@@ -1,0 +1,77 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- net10.0：net8.0 的 Native AOT 有 WinUI GC 挂死缺陷（dotnet/runtime#104582，.NET 9+ 才修复）。 -->
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>SteamEyaWinUI</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <Version>1.1.0</Version>
+    <FileVersion>1.1.0.0</FileVersion>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <InformationalVersion>v1.1.0-dev</InformationalVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- 自定义 Program.Main：先拦截 CS2 云推送辅助进程模式（cs2-cloud-push 开关）再走 XAML 启动（见 Program.cs）。 -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+
+    <!-- Native AOT 发布（dotnet publish -r win-x64 -p:Platform=x64 时生效）。
+         按 Windows App SDK 指引，PublishAot 需写在项目文件里以便还原期生效。 -->
+    <PublishAot>true</PublishAot>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <!-- CsWinRT 源生成器可能产出 unsafe 代码（CsWinRT#1721）。 -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- 对跨 WinRT ABI 但未标 partial 的类型给出编译期警告。 -->
+    <CsWinRTAotWarningLevel>2</CsWinRTAotWarningLevel>
+    <!-- 禁止反射式 System.Text.Json，意外引入时在开发期即失败而不是 AOT 产物上炸。 -->
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+    <!-- 自包含：把 Windows App SDK 运行时 DLL 一并打包到发布目录，
+         用户电脑无需安装 Windows App Runtime，配合 Native AOT 实现真正零运行时依赖。 -->
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <SelfContained>true</SelfContained>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Manifest Include="$(ApplicationManifest)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\AppIcon.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Logo.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Startup.mp4" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\GenshinSecret.mp4" CopyToOutputDirectory="PreserveNewest" />
+    <!-- CS2 武器矢量图标（取自 Juknum/counter-strike-icons，CS2 游戏内 panorama 图标）。 -->
+    <Content Include="Assets\weapons\*.svg" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Steamworks SDK 再分发库：供「CS2 设置同步」用 ISteamRemoteStorage 强推 cfg 到 Steam 云。
+         已随仓库入库（Steamworks SDK redistributable_bin\win64\steam_api64.dll），构建/发布自动拷到输出目录，
+         确保 CI/CD 产物自带该 DLL。Condition 仅作保底：万一被删除也不阻断编译，运行时会提示“缺少 steam_api64.dll”。 -->
+    <Content Include="steam_api64.dll" Condition="Exists('steam_api64.dll')" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 界面语言包：随发布拷到 Languages\ 供贡献者/用户增改，并内嵌一份作发布漏拷时的保底（见 LanguageCatalog）。
+         显式 LogicalName 既让清单名稳定（SteamEyaWinUI.Languages.<code>.json），也避免 en/zh-Hant 被当作附属语言 culture。 -->
+    <Content Include="Languages\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <EmbeddedResource Include="Languages\*.json">
+      <LogicalName>SteamEyaWinUI.Languages.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 只引用 WinUI 组件包（自动带 Foundation/Base/InteractiveExperiences），
+         避免 WindowsAppSDK 元包拖入 onnxruntime/DirectML/AI 等无用载荷（约 40 MB）。
+         自包含模式下 WinUI 组件包自带运行时 DLL，无需 Runtime 包。 -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.2.1" />
+  </ItemGroup>
+
+  <!-- workaround：无打包 WinUI 应用 dotnet publish 时不会复制 PRI 资源索引文件，
+       缺少它会在启动时抛 XamlParseException。 -->
+  <Target Name="IncludeWinUIPriInPublish" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish Include="$(TargetDir)$(TargetName).pri" RelativePath="$(TargetName).pri" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
+</Project>

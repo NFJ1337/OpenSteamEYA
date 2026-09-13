@@ -1,0 +1,750 @@
+﻿<Page
+    x:Class="SteamEyaWinUI.Pages.HistoryPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:models="using:SteamEyaWinUI.Models"
+    xmlns:loc="using:SteamEyaWinUI.Localization"
+    NavigationCacheMode="Required">
+
+    <Grid Padding="32,24,32,16" RowSpacing="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Spacing="4">
+                <TextBlock x:Name="HistoryTitleText" Style="{StaticResource PageTitleTextStyle}" Visibility="Collapsed" />
+                <TextBlock
+                    x:Name="HistorySummaryText"
+                    Text="{x:Bind Strings.Get('History_Subtitle'), Mode=OneWay}"
+                    Style="{StaticResource PageSubtitleTextStyle}" Visibility="Collapsed" />
+            </StackPanel>
+
+
+        </Grid>
+
+        <Grid Grid.Row="1" ColumnSpacing="20">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition x:Name="HistoryDetailColumn" Width="360" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" Grid.ColumnSpan="2" Margin="0,0,0,12" ColumnSpacing="8" RowSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                    <Button x:Name="WhiteRefreshHistoryButton" Visibility="Collapsed" Click="WhiteRefreshHistoryButton_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE72C;" FontSize="16" />
+                            <TextBlock Text="{x:Bind Strings.Get('Common_Refresh'), Mode=OneWay}" />
+                        </StackPanel>
+                    </Button>
+                    <Button
+                        x:Name="RefreshHistoryButton"
+                        VerticalAlignment="Center"
+                        Click="RefreshHistoryButton_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE72C;" FontSize="16" />
+                            <TextBlock Text="{x:Bind Strings.Get('Common_Refresh'), Mode=OneWay}" />
+                        </StackPanel>
+                    </Button>
+                    <AutoSuggestBox
+                        x:Name="HistorySearchBox"
+                        Width="240"
+                        VerticalAlignment="Center"
+                        PlaceholderText="{x:Bind Strings.Get('History_Search_Placeholder'), Mode=OneWay}"
+                        QueryIcon="Find"
+                        TextChanged="HistorySearchBox_TextChanged" />
+                    <Button x:Name="BatchImportWhiteButton" Click="BatchImportWhiteButton_Click" Style="{StaticResource AuroraGlassButtonStyle}" ToolTipService.ToolTip="{x:Bind Strings.Get('History_WhiteImport_Tooltip'), Mode=OneWay}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE710;" FontSize="16" />
+                            <TextBlock Text="{x:Bind Strings.Get('History_WhiteImport_Button'), Mode=OneWay}" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="WhiteBatchQueryButton" Visibility="Collapsed" Click="WhiteBatchQueryButton_Click" ToolTipService.ToolTip="{x:Bind Strings.Get('Common_OneClickQuery'), Mode=OneWay}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE9D9;" FontSize="16" />
+                            <TextBlock x:Name="WhiteBatchQueryText" Text="{x:Bind Strings.Get('Common_OneClickQuery'), Mode=OneWay}" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+
+                <Button x:Name="ClearInvalidAccountsButton" Grid.Row="0" Grid.Column="1" Click="ClearInvalidAccountsButton_Click" ToolTipService.ToolTip="{x:Bind Strings.Get('History_ClearInvalid_Tooltip'), Mode=OneWay}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE894;" FontSize="16" Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
+                        <TextBlock Text="{x:Bind Strings.Get('History_ClearInvalid_Button'), Mode=OneWay}" Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
+                    </StackPanel>
+                </Button>
+                <Button x:Name="ClearHistoryButton" Grid.Row="0" Grid.Column="2" Click="ClearHistoryButton_Click" ToolTipService.ToolTip="{x:Bind Strings.Get('History_ClearAll_Tooltip'), Mode=OneWay}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE75C;" FontSize="16" Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
+                        <TextBlock Text="{x:Bind Strings.Get('Common_Clear'), Mode=OneWay}" Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
+                    </StackPanel>
+                </Button>
+
+                <StackPanel x:Name="BatchActionBarTop" Grid.Row="0" Grid.Column="3" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center" Visibility="Collapsed">
+                    <TextBlock x:Name="BatchSelectionText" VerticalAlignment="Center" FontWeight="SemiBold" Text="{x:Bind Strings.Get('Common_Selected_Format'), Mode=OneWay}" />
+                    <Button x:Name="BatchSelectAllButton" Click="BatchSelectAllButton_Click" Content="{x:Bind Strings.Get('Common_SelectAll'), Mode=OneWay}" />
+                    <Button x:Name="BatchClearButton" Click="BatchClearButton_Click" Content="{x:Bind Strings.Get('Common_ClearSelection'), Mode=OneWay}" />
+                    <Button x:Name="BatchQueryButton" Click="BatchQueryButton_Click" ToolTipService.ToolTip="{x:Bind Strings.Get('History_BatchQuery_Tooltip'), Mode=OneWay}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE9D9;" FontSize="14" />
+                            <TextBlock Text="{x:Bind Strings.Get('Common_BatchQuery'), Mode=OneWay}" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+
+                <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Left" VerticalAlignment="Center">
+                    <StackPanel x:Name="WhiteAccountsToolbar" Orientation="Horizontal" Spacing="8" Visibility="Collapsed">
+                        <AutoSuggestBox x:Name="WhiteHistorySearchBox" Width="240" VerticalAlignment="Center" PlaceholderText="{x:Bind Strings.Get('History_Search_Placeholder'), Mode=OneWay}" QueryIcon="Find" TextChanged="WhiteHistorySearchBox_TextChanged" />
+                        <DropDownButton x:Name="WhiteStatusFilterButton" MinWidth="132" VerticalAlignment="Center" Style="{StaticResource UiTintDropDownButtonStyle}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE8EC;" FontSize="14" />
+                                <TextBlock x:Name="WhiteStatusFilterText" />
+                            </StackPanel>
+                            <DropDownButton.Flyout>
+                                <MenuFlyout x:Name="WhiteStatusFilterFlyout" MenuFlyoutPresenterStyle="{StaticResource AuroraOpaqueMenuFlyoutPresenterStyle}">
+                                    <MenuFlyoutItem Tag="all" Text="{x:Bind Strings.Get('WhiteAccounts_Filter_All'), Mode=OneWay}" Click="WhiteStatusFilterMenuItem_Click" />
+                                    <MenuFlyoutItem Tag="available" Text="{x:Bind Strings.Get('WhiteAccounts_Filter_Available'), Mode=OneWay}" Click="WhiteStatusFilterMenuItem_Click" />
+                                    <MenuFlyoutItem Tag="unavailable" Text="{x:Bind Strings.Get('WhiteAccounts_Filter_Unavailable'), Mode=OneWay}" Click="WhiteStatusFilterMenuItem_Click" />
+                                    <MenuFlyoutItem Tag="vac" Text="{x:Bind Strings.Get('WhiteAccounts_Filter_Vac'), Mode=OneWay}" Click="WhiteStatusFilterMenuItem_Click" />
+                                </MenuFlyout>
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
+                        <DropDownButton x:Name="WhiteGroupFilterButton" MinWidth="128" VerticalAlignment="Center" Style="{StaticResource UiTintDropDownButtonStyle}" ToolTipService.ToolTip="{x:Bind Strings.Get('History_Group_Filter_Tooltip'), Mode=OneWay}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE8EC;" FontSize="14" />
+                                <TextBlock x:Name="WhiteGroupFilterText" />
+                            </StackPanel>
+                            <DropDownButton.Flyout>
+                                <MenuFlyout x:Name="WhiteGroupFilterFlyout" />
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
+                        <Button x:Name="WhiteManageGroupsButton" VerticalAlignment="Center" Click="ManageGroupsButton_Click" ToolTipService.ToolTip="{x:Bind Strings.Get('History_Group_Manage'), Mode=OneWay}">
+                            <FontIcon Glyph="&#xE713;" FontSize="14" />
+                        </Button>
+                    </StackPanel>
+                    <DropDownButton x:Name="GroupFilterButton" MinWidth="128" VerticalAlignment="Center" Style="{StaticResource UiTintDropDownButtonStyle}" ToolTipService.ToolTip="{x:Bind Strings.Get('History_Group_Filter_Tooltip'), Mode=OneWay}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE8EC;" FontSize="14" />
+                            <TextBlock x:Name="GroupFilterText" />
+                        </StackPanel>
+                        <DropDownButton.Flyout>
+                            <MenuFlyout x:Name="GroupFilterFlyout" />
+                        </DropDownButton.Flyout>
+                    </DropDownButton>
+                    <Button x:Name="ManageGroupsButton" VerticalAlignment="Center" Click="ManageGroupsButton_Click" ToolTipService.ToolTip="{x:Bind Strings.Get('History_Group_Manage'), Mode=OneWay}">
+                        <FontIcon Glyph="&#xE713;" FontSize="14" />
+                    </Button>
+                </StackPanel>
+
+                <StackPanel x:Name="BatchActionBarBottom" Grid.Row="1" Grid.Column="3" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center" Visibility="Collapsed">
+                    <Button x:Name="BatchGroupButton" ToolTipService.ToolTip="{x:Bind Strings.Get('History_BatchGroup_Tooltip'), Mode=OneWay}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE8FD;" FontSize="14" />
+                            <TextBlock Text="{x:Bind Strings.Get('Common_BatchGroup'), Mode=OneWay}" />
+                        </StackPanel>
+                        <Button.Flyout>
+                            <MenuFlyout x:Name="BatchGroupFlyout" Opening="BatchGroupFlyout_Opening" />
+                        </Button.Flyout>
+                    </Button>
+                    <Button x:Name="BatchExportButton" Click="BatchExportButton_Click" ToolTipService.ToolTip="{x:Bind Strings.Get('History_BatchExport_Tooltip'), Mode=OneWay}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE8C8;" FontSize="14" />
+                            <TextBlock Text="{x:Bind Strings.Get('Common_BatchExport'), Mode=OneWay}" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="BatchDeleteButton" Click="BatchDeleteButton_Click" ToolTipService.ToolTip="{x:Bind Strings.Get('History_BatchDelete_Tooltip'), Mode=OneWay}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE74D;" FontSize="14" Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
+                            <TextBlock Text="{x:Bind Strings.Get('Common_BatchDelete'), Mode=OneWay}" Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <Grid Grid.Row="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+
+                <ListView
+                    x:Name="HistoryAccountList"
+                    Grid.Row="1"
+                    SelectionMode="Single"
+                    VerticalAlignment="Stretch"
+                    SelectionChanged="HistoryAccountList_SelectionChanged">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="Margin" Value="0,0,0,8" />
+                            <Setter Property="CornerRadius" Value="{ThemeResource OverlayCornerRadius}" />
+                        </Style>
+                    </ListView.ItemContainerStyle>
+
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="models:SteamAccountHistoryItem">
+                            <Grid
+                                Background="Transparent"
+                                PointerEntered="HistoryCard_PointerEntered"
+                                PointerExited="HistoryCard_PointerExited">
+                                <Border
+                                    Padding="14"
+                                    CornerRadius="{ThemeResource OverlayCornerRadius}"
+                                    BorderThickness="1"
+                                    Background="{ThemeResource AuroraGlassBrush}"
+                                    BorderBrush="{ThemeResource AuroraGlassBorderBrush}">
+                                    <Grid MinHeight="64" ColumnSpacing="14">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <PersonPicture
+                                            Width="52"
+                                            Height="52"
+                                            VerticalAlignment="Center"
+                                            DisplayName="{x:Bind AccountTitle}"
+                                            ProfilePicture="{x:Bind AvatarImage, Mode=OneWay}" />
+
+                                        <StackPanel
+                                            Grid.Column="1"
+                                            Spacing="4"
+                                            VerticalAlignment="Center">
+                                            <Grid ColumnSpacing="6">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock
+                                                    Text="{x:Bind AccountTitle}"
+                                                    FontSize="15"
+                                                    FontWeight="SemiBold"
+                                                    TextTrimming="CharacterEllipsis" />
+                                                <FontIcon
+                                                    Grid.Column="1"
+                                                    Glyph="&#xE70B;"
+                                                    FontSize="12"
+                                                    VerticalAlignment="Center"
+                                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                    Visibility="{x:Bind NoteIndicatorVisibility, Mode=OneWay}"
+                                                    ToolTipService.ToolTip="{loc:Localize Key=History_Card_Note_Tooltip}" />
+                                            </Grid>
+                                            <TextBlock
+                                                Text="{x:Bind PersonaDisplayName}"
+                                                Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                                TextTrimming="CharacterEllipsis" />
+                                            <TextBlock
+                                                Text="{x:Bind RemainingCooldownSummaryText, Mode=OneWay}"
+                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                                TextTrimming="CharacterEllipsis" />
+                                            <TextBlock
+                                                Text="{x:Bind LastLoginCaptionText}"
+                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+
+                                        <StackPanel
+                                            Grid.Column="2"
+                                            Orientation="Horizontal"
+                                            Spacing="4"
+                                            VerticalAlignment="Center">
+
+                                            <Button
+                                                Padding="9,7"
+                                                Style="{StaticResource AuroraGlassButtonStyle}"
+                                                Click="CardExportButton_Click"
+                                                ToolTipService.ToolTip="{loc:Localize Key=History_Card_Copy}">
+                                                <FontIcon Glyph="&#xE8C8;" FontSize="14" />
+                                            </Button>
+                                            <Button
+                                                Padding="9,7"
+                                                Style="{StaticResource AuroraGlassButtonStyle}"
+                                                Click="CardDeleteButton_Click"
+                                                ToolTipService.ToolTip="{loc:Localize Key=History_Card_Delete}">
+                                                <FontIcon Glyph="&#xE74D;" FontSize="14" />
+                                            </Button>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+
+                                <Border
+                                    BorderBrush="#FFB45309"
+                                    BorderThickness="2"
+                                    Background="#22F59E0B"
+                                    CornerRadius="{ThemeResource OverlayCornerRadius}"
+                                    IsHitTestVisible="False"
+                                    Visibility="{x:Bind CooldownHighlightVisibility, Mode=OneWay}" />
+                                <!-- 选中：整卡黑框（高对比 ink 边框，参考主流多选样式） -->
+                                <Border
+                                    BorderBrush="{ThemeResource TextFillColorPrimaryBrush}"
+                                    BorderThickness="2"
+                                    CornerRadius="{ThemeResource OverlayCornerRadius}"
+                                    IsHitTestVisible="False"
+                                    Visibility="{x:Bind SelectionRingVisibility, Mode=OneWay}" />
+
+                                <!-- 左上角 45° 角标勾选指示器（参考相册类多选）：悬停半透明角标作提示，
+                                     选中实心 ink 三角 + 白色对勾；尖角随卡片圆角裁剪。
+                                     用无 chrome 的 Button（而非 Tapped）以可靠阻止点勾选顺带选中整行（详情焦点）。 -->
+                                <Button
+                                    Width="30"
+                                    Height="30"
+                                    Margin="0"
+                                    Padding="0"
+                                    BorderThickness="0"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Top"
+                                    Click="HistoryCardCheck_Click"
+                                    ToolTipService.ToolTip="{loc:Localize Key=Common_CheckToBatch}"
+                                    Visibility="{x:Bind CheckIndicatorVisibility, Mode=OneWay}">
+                                    <Button.Resources>
+                                        <SolidColorBrush x:Key="ButtonBackground" Color="Transparent" />
+                                        <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="Transparent" />
+                                        <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="Transparent" />
+                                        <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="Transparent" />
+                                        <SolidColorBrush x:Key="ButtonBorderBrush" Color="Transparent" />
+                                        <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent" />
+                                        <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent" />
+                                    </Button.Resources>
+                                    <Grid>
+                                        <!-- 45° 角标三角：左上尖角按卡片圆角(8)用圆弧内建进几何，不做裁剪——
+                                             Path 填充自带抗锯齿，斜边与圆角都平滑（裁剪边缘才会产生锯齿）。 -->
+                                        <Path
+                                            Data="M 8,0 L 30,0 L 0,30 L 0,8 A 8,8 0 0 1 8,0 Z"
+                                            Stretch="None"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Top"
+                                            Fill="{ThemeResource TextFillColorPrimaryBrush}"
+                                            Opacity="0.35"
+                                            Visibility="{x:Bind EmptyCheckCircleVisibility, Mode=OneWay}" />
+                                        <Path
+                                            Data="M 8,0 L 30,0 L 0,30 L 0,8 A 8,8 0 0 1 8,0 Z"
+                                            Stretch="None"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Top"
+                                            Fill="{ThemeResource TextFillColorPrimaryBrush}"
+                                            Visibility="{x:Bind SelectionRingVisibility, Mode=OneWay}" />
+                                        <!-- 白色对勾：悬停或选中都显示 -->
+                                        <FontIcon
+                                            Glyph="&#xE73E;"
+                                            FontSize="11"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Top"
+                                            Margin="4,3,0,0"
+                                            Foreground="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                                            Visibility="{x:Bind CheckIndicatorVisibility, Mode=OneWay}" />
+                                    </Grid>
+                                </Button>
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+
+                <ListView
+                    x:Name="WhiteAccountList"
+                    Grid.Row="1"
+                    SelectionMode="Single"
+                    VerticalAlignment="Stretch"
+                    SelectionChanged="HistoryAccountList_SelectionChanged">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="Margin" Value="0,0,0,8" />
+                            <Setter Property="CornerRadius" Value="{ThemeResource OverlayCornerRadius}" />
+                        </Style>
+                    </ListView.ItemContainerStyle>
+
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="models:SteamAccountHistoryItem">
+                            <Grid
+                                Background="Transparent"
+                                PointerEntered="HistoryCard_PointerEntered"
+                                PointerExited="HistoryCard_PointerExited">
+                                <Border
+                                    Padding="14"
+                                    CornerRadius="{ThemeResource OverlayCornerRadius}"
+                                    BorderThickness="1"
+                                    Background="{ThemeResource AuroraGlassBrush}"
+                                    BorderBrush="{ThemeResource AuroraGlassBorderBrush}">
+                                    <Grid MinHeight="64" ColumnSpacing="14">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <PersonPicture
+                                            Width="52"
+                                            Height="52"
+                                            VerticalAlignment="Center"
+                                            DisplayName="{x:Bind AccountTitle}"
+                                            ProfilePicture="{x:Bind AvatarImage, Mode=OneWay}" />
+
+                                        <StackPanel
+                                            Grid.Column="1"
+                                            Spacing="4"
+                                            VerticalAlignment="Center">
+                                            <Grid ColumnSpacing="6">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock
+                                                    Text="{x:Bind AccountTitle}"
+                                                    FontSize="15"
+                                                    FontWeight="SemiBold"
+                                                    TextTrimming="CharacterEllipsis" />
+                                                <FontIcon
+                                                    Grid.Column="1"
+                                                    Glyph="&#xE70B;"
+                                                    FontSize="12"
+                                                    VerticalAlignment="Center"
+                                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                    Visibility="{x:Bind NoteIndicatorVisibility, Mode=OneWay}"
+                                                    ToolTipService.ToolTip="{loc:Localize Key=History_Card_Note_Tooltip}" />
+                                            </Grid>
+                                            <TextBlock
+                                                Text="{x:Bind PersonaDisplayName}"
+                                                Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                                TextTrimming="CharacterEllipsis" />
+                                            <TextBlock
+                                                Text="{x:Bind RemainingCooldownSummaryText, Mode=OneWay}"
+                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                                TextTrimming="CharacterEllipsis" />
+                                            <TextBlock
+                                                Text="{x:Bind LastLoginCaptionText}"
+                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+
+                                        <StackPanel
+                                            Grid.Column="2"
+                                            Orientation="Horizontal"
+                                            Spacing="4"
+                                            VerticalAlignment="Center">
+                                            <Button
+                                                Visibility="{x:Bind CardActionVisibility, Mode=OneWay}"
+                                                Padding="9,7"
+                                                Style="{StaticResource AuroraGlassButtonStyle}"
+                                                Click="CardUseButton_Click"
+                                                ToolTipService.ToolTip="{loc:Localize Key=WhiteAccounts_Btn_Login}">
+                                                <FontIcon Glyph="&#xE8D4;" FontSize="14" />
+                                            </Button>
+                                                <Button
+                                                    Visibility="{x:Bind CardActionVisibility, Mode=OneWay}"
+                                                    Padding="9,7"
+                                                    Style="{StaticResource AuroraGlassButtonStyle}"
+                                                    Click="CardCopyAccountButton_Click"
+                                                    Content="账号"
+                                                    ToolTipService.ToolTip="账号" />
+                                                <Button
+                                                    Visibility="{x:Bind CardActionVisibility, Mode=OneWay}"
+                                                    Padding="9,7"
+                                                    Style="{StaticResource AuroraGlassButtonStyle}"
+                                                    Click="CardCopyPasswordButton_Click"
+                                                    Content="密码"
+                                                    ToolTipService.ToolTip="密码" />
+                                            
+                                            <Button
+                                                Padding="9,7"
+                                                Style="{StaticResource AuroraGlassButtonStyle}"
+                                                Click="CardDeleteButton_Click"
+                                                ToolTipService.ToolTip="{loc:Localize Key=History_Card_Delete}">
+                                                <FontIcon Glyph="&#xE74D;" FontSize="14" />
+                                            </Button>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+
+                                <Border
+                                    BorderBrush="#FFB45309"
+                                    BorderThickness="2"
+                                    Background="#22F59E0B"
+                                    CornerRadius="{ThemeResource OverlayCornerRadius}"
+                                    IsHitTestVisible="False"
+                                    Visibility="{x:Bind CooldownHighlightVisibility, Mode=OneWay}" />
+                                <!-- 选中：整卡黑框（高对比 ink 边框，参考主流多选样式） -->
+                                <Border
+                                    BorderBrush="{ThemeResource TextFillColorPrimaryBrush}"
+                                    BorderThickness="2"
+                                    CornerRadius="{ThemeResource OverlayCornerRadius}"
+                                    IsHitTestVisible="False"
+                                    Visibility="{x:Bind SelectionRingVisibility, Mode=OneWay}" />
+
+                                <!-- 左上角 45° 角标勾选指示器（参考相册类多选）：悬停半透明角标作提示，
+                                     选中实心 ink 三角 + 白色对勾；尖角随卡片圆角裁剪。
+                                     用无 chrome 的 Button（而非 Tapped）以可靠阻止点勾选顺带选中整行（详情焦点）。 -->
+                                <Button
+                                    Width="30"
+                                    Height="30"
+                                    Margin="0"
+                                    Padding="0"
+                                    BorderThickness="0"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Top"
+                                    Click="HistoryCardCheck_Click"
+                                    ToolTipService.ToolTip="{loc:Localize Key=Common_CheckToBatch}"
+                                    Visibility="{x:Bind CheckIndicatorVisibility, Mode=OneWay}">
+                                    <Button.Resources>
+                                        <SolidColorBrush x:Key="ButtonBackground" Color="Transparent" />
+                                        <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="Transparent" />
+                                        <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="Transparent" />
+                                        <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="Transparent" />
+                                        <SolidColorBrush x:Key="ButtonBorderBrush" Color="Transparent" />
+                                        <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent" />
+                                        <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent" />
+                                    </Button.Resources>
+                                    <Grid>
+                                        <!-- 45° 角标三角：左上尖角按卡片圆角(8)用圆弧内建进几何，不做裁剪——
+                                             Path 填充自带抗锯齿，斜边与圆角都平滑（裁剪边缘才会产生锯齿）。 -->
+                                        <Path
+                                            Data="M 8,0 L 30,0 L 0,30 L 0,8 A 8,8 0 0 1 8,0 Z"
+                                            Stretch="None"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Top"
+                                            Fill="{ThemeResource TextFillColorPrimaryBrush}"
+                                            Opacity="0.35"
+                                            Visibility="{x:Bind EmptyCheckCircleVisibility, Mode=OneWay}" />
+                                        <Path
+                                            Data="M 8,0 L 30,0 L 0,30 L 0,8 A 8,8 0 0 1 8,0 Z"
+                                            Stretch="None"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Top"
+                                            Fill="{ThemeResource TextFillColorPrimaryBrush}"
+                                            Visibility="{x:Bind SelectionRingVisibility, Mode=OneWay}" />
+                                        <!-- 白色对勾：悬停或选中都显示 -->
+                                        <FontIcon
+                                            Glyph="&#xE73E;"
+                                            FontSize="11"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Top"
+                                            Margin="4,3,0,0"
+                                            Foreground="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                                            Visibility="{x:Bind CheckIndicatorVisibility, Mode=OneWay}" />
+                                    </Grid>
+                                </Button>
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+
+                <StackPanel
+                    x:Name="HistoryEmptyPanel"
+                    Grid.Row="1"
+                    Spacing="12"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Visibility="Collapsed">
+                    <FontIcon
+                        Glyph="&#xE81C;"
+                        FontSize="40"
+                        HorizontalAlignment="Center"
+                        Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                    <TextBlock
+                        x:Name="HistoryEmptyText"
+                        Text="{x:Bind Strings.Get('History_Empty_Title'), Mode=OneWay}"
+                        FontSize="16"
+                        HorizontalAlignment="Center"
+                        Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                    <TextBlock
+                        x:Name="HistoryEmptyHintText"
+                        Text="{x:Bind Strings.Get('History_Empty_Hint'), Mode=OneWay}"
+                        HorizontalAlignment="Center"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                </StackPanel>
+
+                <!-- 批量操作栏：勾选任意卡片后浮现在列表底部，操作针对全部已勾选账号 -->
+            </Grid>
+
+            <ScrollViewer x:Name="HistoryDetailScrollViewer" Grid.Row="1" Grid.Column="1" VerticalScrollBarVisibility="Auto">
+                <Border Style="{StaticResource CardBorderStyle}">
+                    <StackPanel x:Name="HistoryDetailContentPanel" Spacing="16">
+                        <StackPanel Spacing="10" HorizontalAlignment="Center">
+                            <!-- 不绑 DisplayName：留空才显示默认人像剪影（PersonPicture 会按文案取首字母），
+                                 且语言切换重估绑定会把代码里清空的值盖回去。 -->
+                            <PersonPicture
+                                x:Name="HistoryDetailAvatar"
+                                Width="92"
+                                Height="92" />
+                            <TextBlock
+                                x:Name="HistoryDetailAccountNameText"
+                                Text="{x:Bind Strings.Get('History_Detail_NoAccountSelected'), Mode=OneWay}"
+                                FontSize="20"
+                                FontWeight="SemiBold"
+                                HorizontalAlignment="Center"
+                                TextWrapping="Wrap" />
+                            <TextBlock
+                                x:Name="HistoryDetailPersonaText"
+                                Text="{x:Bind Strings.Get('History_Detail_ProfileNotSynced'), Mode=OneWay}"
+                                HorizontalAlignment="Center"
+                                Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <MenuFlyoutSeparator />
+
+                        <Grid x:Name="HistoryDetailFieldsGrid" RowSpacing="10" ColumnSpacing="12">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="100" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Text="Steam64" Style="{StaticResource FieldLabelTextStyle}" />
+                            <TextBlock
+                                x:Name="HistoryDetailSteamIdText"
+                                Grid.Column="1"
+                                Text="{x:Bind Strings.Get('History_Detail_Unparsed'), Mode=OneWay}"
+                                IsTextSelectionEnabled="True"
+                                Style="{StaticResource FieldValueTextStyle}" />
+
+                            <TextBlock Grid.Row="1" Text="{x:Bind Strings.Get('History_Detail_Label_JwtExpires'), Mode=OneWay}" Style="{StaticResource FieldLabelTextStyle}" />
+                            <TextBlock
+                                x:Name="HistoryDetailTokenExpiresText"
+                                Grid.Row="1"
+                                Grid.Column="1"
+                                Text="{x:Bind Strings.Get('History_Detail_Unparsed'), Mode=OneWay}"
+                                Style="{StaticResource FieldValueTextStyle}" />
+
+                            <TextBlock Grid.Row="2" Text="{x:Bind Strings.Get('History_Detail_Label_LastLogin'), Mode=OneWay}" Style="{StaticResource FieldLabelTextStyle}" />
+                            <TextBlock
+                                x:Name="HistoryDetailLastLoginText"
+                                Grid.Row="2"
+                                Grid.Column="1"
+                                Text="{x:Bind Strings.Get('History_Detail_NoRecord'), Mode=OneWay}"
+                                Style="{StaticResource FieldValueTextStyle}" />
+
+                            <TextBlock Grid.Row="3" Text="{x:Bind Strings.Get('History_Detail_Label_CompetitiveScore'), Mode=OneWay}" Style="{StaticResource FieldLabelTextStyle}" />
+                            <TextBlock
+                                x:Name="HistoryDetailCompetitiveScoreText"
+                                Grid.Row="3"
+                                Grid.Column="1"
+                                Text="{x:Bind Strings.Get('History_Detail_Pending'), Mode=OneWay}"
+                                Style="{StaticResource FieldValueTextStyle}" />
+
+                            <TextBlock Grid.Row="4" Text="{x:Bind Strings.Get('History_Detail_Label_CsLevel'), Mode=OneWay}" Style="{StaticResource FieldLabelTextStyle}" />
+                            <TextBlock
+                                x:Name="HistoryDetailCsLevelText"
+                                Grid.Row="4"
+                                Grid.Column="1"
+                                Text="{x:Bind Strings.Get('History_Detail_Pending'), Mode=OneWay}"
+                                Style="{StaticResource FieldValueTextStyle}" />
+
+                            <TextBlock Grid.Row="5" Text="{x:Bind Strings.Get('History_Detail_Label_CooldownStatus'), Mode=OneWay}" Style="{StaticResource FieldLabelTextStyle}" />
+                            <TextBlock
+                                x:Name="HistoryDetailCooldownStatusText"
+                                Grid.Row="5"
+                                Grid.Column="1"
+                                Text="{x:Bind Strings.Get('History_Detail_Pending'), Mode=OneWay}"
+                                Style="{StaticResource FieldValueTextStyle}" />
+
+                            <TextBlock Grid.Row="6" Text="{x:Bind Strings.Get('History_Detail_Label_JwtAvailability'), Mode=OneWay}" Style="{StaticResource FieldLabelTextStyle}" />
+                            <TextBlock
+                                x:Name="HistoryDetailAccountStatusText"
+                                Grid.Row="6"
+                                Grid.Column="1"
+                                Text="{x:Bind Strings.Get('History_Detail_Pending'), Mode=OneWay}"
+                                Style="{StaticResource FieldValueTextStyle}" />
+
+                            <TextBlock Grid.Row="7" Text="{x:Bind Strings.Get('History_Detail_Label_Cs2IsChina'), Mode=OneWay}" Style="{StaticResource FieldLabelTextStyle}" />
+                            <TextBlock
+                                x:Name="HistoryDetailCs2IsChinaText"
+                                Grid.Row="7"
+                                Grid.Column="1"
+                                Text="{x:Bind Strings.Get('History_Detail_Pending'), Mode=OneWay}"
+                                Style="{StaticResource FieldValueTextStyle}" />
+                        </Grid>
+
+                        <StackPanel Spacing="6">
+                            <TextBlock
+                                Text="{x:Bind Strings.Get('History_Detail_Label_Note'), Mode=OneWay}"
+                                Style="{StaticResource FieldLabelTextStyle}" />
+                            <TextBox
+                                x:Name="HistoryDetailNoteBox"
+                                PlaceholderText="{x:Bind Strings.Get('History_Note_Placeholder'), Mode=OneWay}"
+                                TextWrapping="Wrap"
+                                AcceptsReturn="True"
+                                MaxHeight="120"
+                                IsSpellCheckEnabled="False"
+                                LostFocus="HistoryDetailNoteBox_LostFocus" />
+                        </StackPanel>
+
+                        <Button
+                            x:Name="OneClickHistoryQueryButton"
+                            HorizontalAlignment="Stretch"
+                            Click="OneClickHistoryQueryButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE9D9;" FontSize="16" />
+                                <TextBlock Text="{x:Bind Strings.Get('Common_OneClickQuery'), Mode=OneWay}" />
+                            </StackPanel>
+                        </Button>
+
+                        <!-- 取消按钮仅忙碌时可见；UpdateControlsEnabled 不禁用它，busy 期间始终可点。 -->
+                        <Button
+                            x:Name="CancelHistoryQueryButton"
+                            HorizontalAlignment="Stretch"
+                            Visibility="Collapsed"
+                            Click="CancelHistoryQueryButton_Click"
+                            ToolTipService.ToolTip="{x:Bind Strings.Get('History_CancelQuery_Tooltip'), Mode=OneWay}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE711;" FontSize="16" />
+                                <TextBlock Text="{x:Bind Strings.Get('Common_Cancel'), Mode=OneWay}" />
+                            </StackPanel>
+                        </Button>
+
+                        <Button
+                            x:Name="UseHistoryAccountButton"
+                            HorizontalAlignment="Stretch"
+                            Style="{StaticResource AccentButtonStyle}"
+                            Click="UseHistoryAccountButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE8E5;" FontSize="16" />
+                                <TextBlock Text="{x:Bind Strings.Get('History_LoadToLogin_Button'), Mode=OneWay}" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Border>
+            </ScrollViewer>
+        </Grid>
+
+    </Grid>
+</Page>

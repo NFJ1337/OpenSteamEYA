@@ -1,0 +1,210 @@
+﻿<Window
+    x:Class="SteamEyaWinUI.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="SteamEYA">
+
+    <Grid x:Name="RootLayoutGrid" Background="{ThemeResource AuroraPageBackgroundBrush}" SizeChanged="RootLayoutGrid_SizeChanged">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- 自定义背景图片：放在所有界面内容下方，透明区域由页面渐变色补足。 -->
+        <Image
+            x:Name="CustomBackgroundImage"
+            Grid.RowSpan="2"
+            Stretch="Fill"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Stretch"
+            IsHitTestVisible="False"
+            Opacity="0"
+            Visibility="Collapsed" />
+
+        <!-- 自定义标题栏（拖动区域） -->
+        <Grid x:Name="AppTitleBar" Background="Transparent">
+            <StackPanel
+                Orientation="Horizontal"
+                Spacing="10"
+                Margin="16,0"
+                VerticalAlignment="Center">
+                <Image
+                    Source="ms-appx:///Assets/Logo.png"
+                    Width="18"
+                    Height="18" />
+                <TextBlock
+                    Text="账号管理"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    VerticalAlignment="Center" />
+                <TextBlock
+                    x:Name="TitleVersionText"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    VerticalAlignment="Center" />
+            </StackPanel>
+        </Grid>
+
+        <NavigationView
+            x:Name="RootNavigationView"
+            Grid.Row="1"
+            PaneDisplayMode="Left"
+            OpenPaneLength="196"
+            CompactPaneLength="48"
+            IsSettingsVisible="False"
+            IsBackButtonVisible="Collapsed"
+            IsTitleBarAutoPaddingEnabled="False"
+            Background="Transparent"
+            SelectionChanged="RootNavigationView_SelectionChanged">
+            <NavigationView.Resources>
+                <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent" />
+                <StaticResource x:Key="NavigationViewDefaultPaneBackground" ResourceKey="AuroraPaneBrush" />
+                <StaticResource x:Key="NavigationViewExpandedPaneBackground" ResourceKey="AuroraPaneBrush" />
+                <StaticResource x:Key="NavigationViewItemBackgroundPointerOver" ResourceKey="AuroraNavHoverBrush" />
+                <StaticResource x:Key="NavigationViewItemBackgroundSelected" ResourceKey="AuroraNavSelectedBrush" />
+                <StaticResource x:Key="NavigationViewItemBackgroundSelectedPointerOver" ResourceKey="AuroraNavSelectedBrush" />
+                <CornerRadius x:Key="ControlCornerRadius">12</CornerRadius>
+            </NavigationView.Resources>
+            <!-- 导航项文字由 MainWindow.RefreshNavText() 按当前语言在代码里设置（构造时即设、语言切换时刷新）。 -->
+            <NavigationView.MenuItems>
+                <NavigationViewItem
+                    x:Name="ManagedAccountsNavItem"
+                    Tag="whiteAccounts">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE716;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
+                    x:Name="LoginNavItem"
+                    Tag="login">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8D4;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
+                    x:Name="HistoryNavItem"
+                    Tag="history">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE81C;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
+                    x:Name="CachedAccountsNavItem"
+                    Tag="cachedAccounts">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE777;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
+                    x:Name="LoadoutNavItem"
+                    Tag="loadout">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE7C1;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
+                    x:Name="PersonalizationNavItem"
+                    Tag="personalization">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE779;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+            <NavigationView.FooterMenuItems>
+                <NavigationViewItem
+                    x:Name="TreasureBoxNavItem"
+                    Tag="treasureBox">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8D9;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
+                    x:Name="SettingsNavItem"
+                    Tag="settings">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE713;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
+                    x:Name="AboutNavItem"
+                    Tag="about">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE946;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.FooterMenuItems>
+            <Grid>
+                <Frame x:Name="ContentFrame" Background="Transparent" />
+
+                <!-- 全局状态栏：悬浮在页面内容上方，不占用内容高度。 -->
+                <Grid
+                    x:Name="StatusOverlay"
+                    Margin="32,0,32,16"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Bottom"
+                    ColumnSpacing="10"
+                    Visibility="Collapsed"
+                    Canvas.ZIndex="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <ProgressRing
+                        x:Name="BusyRing"
+                        Width="18"
+                        Height="18"
+                        VerticalAlignment="Center"
+                        IsActive="False"
+                        Visibility="Collapsed" />
+                    <Border
+                        Grid.Column="1"
+                        Background="{ThemeResource CustomUiDialogBrush}"
+                        BorderBrush="{ThemeResource AuroraGlassBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="{ThemeResource ControlCornerRadius}">
+                        <InfoBar
+                            x:Name="StatusInfoBar"
+                            Background="Transparent"
+                            IsOpen="False"
+                            IsClosable="True"
+                            Severity="Informational" />
+                    </Border>
+                </Grid>
+            </Grid>
+        </NavigationView>
+        <!-- 启动视频：覆盖整个窗口播放，结束或任意输入后进入主界面。 -->
+        <Grid
+            x:Name="IntroVideoOverlay"
+            Grid.RowSpan="2"
+            Background="Black"
+            Visibility="Collapsed">
+            <MediaPlayerElement
+                x:Name="IntroMediaPlayerElement"
+                Stretch="Fill"
+                AreTransportControlsEnabled="False"
+                AutoPlay="False" />
+            <Button
+                x:Name="IntroSkipButton"
+                MinWidth="0"
+                MinHeight="0"
+                Padding="0"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                VerticalContentAlignment="Stretch"
+                Background="Transparent"
+                BorderThickness="0"
+                UseSystemFocusVisuals="False"
+                Click="IntroSkipButton_Click">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="Transparent">
+                            <ContentPresenter
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Stretch" />
+                        </Border>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+        </Grid>
+    </Grid>
+</Window>

@@ -1,0 +1,660 @@
+<Page
+    x:Class="SteamEyaWinUI.Pages.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    NavigationCacheMode="Required">
+
+    <ScrollViewer
+        HorizontalScrollBarVisibility="Disabled"
+        VerticalScrollBarVisibility="Auto"
+        Padding="32,24,32,16">
+        <StackPanel MaxWidth="820" Spacing="14" HorizontalAlignment="Left">
+            <StackPanel Spacing="4">
+                <TextBlock
+                    Text="{x:Bind Strings.Get('Settings_Title'), Mode=OneWay}"
+                    Style="{StaticResource PageTitleTextStyle}" Visibility="Collapsed" />
+                <TextBlock
+                    Text="{x:Bind Strings.Get('Settings_Subtitle'), Mode=OneWay}"
+                    Style="{StaticResource PageSubtitleTextStyle}" Visibility="Collapsed" />
+            </StackPanel>
+
+            <!-- 语言：用 ComboBox 而非堆叠单选，既紧凑（避免页面出现多余滚动条）又适配可增长的语言列表 -->
+            <Border Style="{StaticResource CardBorderStyle}">
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                        <TextBlock
+                            Text="{x:Bind Strings.Get('Settings_Language_Section'), Mode=OneWay}"
+                            Style="{StaticResource SectionTitleTextStyle}" />
+                        <TextBlock
+                            Text="{x:Bind Strings.Get('Settings_Language_Desc'), Mode=OneWay}"
+                            Foreground="{ThemeResource AuroraTextMutedBrush}"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                    <!-- 语言自称名不随界面语言变化；选项在 code-behind 按已加载语言包动态生成 -->
+                    <DropDownButton
+                        x:Name="LanguageButton"
+                        Grid.Column="1"
+                        MinWidth="180"
+                        VerticalAlignment="Center"
+                        Style="{StaticResource UiTintDropDownButtonStyle}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE8C1;" FontSize="16" />
+                            <TextBlock x:Name="LanguageButtonText" />
+                        </StackPanel>
+                        <DropDownButton.Flyout>
+                            <MenuFlyout x:Name="LanguageFlyout" />
+                        </DropDownButton.Flyout>
+                    </DropDownButton>
+                </Grid>
+            </Border>
+
+            <!-- 主题 -->
+            <Border Style="{StaticResource CardBorderStyle}">
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                        <TextBlock
+                            Text="{x:Bind Strings.Get('Settings_Theme_Section'), Mode=OneWay}"
+                            Style="{StaticResource SectionTitleTextStyle}" />
+                        <TextBlock
+                            Text="{x:Bind Strings.Get('Settings_Theme_Desc'), Mode=OneWay}"
+                            Foreground="{ThemeResource AuroraTextMutedBrush}"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                    <StackPanel
+                        Grid.Column="1"
+                        Orientation="Horizontal"
+                        Spacing="8"
+                        VerticalAlignment="Center">
+                        <DropDownButton
+                            x:Name="ThemeButton"
+                            MinWidth="180"
+                            Style="{StaticResource UiTintDropDownButtonStyle}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE790;" FontSize="16" />
+                                <TextBlock x:Name="ThemeButtonText" />
+                            </StackPanel>
+                            <DropDownButton.Flyout>
+                                <MenuFlyout x:Name="ThemeFlyout" />
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
+                        <Button
+                            x:Name="ThemeColorButton"
+                            MinWidth="0"
+                            Visibility="Collapsed">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Border
+                                    x:Name="ThemeColorSwatch"
+                                    Width="18"
+                                    Height="18"
+                                    CornerRadius="4"
+                                    BorderThickness="1"
+                                    BorderBrush="{ThemeResource AuroraGlassBorderBrush}"
+                                    Background="{ThemeResource CustomUiBrush}" />
+                                <TextBlock Text="{x:Bind Strings.Get('Settings_Theme_Color_Button'), Mode=OneWay}" />
+                            </StackPanel>
+                            <Button.Flyout>
+                                <Flyout>
+                                    <StackPanel Spacing="8">
+                                        <ColorPicker
+                                            x:Name="ThemeColorPicker"
+                                            IsAlphaEnabled="False"
+                                            IsAlphaSliderVisible="False"
+                                            IsAlphaTextInputVisible="False"
+                                            ColorChanged="ThemeColorPicker_ColorChanged" />
+                                        <Button
+                                            HorizontalAlignment="Right"
+                                            MinWidth="0"
+                                            Click="ResetThemeColorButton_Click">
+                                            <TextBlock Text="{x:Bind Strings.Get('Settings_Theme_Color_Reset'), Mode=OneWay}" />
+                                        </Button>
+                                    </StackPanel>
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- 自定义图片背景 -->
+            <Border Style="{StaticResource CardBorderStyle}">
+                <StackPanel Spacing="10">
+                    <TextBlock
+                        Text="{x:Bind Strings.Get('Settings_Background_Section'), Mode=OneWay}"
+                        Style="{StaticResource SectionTitleTextStyle}" />
+                    <TextBlock
+                        Text="{x:Bind Strings.Get('Settings_Background_Desc'), Mode=OneWay}"
+                        Foreground="{ThemeResource AuroraTextMutedBrush}"
+                        TextWrapping="Wrap" />
+                    <ToggleSwitch
+                        x:Name="CustomBackgroundToggle"
+                        Header="{x:Bind Strings.Get('Settings_Background_Enable'), Mode=OneWay}"
+                        Toggled="CustomBackgroundToggle_Toggled" />
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            x:Name="CustomBackgroundFileNameText"
+                            VerticalAlignment="Center"
+                            TextTrimming="CharacterEllipsis"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                        <StackPanel
+                            Grid.Column="1"
+                            Orientation="Horizontal"
+                            Spacing="8">
+                            <Button
+                                x:Name="ChooseCustomBackgroundButton"
+                                Click="ChooseCustomBackgroundButton_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xEB9F;" FontSize="16" />
+                                    <TextBlock Text="{x:Bind Strings.Get('Settings_Background_Choose'), Mode=OneWay}" />
+                                </StackPanel>
+                            </Button>
+                            <Button
+                                x:Name="ClearCustomBackgroundButton"
+                                Click="ClearCustomBackgroundButton_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE74D;" FontSize="16" />
+                                    <TextBlock Text="{x:Bind Strings.Get('Settings_Background_Clear'), Mode=OneWay}" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Slider
+                            x:Name="CustomBackgroundOpacitySlider"
+                            Grid.Column="0"
+                            Header="{x:Bind Strings.Get('Settings_Background_Opacity'), Mode=OneWay}"
+                            Minimum="0.1"
+                            Maximum="0.9"
+                            StepFrequency="0.05"
+                            Value="0.4"
+                            ValueChanged="CustomBackgroundOpacitySlider_ValueChanged" />
+                        <Button
+                            x:Name="ResetCustomBackgroundOpacityButton"
+                            Grid.Column="1"
+                            Margin="0,0,0,2"
+                            VerticalAlignment="Bottom"
+                            Click="ResetCustomBackgroundOpacityButton_Click">
+                            <TextBlock Text="{x:Bind Strings.Get('Settings_Background_Opacity_Reset'), Mode=OneWay}" />
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- 入场动画 -->
+            <Border Style="{StaticResource CardBorderStyle}">
+                <StackPanel Spacing="10">
+                    <TextBlock
+                        Text="{x:Bind Strings.Get('Settings_Intro_Section'), Mode=OneWay}"
+                        Style="{StaticResource SectionTitleTextStyle}" />
+                    <TextBlock
+                        Text="{x:Bind Strings.Get('Settings_Intro_Desc'), Mode=OneWay}"
+                        Foreground="{ThemeResource AuroraTextMutedBrush}"
+                        TextWrapping="Wrap" />
+                    <TextBlock
+                        x:Name="IntroVideoSourceText"
+                        Foreground="{ThemeResource AuroraTextMutedBrush}"
+                        TextWrapping="Wrap" />
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ToggleSwitch
+                            x:Name="IntroVideoToggle"
+                            Grid.Column="0"
+                            Header="{x:Bind Strings.Get('Settings_Intro_Enable'), Mode=OneWay}"
+                            Toggled="IntroVideoToggle_Toggled" />
+                        <StackPanel
+                            Grid.Column="1"
+                            Orientation="Horizontal"
+                            Spacing="8"
+                            VerticalAlignment="Center">
+                            <Button
+                                x:Name="ChooseIntroVideoButton"
+                                Click="ChooseIntroVideoButton_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE8B9;" FontSize="16" />
+                                    <TextBlock Text="{x:Bind Strings.Get('Settings_Intro_Choose'), Mode=OneWay}" />
+                                </StackPanel>
+                            </Button>
+                            <Button
+                                x:Name="ResetIntroVideoButton"
+                                Click="ResetIntroVideoButton_Click">
+                                <TextBlock Text="{x:Bind Strings.Get('Settings_Intro_Reset'), Mode=OneWay}" />
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- 窗口尺寸 -->
+            <Border Style="{StaticResource CardBorderStyle}">
+                <StackPanel Spacing="12">
+                    <StackPanel Spacing="2">
+                        <TextBlock
+                            Text="{x:Bind Strings.Get('Settings_WindowSize_Section'), Mode=OneWay}"
+                            Style="{StaticResource SectionTitleTextStyle}" />
+                        <TextBlock
+                            Text="{x:Bind Strings.Get('Settings_WindowSize_Desc'), Mode=OneWay}"
+                            Foreground="{ThemeResource AuroraTextMutedBrush}"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                    <Grid ColumnSpacing="14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="6">
+                            <TextBlock
+                                Text="{x:Bind Strings.Get('Settings_WindowSize_Width'), Mode=OneWay}"
+                                Style="{StaticResource FieldLabelTextStyle}" />
+                            <Grid ColumnSpacing="4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox
+                                    x:Name="WindowWidthBox"
+                                    Text="1380"
+                                    VerticalAlignment="Center"
+                                    IsSpellCheckEnabled="False" />
+                                <StackPanel Grid.Column="1" Spacing="2">
+                                    <RepeatButton
+                                        Width="32"
+                                        Height="16"
+                                        Click="IncreaseWindowWidthButton_Click"
+                                        Content="&#xE70E;"
+                                        Style="{StaticResource ThemedNumberBoxSpinButtonStyle}"
+                                        ToolTipService.ToolTip="{x:Bind Strings.Get('Settings_WindowSize_Increase'), Mode=OneWay}" />
+                                    <RepeatButton
+                                        Width="32"
+                                        Height="16"
+                                        Click="DecreaseWindowWidthButton_Click"
+                                        Content="&#xE70D;"
+                                        Style="{StaticResource ThemedNumberBoxSpinButtonStyle}"
+                                        ToolTipService.ToolTip="{x:Bind Strings.Get('Settings_WindowSize_Decrease'), Mode=OneWay}" />
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="6">
+                            <TextBlock
+                                Text="{x:Bind Strings.Get('Settings_WindowSize_Height'), Mode=OneWay}"
+                                Style="{StaticResource FieldLabelTextStyle}" />
+                            <Grid ColumnSpacing="4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox
+                                    x:Name="WindowHeightBox"
+                                    Text="810"
+                                    VerticalAlignment="Center"
+                                    IsSpellCheckEnabled="False" />
+                                <StackPanel Grid.Column="1" Spacing="2">
+                                    <RepeatButton
+                                        Width="32"
+                                        Height="16"
+                                        Click="IncreaseWindowHeightButton_Click"
+                                        Content="&#xE70E;"
+                                        Style="{StaticResource ThemedNumberBoxSpinButtonStyle}"
+                                        ToolTipService.ToolTip="{x:Bind Strings.Get('Settings_WindowSize_Increase'), Mode=OneWay}" />
+                                    <RepeatButton
+                                        Width="32"
+                                        Height="16"
+                                        Click="DecreaseWindowHeightButton_Click"
+                                        Content="&#xE70D;"
+                                        Style="{StaticResource ThemedNumberBoxSpinButtonStyle}"
+                                        ToolTipService.ToolTip="{x:Bind Strings.Get('Settings_WindowSize_Decrease'), Mode=OneWay}" />
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                        <StackPanel
+                            Grid.Column="2"
+                            Orientation="Horizontal"
+                            Spacing="8"
+                            VerticalAlignment="Bottom"
+                            Margin="0,0,0,4">
+                            <Button
+                                Click="ApplyWindowSizeButton_Click"
+                                Content="{x:Bind Strings.Get('Settings_Btn_ApplyWindowSize'), Mode=OneWay}"
+                                Style="{StaticResource AuroraGlassButtonStyle}" />
+                            <Button
+                                Click="ResetWindowSizeButton_Click"
+                                Content="{x:Bind Strings.Get('Settings_Btn_ResetWindowSize'), Mode=OneWay}"
+                                Style="{StaticResource AuroraGlassButtonStyle}" />
+                        </StackPanel>
+                    </Grid>
+                    <StackPanel Spacing="4">
+                        <ToggleSwitch
+                            x:Name="RememberWindowPositionToggle"
+                            Header="{x:Bind Strings.Get('Settings_WindowPosition_Toggle'), Mode=OneWay}"
+                            Toggled="RememberWindowPositionToggle_Toggled" />
+                        <TextBlock
+                            Text="{x:Bind Strings.Get('Settings_WindowPosition_Desc'), Mode=OneWay}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Foreground="{ThemeResource AuroraTextMutedBrush}"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+            <!-- 表格分隔线颜色 -->
+            <Border Style="{StaticResource CardBorderStyle}">
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                        <TextBlock
+                            Text="{x:Bind Strings.Get('Settings_TableSeparator_Section'), Mode=OneWay}"
+                            Style="{StaticResource SectionTitleTextStyle}" />
+                        <TextBlock
+                            Text="{x:Bind Strings.Get('Settings_TableSeparator_Desc'), Mode=OneWay}"
+                            Foreground="{ThemeResource AuroraTextMutedBrush}"
+                            TextWrapping="Wrap" />
+                        <ToggleSwitch
+                            x:Name="TableSeparatorToggle"
+                            Header="{x:Bind Strings.Get('Settings_TableSeparator_Show'), Mode=OneWay}"
+                            Toggled="TableSeparatorToggle_Toggled"
+                            Margin="0,8,0,0" />
+                    </StackPanel>
+                    <Button x:Name="TableSeparatorColorButton" Grid.Column="1" MinWidth="0" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Border x:Name="TableSeparatorColorSwatch" Width="18" Height="18" CornerRadius="4" BorderThickness="1" BorderBrush="{ThemeResource AuroraGlassBorderBrush}" Background="{ThemeResource TableRowSeparatorBrush}" />
+                            <TextBlock Text="{x:Bind Strings.Get('Settings_TableSeparator_Button'), Mode=OneWay}" />
+                        </StackPanel>
+                        <Button.Flyout>
+                            <Flyout>
+                                <StackPanel Spacing="8">
+                                    <ColorPicker
+                                        x:Name="TableSeparatorColorPicker"
+                                        IsAlphaEnabled="False"
+                                        IsAlphaSliderVisible="False"
+                                        IsAlphaTextInputVisible="False"
+                                        IsColorSliderVisible="False"
+                                        IsColorChannelTextInputVisible="False"
+                                        IsHexInputVisible="True"
+                                        ColorChanged="TableSeparatorColorPicker_ColorChanged" />
+                                    <Button HorizontalAlignment="Right" MinWidth="0" Click="ResetTableSeparatorColorButton_Click">
+                                        <TextBlock Text="{x:Bind Strings.Get('Settings_TableSeparator_Reset'), Mode=OneWay}" />
+                                    </Button>
+                                </StackPanel>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- 自定义 UI 颜色 -->
+            <Border Style="{StaticResource CardBorderStyle}">
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                        <TextBlock
+                            Text="{x:Bind Strings.Get('Settings_UiColor_Section'), Mode=OneWay}"
+                            Style="{StaticResource SectionTitleTextStyle}" />
+                        <TextBlock
+                            Text="{x:Bind Strings.Get('Settings_UiColor_Desc'), Mode=OneWay}"
+                            Foreground="{ThemeResource AuroraTextMutedBrush}"
+                            TextWrapping="Wrap" />
+                        <ToggleSwitch
+                            x:Name="AnimateUiColorToggle"
+                            Header="{x:Bind Strings.Get('Settings_UiColor_Animate'), Mode=OneWay}"
+                            Toggled="AnimateUiColorToggle_Toggled"
+                            Margin="0,8,0,0" />
+                    </StackPanel>
+                    <Button x:Name="UiColorButton" Grid.Column="1" MinWidth="0" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Border x:Name="UiColorSwatch" Width="18" Height="18" CornerRadius="4" BorderThickness="1" BorderBrush="{ThemeResource AuroraGlassBorderBrush}" Background="{ThemeResource CustomUiBrush}" />
+                            <TextBlock Text="{x:Bind Strings.Get('Settings_UiColor_Button'), Mode=OneWay}" />
+                        </StackPanel>
+                        <Button.Flyout>
+                            <Flyout>
+                                <StackPanel Spacing="8">
+                                    <ColorPicker
+                                        x:Name="UiColorPicker"
+                                        IsAlphaEnabled="False"
+                                        IsAlphaSliderVisible="False"
+                                        IsAlphaTextInputVisible="False"
+                                        ColorChanged="UiColorPicker_ColorChanged" />
+                                    <Button HorizontalAlignment="Right" MinWidth="0" Click="ResetUiColorButton_Click">
+                                        <TextBlock Text="{x:Bind Strings.Get('Settings_UiColor_Reset'), Mode=OneWay}" />
+                                    </Button>
+                                </StackPanel>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- 更新站点：可选直连或代理站，手动检测当前选择站点延迟 -->
+            <Border Style="{StaticResource CardBorderStyle}">
+                <StackPanel Spacing="10">
+                    <TextBlock
+                        Text="{x:Bind Strings.Get('Settings_UpdateProxy_Section'), Mode=OneWay}"
+                        Style="{StaticResource SectionTitleTextStyle}" />
+                    <TextBlock
+                        Text="{x:Bind Strings.Get('Settings_UpdateProxy_Desc'), Mode=OneWay}"
+                        Foreground="{ThemeResource AuroraTextMutedBrush}"
+                        TextWrapping="Wrap" />
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <DropDownButton
+                            x:Name="UpdateProxyButton"
+                            Grid.Column="0"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            Style="{StaticResource UiTintDropDownButtonStyle}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE774;" FontSize="16" />
+                                <TextBlock x:Name="UpdateProxyButtonText" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                            <DropDownButton.Flyout>
+                                <MenuFlyout x:Name="UpdateProxyFlyout" />
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
+                        <Button
+                            x:Name="UpdateProxyLatencyButton"
+                            Grid.Column="1"
+                            Click="UpdateProxyLatencyButton_Click"
+                            ToolTipService.ToolTip="{x:Bind Strings.Get('Settings_UpdateProxy_LatencyButton'), Mode=OneWay}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE895;" FontSize="14" />
+                                <TextBlock Text="{x:Bind Strings.Get('Settings_UpdateProxy_LatencyButton'), Mode=OneWay}" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Steam 安装路径：上号用的 Steam；装有多个 Steam 时可手动指定要用哪一个 -->
+            <Border Style="{StaticResource CardBorderStyle}">
+                <StackPanel Spacing="10">
+                    <TextBlock
+                        Text="{x:Bind Strings.Get('Settings_SteamPath_Section'), Mode=OneWay}"
+                        Style="{StaticResource SectionTitleTextStyle}" />
+                    <TextBlock
+                        Text="{x:Bind Strings.Get('Settings_SteamPath_Desc'), Mode=OneWay}"
+                        Foreground="{ThemeResource AuroraTextMutedBrush}"
+                        TextWrapping="Wrap" />
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            x:Name="SteamPathText"
+                            VerticalAlignment="Center"
+                            IsTextSelectionEnabled="True"
+                            TextTrimming="CharacterEllipsis"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                        <Button
+                            x:Name="ChangeSteamPathButton"
+                            Grid.Column="1"
+                            Click="ChangeSteamPathButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE838;" FontSize="16" />
+                                <TextBlock Text="{x:Bind Strings.Get('Settings_Btn_ChangeSteamPath'), Mode=OneWay}" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- CS2 设置同步（issue #10）：登录时把来源账号的准星/灵敏度/键位等强推到目标账号的 Steam 云 -->
+            <Border Style="{StaticResource CardBorderStyle}">
+                <StackPanel Spacing="10">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                            <TextBlock
+                                Text="{x:Bind Strings.Get('Settings_Cs2Sync_Section'), Mode=OneWay}"
+                                Style="{StaticResource SectionTitleTextStyle}" />
+                            <TextBlock
+                                Text="{x:Bind Strings.Get('Settings_Cs2Sync_Desc'), Mode=OneWay}"
+                                Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ToggleSwitch
+                            x:Name="Cs2SyncToggle"
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            MinWidth="0"
+                            OnContent="{x:Null}"
+                            OffContent="{x:Null}"
+                            Toggled="Cs2SyncToggle_Toggled" />
+                    </Grid>
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            Grid.Column="0"
+                            VerticalAlignment="Center"
+                            Text="{x:Bind Strings.Get('Settings_Cs2Sync_Source'), Mode=OneWay}"
+                            Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                        <AutoSuggestBox
+                            x:Name="Cs2SyncSourceBox"
+                            Grid.Column="1"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Center"
+                            QueryIcon="Find"
+                            UpdateTextOnSelect="False"
+                            PlaceholderText="{x:Bind Strings.Get('Settings_Cs2Sync_Source_Placeholder'), Mode=OneWay}"
+                            TextChanged="Cs2SyncSourceBox_TextChanged"
+                            QuerySubmitted="Cs2SyncSourceBox_QuerySubmitted"
+                            GotFocus="Cs2SyncSourceBox_GotFocus"
+                            LostFocus="Cs2SyncSourceBox_LostFocus" />
+                        <Button
+                            x:Name="Cs2SyncRefreshButton"
+                            Grid.Column="2"
+                            Click="Cs2SyncRefreshButton_Click"
+                            ToolTipService.ToolTip="{x:Bind Strings.Get('Common_Refresh'), Mode=OneWay}">
+                            <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                        </Button>
+                        <Button
+                            x:Name="Cs2SyncPushNowButton"
+                            Grid.Column="3"
+                            Click="Cs2SyncPushNowButton_Click"
+                            ToolTipService.ToolTip="{x:Bind Strings.Get('Settings_Cs2Sync_PushNow_Tooltip'), Mode=OneWay}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE898;" FontSize="14" />
+                                <TextBlock Text="{x:Bind Strings.Get('Settings_Cs2Sync_PushNow'), Mode=OneWay}" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                    <TextBlock
+                        Text="{x:Bind Strings.Get('Settings_Cs2Sync_Note'), Mode=OneWay}"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <!-- 数据 -->
+            <Border Style="{StaticResource CardBorderStyle}">
+                <StackPanel Spacing="10">
+                    <TextBlock
+                        Text="{x:Bind Strings.Get('Settings_Data_Section'), Mode=OneWay}"
+                        Style="{StaticResource SectionTitleTextStyle}" />
+                    <TextBlock
+                        Text="{x:Bind Strings.Get('Settings_Data_Desc'), Mode=OneWay}"
+                        Foreground="{ThemeResource AuroraTextMutedBrush}"
+                        TextWrapping="Wrap" />
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            x:Name="DataFolderPathText"
+                            VerticalAlignment="Center"
+                            IsTextSelectionEnabled="True"
+                            TextTrimming="CharacterEllipsis"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                        <StackPanel
+                            Grid.Column="1"
+                            Orientation="Horizontal"
+                            Spacing="8">
+                            <Button
+                                x:Name="MoveDataFolderButton"
+                                Click="MoveDataFolderButton_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE8DE;" FontSize="16" />
+                                    <TextBlock Text="{x:Bind Strings.Get('Settings_Btn_MoveDataFolder'), Mode=OneWay}" />
+                                </StackPanel>
+                            </Button>
+                            <Button
+                                x:Name="MoveToDefaultDataFolderButton"
+                                Click="MoveToDefaultDataFolderButton_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE8DE;" FontSize="16" />
+                                    <TextBlock Text="{x:Bind Strings.Get('Settings_Btn_MoveToDefaultDataFolder'), Mode=OneWay}" />
+                                </StackPanel>
+                            </Button>
+                            <Button
+                                x:Name="OpenDataFolderButton"
+                                Click="OpenDataFolderButton_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE838;" FontSize="16" />
+                                    <TextBlock Text="{x:Bind Strings.Get('Settings_Btn_OpenDataFolder'), Mode=OneWay}" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

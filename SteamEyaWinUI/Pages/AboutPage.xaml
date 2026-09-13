@@ -1,0 +1,89 @@
+<Page
+    x:Class="SteamEyaWinUI.Pages.AboutPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    NavigationCacheMode="Required">
+
+    <ScrollViewer
+        HorizontalScrollBarVisibility="Disabled"
+        VerticalScrollBarVisibility="Auto"
+        HorizontalContentAlignment="Stretch"
+        Padding="32,24,32,16">
+        <StackPanel Spacing="16" HorizontalAlignment="Stretch">
+            <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
+                <Border
+                    Width="88"
+                    Height="88"
+                    CornerRadius="{ThemeResource OverlayCornerRadius}"
+                    BorderThickness="1"
+                    Background="{ThemeResource AuroraGlassBrush}"
+                    BorderBrush="{ThemeResource AuroraGlassBorderBrush}">
+                    <Image Source="ms-appx:///Assets/Logo.png" Stretch="UniformToFill" />
+                </Border>
+
+                <StackPanel Spacing="4" VerticalAlignment="Center">
+                    <TextBlock Text="账号管理喵" Style="{StaticResource PageTitleTextStyle}" Visibility="Collapsed" />
+                    <TextBlock
+                        x:Name="AboutVersionText"
+                        Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                </StackPanel>
+            </StackPanel>
+
+            <Border Style="{StaticResource CardBorderStyle}">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="{x:Bind Strings.Get('About_Usage_Title'), Mode=OneWay}" Style="{StaticResource SectionTitleTextStyle}" />
+                    <TextBlock
+                        Text="{x:Bind Strings.Get('About_Usage_Intro'), Mode=OneWay}"
+                        Foreground="{ThemeResource AuroraTextMutedBrush}"
+                        TextWrapping="Wrap" />
+                    <TextBlock Text="{x:Bind Strings.Get('About_Usage_ManagedAccounts'), Mode=OneWay}" TextWrapping="Wrap" LineHeight="22" />
+                    <TextBlock Text="{x:Bind Strings.Get('About_Usage_Query'), Mode=OneWay}" TextWrapping="Wrap" LineHeight="22" />
+                    <TextBlock Text="{x:Bind Strings.Get('About_Usage_Login'), Mode=OneWay}" TextWrapping="Wrap" LineHeight="22" />
+                    <TextBlock Text="{x:Bind Strings.Get('About_Usage_History'), Mode=OneWay}" TextWrapping="Wrap" LineHeight="22" />
+                    <TextBlock Text="{x:Bind Strings.Get('About_Usage_CachedAccounts'), Mode=OneWay}" TextWrapping="Wrap" LineHeight="22" />
+                    <TextBlock Text="{x:Bind Strings.Get('About_Usage_Loadout'), Mode=OneWay}" TextWrapping="Wrap" LineHeight="22" />
+                    <TextBlock Text="{x:Bind Strings.Get('About_Usage_Personalize'), Mode=OneWay}" TextWrapping="Wrap" LineHeight="22" />
+                    <TextBlock Text="{x:Bind Strings.Get('About_Usage_TreasureBox'), Mode=OneWay}" TextWrapping="Wrap" LineHeight="22" />
+                    <TextBlock Text="{x:Bind Strings.Get('About_Usage_Settings'), Mode=OneWay}" TextWrapping="Wrap" LineHeight="22" />
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource CardBorderStyle}">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="南方见 重制版" Style="{StaticResource SectionTitleTextStyle}" />
+                    <TextBlock
+                        TextWrapping="Wrap"
+                        LineHeight="24"
+                        IsTextSelectionEnabled="True">
+                        <Run Text="本重制版仅对界面 UI 进行全面重构，同时再原有基础上增加若干自定义实用小功能。" /><LineBreak />
+                        <Run Text="此 UI重构 99.99%采用DeepSeek AI编写，介意请勿使用。" /><LineBreak />
+                        <Run Text="如果你在使用过程中有 Bug 反馈、优化建议、新功能 或 源码 需求，欢迎添加本人 QQ：261064327。" /><LineBreak /><LineBreak />
+                        <Run Text="重要声明：" Foreground="#FFFF7A93" /><LineBreak />
+                        <Run Text="如果您介意因使此软件黑号登录错误或售后问题 请勿使用！请勿使用！请勿使用！" Foreground="#FFFF7A93" /><LineBreak />
+                        <Run Text="以及本软件永久免费开源。若有人假借本软件名义向你收取费用，均非作者行为，请提高警惕，谨防诈骗。" Foreground="#FFFF7A93" /><LineBreak /><LineBreak />
+                        <Run Text="如需原版程序，请访问下方 GitHub 开源项目地址获取。" />
+                    </TextBlock>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource CardBorderStyle}">
+                <StackPanel Spacing="12">
+                    <TextBlock
+                        Text="https://github.com/dmy1710/OpenSteamEYA"
+                        IsTextSelectionEnabled="True"
+                        Foreground="{ThemeResource AuroraTextMutedBrush}"
+                        TextWrapping="Wrap" />
+                    <Button
+                        x:Name="OpenGitHubButton"
+                        HorizontalAlignment="Left"
+                        Click="OpenGitHubButton_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE774;" FontSize="16" />
+                            <TextBlock Text="{x:Bind Strings.Get('About_Btn_OpenGitHub'), Mode=OneWay}" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</Page>
