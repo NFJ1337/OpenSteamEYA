@@ -24,8 +24,10 @@ SteamEYA uses EYA tokens, a type of Steam login credential, to replace tradition
 
 <h1>Nanfangjian Remastered Edition</h1>
 
-This remastered edition fully rebuilds the UI and adds several practical custom features on top of the original version.<br>
-99.99% of this UI rebuild was written with DeepSeek AI. Please do not use it if you mind.<br>
+This remastered edition fully rebuilds the UI and adds several practical custom features on top of the original version.
+
+99.99% of this UI rebuild was written with DeepSeek AI. Please do not use it if you mind.
+
 For bug reports, optimization suggestions, new feature requests, or source code requests, please contact me on QQ: 261064327.
 
 > [!CAUTION]
@@ -34,10 +36,14 @@ For bug reports, optimization suggestions, new feature requests, or source code 
 > If you are concerned about account login errors or after-sales issues caused by using this software, please do not use it! Please do not use it! Please do not use it!
 >
 > This software is permanently free and open source. If anyone charges you under the name of this software, it is not the author's action. Please stay alert and beware of fraud.
->
-> If you need the original program, please visit the GitHub open-source project below.
+
+If you need the original program, please visit the GitHub open-source project below.
+
+> **Original Project**
 >
 > <https://github.com/hvh-software/OpenSteamEYA/>
+>
+> [![Open GitHub](https://img.shields.io/badge/Open-GitHub-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/hvh-software/OpenSteamEYA/)
 
 ## Installation
 

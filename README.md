@@ -22,22 +22,28 @@ SteamEYA 用 EYA 令牌（一种 Steam 登录凭据）代替账号密码登录�
   <img src="docs/screenshots/Four.png" alt="SteamEYA 界面截图 4">
 </p>
 
-<h1>南方见重制版</h1>
+<h1>南方见 重制版</h1>
 
-本重制版仅对界面 UI 进行全面重构，同时再原有基础上增加若干自定义实用小功能。<br>
-此 UI 重构 99.99% 采用 DeepSeek AI 编写，介意请勿使用。<br>
-如果你在使用过程中有 Bug 反馈、优化建议、新功能或源码需求，欢迎添加本人 QQ：261064327。
+本重制版仅对界面 UI 进行全面重构，同时再原有基础上增加若干自定义实用小功能。
+
+此 UI重构 99.99%采用DeepSeek AI编写，介意请勿使用。
+
+如果你在使用过程中有 Bug 反馈、优化建议、新功能 或 源码 需求，欢迎添加本人 QQ：261064327。
 
 > [!CAUTION]
 > **重要声明：**
 >
-> 如果您介意因使此软件黑号登录错误或售后问题请勿使用！请勿使用！请勿使用！
+> 如果您介意因使此软件黑号登录错误或售后问题 请勿使用！请勿使用！请勿使用！
 >
 > 以及本软件永久免费开源。若有人假借本软件名义向你收取费用，均非作者行为，请提高警惕，谨防诈骗。
->
-> 如需原版程序，请访问下方 GitHub 开源项目地址获取。
+
+如需原版程序，请访问下方 GitHub 开源项目地址获取。
+
+> **原版项目地址**
 >
 > <https://github.com/hvh-software/OpenSteamEYA/>
+>
+> [![打开 GitHub](https://img.shields.io/badge/%E6%89%93%E5%BC%80-GitHub-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/hvh-software/OpenSteamEYA/)
 
 ## 安装
 
