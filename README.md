@@ -35,7 +35,8 @@ SteamEYA 用 EYA 令牌（一种 Steam 登录凭据）代替账号密码登录�
 >
 > 以及本软件永久免费开源。若有人假借本软件名义向你收取费用，均非作者行为，请提高警惕，谨防诈骗。
 >
-> 如需原版程序，请访问下方 GitHub 开源项目地址获取。<br>
+> 如需原版程序，请访问下方 GitHub 开源项目地址获取。
+>
 > <https://github.com/hvh-software/OpenSteamEYA/>
 
 ## 安装

@@ -35,7 +35,8 @@ For bug reports, optimization suggestions, new feature requests, or source code 
 >
 > This software is permanently free and open source. If anyone charges you under the name of this software, it is not the author's action. Please stay alert and beware of fraud.
 >
-> If you need the original program, please visit the GitHub open-source project below.<br>
+> If you need the original program, please visit the GitHub open-source project below.
+>
 > <https://github.com/hvh-software/OpenSteamEYA/>
 
 ## Installation
