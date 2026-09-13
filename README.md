@@ -16,9 +16,10 @@ SteamEYA 用 EYA 令牌（一种 Steam 登录凭据）代替账号密码登录�
 ## 界面截图
 
 <p align="center">
-  <img src="https://i.imgur.com/z75EaCd.png" alt="SteamEYA 界面截图 1"><br><br>
-  <img src="https://i.imgur.com/Waxspvt.png" alt="SteamEYA 界面截图 2"><br><br>
-  <img src="https://i.imgur.com/d2K2HRe.png" alt="SteamEYA 界面截图 3">
+  <img src="docs/screenshots/One.png" alt="SteamEYA 界面截图 1"><br><br>
+  <img src="docs/screenshots/Two.png" alt="SteamEYA 界面截图 2"><br><br>
+  <img src="docs/screenshots/Three.png" alt="SteamEYA 界面截图 3"><br><br>
+  <img src="docs/screenshots/Four.png" alt="SteamEYA 界面截图 4">
 </p>
 
 ## 功能

@@ -16,9 +16,10 @@ SteamEYA uses EYA tokens, a type of Steam login credential, to replace tradition
 ## Screenshots
 
 <p align="center">
-  <img src="https://i.imgur.com/z75EaCd.png" alt="SteamEYA screenshot 1"><br><br>
-  <img src="https://i.imgur.com/Waxspvt.png" alt="SteamEYA screenshot 2"><br><br>
-  <img src="https://i.imgur.com/d2K2HRe.png" alt="SteamEYA screenshot 3">
+  <img src="docs/screenshots/One.png" alt="SteamEYA screenshot 1"><br><br>
+  <img src="docs/screenshots/Two.png" alt="SteamEYA screenshot 2"><br><br>
+  <img src="docs/screenshots/Three.png" alt="SteamEYA screenshot 3"><br><br>
+  <img src="docs/screenshots/Four.png" alt="SteamEYA screenshot 4">
 </p>
 
 ## Features
