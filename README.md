@@ -11,7 +11,7 @@
 
 SteamEYA 用 EYA 令牌（一种 Steam 登录凭据）代替账号密码登录，不需要手动输入密码或处理令牌验证器。除了上号，它还能查询账号的优先分、CS2 等级和冷却状态，管理用过的账号，并清理创意工坊订阅。
 
-**👉 [前往 Releases 下载最新版本](https://github.com/dmy1710/OpenSteamEYA/releases)**
+**👉 [前往 Releases 下载最新版本](https://github.com/NFJ1337/OpenSteamEYA/releases)**
 
 ## 界面截图
 
@@ -63,7 +63,7 @@ SteamEYA 用 EYA 令牌（一种 Steam 登录凭据）代替账号密码登录�
 
 ## 安装
 
-1. 在 [Releases](https://github.com/dmy1710/OpenSteamEYA/releases) 下载最新的 `SteamEYA-<版本>-win-x64-setup.exe`。
+1. 在 [Releases](https://github.com/NFJ1337/OpenSteamEYA/releases) 下载最新的 `SteamEYA-<版本>-win-x64-setup.exe`。
 2. 双击安装包，按安装向导完成安装。
 3. 从开始菜单或桌面快捷方式启动 SteamEYA。
 
@@ -73,7 +73,7 @@ SteamEYA 用 EYA 令牌（一种 Steam 登录凭据）代替账号密码登录�
 
 **安装器启动失败怎么办？**
 
-请先检查是否被安全软件拦截，或前往 [Releases](https://github.com/dmy1710/OpenSteamEYA/releases) 重新下载最新安装包后重试。
+请先检查是否被安全软件拦截，或前往 [Releases](https://github.com/NFJ1337/OpenSteamEYA/releases) 重新下载最新安装包后重试。
 
 **EYA 令牌是什么？**
 
@@ -88,7 +88,7 @@ SteamEYA 用 EYA 令牌（一种 Steam 登录凭据）代替账号密码登录�
 需要 .NET 10 SDK 和 Visual Studio 的 C++ 工具链。
 
 ```bash
-git clone https://github.com/dmy1710/OpenSteamEYA.git
+git clone https://github.com/NFJ1337/OpenSteamEYA.git
 cd OpenSteamEYA
 dotnet build SteamEyaWinUI/SteamEyaWinUI.csproj -c Release
 ```
@@ -104,11 +104,11 @@ dotnet build SteamEyaWinUI/SteamEyaWinUI.csproj -c Release
 如果您对这个项目感兴趣，欢迎参与贡献，也欢迎 "Star" 支持一下 ^_^ <br>
 以下为提 PR 并合并的小伙伴，在此感谢项目中所有的贡献者。
 
-<a href="https://github.com/dmy1710/OpenSteamEYA/graphs/contributors" target="_blank">
+<a href="https://github.com/NFJ1337/OpenSteamEYA/graphs/contributors" target="_blank">
   <table>
     <tr>
       <th colspan="2">
-        <br><img src="https://contrib.rocks/image?repo=dmy1710/OpenSteamEYA"><br><br>
+        <br><img src="https://contrib.rocks/image?repo=NFJ1337/OpenSteamEYA"><br><br>
       </th>
     </tr>
   </table>
@@ -127,10 +127,10 @@ dotnet build SteamEyaWinUI/SteamEyaWinUI.csproj -c Release
 <!-- LINK GROUP -->
 
 [latest-version-shield]: https://img.shields.io/github/v/release/hvh-software/OpenSteamEYA?style=flat-square&label=latest%20version&labelColor=black
-[latest-version-link]: https://github.com/dmy1710/OpenSteamEYA/releases
+[latest-version-link]: https://github.com/NFJ1337/OpenSteamEYA/releases
 [github-downloads-shield]: https://img.shields.io/github/downloads/hvh-software/OpenSteamEYA/total?style=flat-square&logo=github&label=downloads&labelColor=black
-[github-downloads-link]: https://github.com/dmy1710/OpenSteamEYA/releases
+[github-downloads-link]: https://github.com/NFJ1337/OpenSteamEYA/releases
 [github-stars-shield]: https://img.shields.io/github/stars/hvh-software/OpenSteamEYA?style=flat-square&logo=github&labelColor=black
-[github-stars-link]: https://github.com/dmy1710/OpenSteamEYA/stargazers
+[github-stars-link]: https://github.com/NFJ1337/OpenSteamEYA/stargazers
 [github-license-shield]: https://img.shields.io/github/license/hvh-software/OpenSteamEYA?style=flat-square&logo=github&labelColor=black
-[github-license-link]: https://github.com/dmy1710/OpenSteamEYA/blob/main/LICENSE
+[github-license-link]: https://github.com/NFJ1337/OpenSteamEYA/blob/main/LICENSE

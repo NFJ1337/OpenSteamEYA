@@ -69,7 +69,7 @@
             <Border Style="{StaticResource CardBorderStyle}">
                 <StackPanel Spacing="12">
                     <TextBlock
-                        Text="https://github.com/dmy1710/OpenSteamEYA"
+                        Text="https://github.com/NFJ1337/OpenSteamEYA"
                         IsTextSelectionEnabled="True"
                         Foreground="{ThemeResource AuroraTextMutedBrush}"
                         TextWrapping="Wrap" />
