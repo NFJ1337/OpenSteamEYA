@@ -55,9 +55,9 @@ function Test-LocalProxyPort([int]$port) {
     finally { $client.Close() }
 }
 
-# 推送源码：GitHub 的 HTTPS 在国内经常被重置，直连失败时自动改用本机代理再试。
-function Invoke-GitPush([string]$branch) {
-    git push origin $branch
+# 推送（分支或 tag）：GitHub 的 HTTPS 在国内经常被重置，直连失败时自动改用本机代理再试。
+function Invoke-GitPush([string[]]$pushArguments) {
+    git push @pushArguments
     if ($LASTEXITCODE -eq 0) { return $true }
 
     Write-Host '直连推送失败，尝试本机代理…'
@@ -65,7 +65,7 @@ function Invoke-GitPush([string]$branch) {
         if (-not (Test-LocalProxyPort $port)) { continue }
 
         Write-Host "  改用 127.0.0.1:$port 重试"
-        git -c "http.proxy=http://127.0.0.1:$port" -c "https.proxy=http://127.0.0.1:$port" push origin $branch
+        git -c "http.proxy=http://127.0.0.1:$port" -c "https.proxy=http://127.0.0.1:$port" push @pushArguments
         if ($LASTEXITCODE -eq 0) { return $true }
     }
 
@@ -96,6 +96,7 @@ if ($DryRun) {
     Write-Host "  - git add -A（当前改动 $pending 条）"
     Write-Host "  - git commit -m ""SteamEYA $Version：源码同步（含本次改动）""（无改动则跳过）"
     Write-Host "  - git push origin $Branch"
+    Write-Host "  - git tag -f $Tag HEAD + git push --force origin refs/tags/$Tag（让发布页的 Source code zip/tar.gz 也变最新）"
     Write-Host '  - 删除 release 上旧的 SteamEYA-*-source.zip（若有）'
     Write-Host "  - gh release upload $Tag $zipPath --clobber（仓库 $Repository）"
     return
@@ -116,12 +117,23 @@ try {
     }
 
     # git 是非托管命令：失败不会抛异常，必须自己看退出码，否则会出现「没推上去却报成功」。
-    if (-not (Invoke-GitPush $Branch)) {
+    if (-not (Invoke-GitPush @('origin', $Branch))) {
         throw "git push 失败：本地已提交但**没有推送成功**（直连与本机代理都试过了），请挂上 VPN 后重试 git push origin $Branch。"
     }
 
     $head = "$(git rev-parse --short HEAD)".Trim()
     Write-Host "已推送源码到 $Repository（$Branch），提交 $head"
+
+    # GitHub release 页上那两个自动生成的「Source code (zip / tar.gz)」是按 release 所在 tag 的提交
+    # 即时打包的。tag 不移动到最新提交，它们就一直是你发版那天的旧代码 —— 所以这里把 tag 跟到 HEAD。
+    git tag -f $Tag HEAD | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw "git tag -f $Tag 失败（退出码 $LASTEXITCODE）。" }
+
+    if (-not (Invoke-GitPush @('--force', 'origin', "refs/tags/$Tag"))) {
+        throw "git push --force origin refs/tags/$Tag 失败：release tag 没能移到最新提交，发布页的 Source code (zip/tar.gz) 会仍是旧代码。"
+    }
+
+    Write-Host "已把 release tag「$Tag」移动并推送到最新提交（GitHub 源码包 zip / tar.gz 会随之更新）"
 }
 finally {
     Pop-Location
