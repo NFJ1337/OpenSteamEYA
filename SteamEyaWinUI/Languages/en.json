@@ -118,6 +118,7 @@
     "About_Btn_ReleasePage": "Releases",
     "About_Btn_OpenGitHub": "Open GitHub",
     "About_Version_Format": "Current version: v{0}",
+    "About_Repo_Line_Label": "Project repository:",
     "About_Usage_Title": "How to use",
     "About_Usage_Intro": "The sidebar is ordered 账号管理 → account verification → login → history → cached accounts → loadout → personalization → toolbox → settings. Follow the flow or jump straight to a page.",
     "About_Usage_Update": "Auto update | Check for new builds on the About page: same version is reported plainly, a mismatch highlights Download Update - nothing downloads until you click it, and the installer is deleted after a successful install. Network failures tell you to use a VPN or download from the Releases page.",

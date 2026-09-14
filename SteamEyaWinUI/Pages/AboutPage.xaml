@@ -26,6 +26,20 @@
                     <TextBlock
                         x:Name="AboutVersionText"
                         Foreground="{ThemeResource AuroraTextMutedBrush}" />
+
+                    <!-- 本项目开源地址：紧跟在版本号下面，点链接直接打开浏览器 -->
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock
+                            Text="{x:Bind Strings.Get('About_Repo_Line_Label'), Mode=OneWay}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Foreground="{ThemeResource AuroraTextMutedBrush}"
+                            VerticalAlignment="Center" />
+                        <HyperlinkButton
+                            x:Name="AboutHeaderRepoLink"
+                            Padding="0"
+                            VerticalAlignment="Center"
+                            Click="AboutHeaderRepoLink_Click" />
+                    </StackPanel>
                 </StackPanel>
             </StackPanel>
 

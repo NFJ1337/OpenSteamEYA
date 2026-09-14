@@ -109,6 +109,7 @@
     "TreasureBox_CheatSites_Legit": "Legit：",
     "About_Btn_OpenGitHub": "打开 GitHub",
     "About_Version_Format": "当前版本：v{0}",
+    "About_Repo_Line_Label": "本项目开源地址：",
     "About_Subtitle": "通过 EYA 令牌登录 Steam、清理创意工坊订阅、查询账号状态。",
     "About_Update_Section": "自动更新(请使用VPN或访问发布页下载)",
     "About_Follow_Title": "点点关注不迷路",

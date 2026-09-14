@@ -128,6 +128,7 @@
     "About_Btn_ReleasePage": "發佈頁",
     "About_Btn_OpenGitHub": "開啟 GitHub",
     "About_Version_Format": "目前版本：v{0}",
+    "About_Repo_Line_Label": "本專案開源網址：",
     "About_Usage_Title": "用法",
     "About_Usage_Intro": "左側選單依「帳號管理 → 帳號核驗 → 黑號登入 → 歷史帳號 → 快取帳號 → 配裝 → 個人化 → 百寶箱 → 設定」排列；可照流程走，也可直接進入對應頁面。",
     "About_Usage_Update": "自動更新｜在「關於」頁檢查新版本：版本一致直接提示，不一致就高亮「下載更新」，點一下才下載並安裝，裝好自動刪掉安裝包；網路不通時會提示掛 VPN 或到發佈頁手動下載。",

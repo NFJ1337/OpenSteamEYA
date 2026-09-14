@@ -221,6 +221,12 @@ public sealed partial class AboutPage : Page, INotifyPropertyChanged
         await AppState.OpenUrlAsync(GitHubUpdateService.RepositoryUrl);
     }
 
+    /// <summary>版本号下方那行开源地址的点击处理（独立方法）。</summary>
+    private async void AboutHeaderRepoLink_Click(object sender, RoutedEventArgs e)
+    {
+        await AppState.OpenUrlAsync(GitHubUpdateService.RepositoryUrl);
+    }
+
     private async void OpenBilibiliButton_Click(object sender, RoutedEventArgs e)
     {
         await AppState.OpenUrlAsync(BilibiliAuthorSpaceUrl);
@@ -313,6 +319,9 @@ public sealed partial class AboutPage : Page, INotifyPropertyChanged
         }
 
         AboutVersionText.Text = Loc.Tf("About_Version_Format", update?.CurrentVersion ?? GitHubUpdateService.CurrentVersion);
+
+        // 版本号下面那行：链接文字直接取常量，改仓库地址时只改一处。
+        AboutHeaderRepoLink.Content = GitHubUpdateService.RepositoryUrl;
 
         if (isChecking)
         {
