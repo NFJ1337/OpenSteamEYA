@@ -44,6 +44,34 @@ function Copy-SourceTree([string]$source, [string]$target) {
     }
 }
 
+# 本机是否有人在监听这个端口（探测 Clash/V2Ray 之类的本地代理端口）
+function Test-LocalProxyPort([int]$port) {
+    $client = New-Object System.Net.Sockets.TcpClient
+    try {
+        $iar = $client.BeginConnect('127.0.0.1', $port, $null, $null)
+        return ($iar.AsyncWaitHandle.WaitOne(300) -and $client.Connected)
+    }
+    catch { return $false }
+    finally { $client.Close() }
+}
+
+# 推送源码：GitHub 的 HTTPS 在国内经常被重置，直连失败时自动改用本机代理再试。
+function Invoke-GitPush([string]$branch) {
+    git push origin $branch
+    if ($LASTEXITCODE -eq 0) { return $true }
+
+    Write-Host '直连推送失败，尝试本机代理…'
+    foreach ($port in 7897, 7890, 7899, 10809, 10808, 1080, 8889, 2080) {
+        if (-not (Test-LocalProxyPort $port)) { continue }
+
+        Write-Host "  改用 127.0.0.1:$port 重试"
+        git -c "http.proxy=http://127.0.0.1:$port" -c "https.proxy=http://127.0.0.1:$port" push origin $branch
+        if ($LASTEXITCODE -eq 0) { return $true }
+    }
+
+    return $false
+}
+
 Write-Host "源码包：$zipPath"
 
 $staging = Join-Path ([System.IO.Path]::GetTempPath()) "steameya-src-$([System.IO.Path]::GetRandomFileName())"
@@ -81,12 +109,17 @@ try {
     $pending = (git status --porcelain | Measure-Object).Count
     if ($pending -gt 0) {
         git commit -m "SteamEYA $Version：源码同步（含本次改动）" | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "git commit 失败（退出码 $LASTEXITCODE）。" }
     }
     else {
         Write-Host '工作区没有需要提交的改动。'
     }
 
-    git push origin $Branch | Out-Host
+    # git 是非托管命令：失败不会抛异常，必须自己看退出码，否则会出现「没推上去却报成功」。
+    if (-not (Invoke-GitPush $Branch)) {
+        throw "git push 失败：本地已提交但**没有推送成功**（直连与本机代理都试过了），请挂上 VPN 后重试 git push origin $Branch。"
+    }
+
     $head = "$(git rev-parse --short HEAD)".Trim()
     Write-Host "已推送源码到 $Repository（$Branch），提交 $head"
 }
