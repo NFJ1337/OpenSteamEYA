@@ -51,7 +51,7 @@
                                 Text="{x:Bind Strings.Get('About_Follow_Title'), Mode=OneWay}"
                                 Style="{StaticResource SectionTitleTextStyle}" />
 
-                            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
                                 <Border
                                     Width="68"
                                     Height="68"
@@ -60,12 +60,18 @@
                                     BorderBrush="{ThemeResource CustomUiBorderBrush}">
                                     <Image Source="ms-appx:///Assets/bilibili-author-avatar.jpg" Stretch="UniformToFill" />
                                 </Border>
-                                <StackPanel Spacing="2" VerticalAlignment="Center">
-                                    <TextBlock Text="南方见TvT" FontSize="16" FontWeight="SemiBold" />
+                                <!-- 昵称与 UID：拉开行距 + 各给行高，避免两行挤在一起 -->
+                                <StackPanel Spacing="6" VerticalAlignment="Center">
+                                    <TextBlock
+                                        Text="南方见TvT"
+                                        FontSize="16"
+                                        FontWeight="SemiBold"
+                                        LineHeight="24" />
                                     <TextBlock
                                         Text="{x:Bind Strings.Get('About_Follow_Uid'), Mode=OneWay}"
                                         Style="{StaticResource CaptionTextBlockStyle}"
-                                        Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                                        Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                        LineHeight="20" />
                                 </StackPanel>
                             </StackPanel>
                         </StackPanel>

@@ -68,6 +68,7 @@ if ($DryRun) {
     Write-Host "  - git add -A（当前改动 $pending 条）"
     Write-Host "  - git commit -m ""SteamEYA $Version：源码同步（含本次改动）""（无改动则跳过）"
     Write-Host "  - git push origin $Branch"
+    Write-Host '  - 删除 release 上旧的 SteamEYA-*-source.zip（若有）'
     Write-Host "  - gh release upload $Tag $zipPath --clobber（仓库 $Repository）"
     return
 }
@@ -91,6 +92,14 @@ try {
 }
 finally {
     Pop-Location
+}
+
+# 先删掉 release 上旧的源码包，只保留这一次的（和安装包一样做「替换」而不是堆积）
+$staleZips = @(gh release view $Tag --repo $Repository --json assets --jq '.assets[].name' |
+    Where-Object { $_ -like 'SteamEYA-*-source.zip' -and $_ -ne $zip.Name })
+foreach ($name in $staleZips) {
+    Write-Host "删除旧源码包：$name"
+    gh release delete-asset $Tag $name --repo $Repository --yes
 }
 
 gh release upload $Tag $zipPath --repo $Repository --clobber

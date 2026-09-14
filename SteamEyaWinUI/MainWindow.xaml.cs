@@ -1,5 +1,6 @@
 ﻿using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -68,7 +69,14 @@ public sealed partial class MainWindow : Window
             new KeyEventHandler(OnIntroKeyDown),
             handledEventsToo: true);
 
-        SystemBackdrop = new MicaBackdrop();
+        // 背景层按系统能力挑：Windows 11 用 Mica；Windows 10 没有 Mica（实测 IsSupported=False），
+        // 这时若仍设 MicaBackdrop，窗口边框/内容缝隙会透出「黑色」底 —— 表现为四周黑边。
+        // 退一档到桌面亚克力（Win10 1809+ 支持），两边都不可用就不设背景层，由根 Grid 的渐变兜底。
+        SystemBackdrop = MicaController.IsSupported()
+            ? new MicaBackdrop()
+            : DesktopAcrylicController.IsSupported()
+                ? new DesktopAcrylicBackdrop()
+                : null;
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
         SetWindowIcon();
