@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using Microsoft.UI.Dispatching;
@@ -208,6 +208,8 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
         OneClickHistoryQueryButton.Visibility = Visibility.Visible;
         UseHistoryAccountButton.Visibility = whiteOnly ? Visibility.Collapsed : Visibility.Visible;
         WhiteBatchQueryButton.Visibility = whiteOnly ? Visibility.Visible : Visibility.Collapsed;
+        // 「导入白号」只在账号管理页出现：历史账号页隐藏它（同一个工具栏，靠作用域切换）。
+        BatchImportWhiteButton.Visibility = whiteOnly ? Visibility.Visible : Visibility.Collapsed;
         RefreshHistoryButton.Visibility = whiteOnly ? Visibility.Collapsed : Visibility.Visible;
         WhiteRefreshHistoryButton.Visibility = whiteOnly ? Visibility.Visible : Visibility.Collapsed;
         HistorySearchBox.Visibility = whiteOnly ? Visibility.Collapsed : Visibility.Visible;
@@ -1074,13 +1076,19 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
         var cancellationToken = AppState.BeginBusyOperation();
         AppState.ShowStatus(Loc.Tf("History_Status_Querying_Format", account.AccountTitle), InfoBarSeverity.Informational);
 
+        if (AppState.LoginPage is not { } loginPage)
+        {
+            AppState.ShowStatus(Loc.T("History_Status_LoginPageNotReady"), InfoBarSeverity.Error);
+            AppState.EndBusyOperation();
+            return;
+        }
+
         try
         {
-            var result = await ValidateHistoryAccountAsync(account, cancellationToken);
-            await RefreshValidatedProfilesAsync([result.SteamId], cancellationToken);
-            ReloadScopedAccounts(result.SteamId);
+            var score = await loginPage.QueryAndSaveCsStatusAsync(
+                account.AccountName, account.EyaToken, cancellationToken);
             AppState.ShowStatus(
-                Loc.Tf("Common_LabelValue_Format", account.AccountTitle, result.SummaryText),
+                Loc.Tf("History_Status_QueryDone_Format", account.AccountTitle, score.DisplayText, score.PlayerLevelText, score.CooldownText, score.GcVacText),
                 InfoBarSeverity.Success);
         }
         catch (OperationCanceledException)

@@ -51,10 +51,161 @@ internal sealed class AccountHistoryService
 
     public string AvatarFolderPath => Path.Combine(AppFolderPath, _avatarFolderName);
 
+    // 读到旧版明文凭据时置位：Load() 会回写一次完成迁移（加密落盘）。
+    private bool _plaintextCredentialsDetected;
+
     public IReadOnlyList<SteamAccountHistoryItem> Load()
     {
         var document = ReadDocument();
+        if (_plaintextCredentialsDetected)
+        {
+            _plaintextCredentialsDetected = false;
+            try
+            {
+                // 迁移：同一份数据原样回写，只是敏感字段变成密文。失败不影响本次读取。
+                WriteDocument(document);
+                AppLog.Info($"本地凭据已加密迁移：{Path.GetFileName(HistoryFilePath)}");
+
+                EnsureBackupHasNoPlaintext();
+            }
+            catch (Exception ex)
+            {
+                AppLog.Warn($"本地凭据加密迁移失败，本次仍按明文使用：{ex.Message}");
+            }
+        }
+
+        // 主文件已加密但同目录 .bak 还是旧版明文时，这里自愈一次（只覆盖备份，不动主文件）。
+        EnsureBackupHasNoPlaintext();
         return NormalizeAccounts(document.Accounts);
+    }
+
+    /// <summary>
+    /// 若 .bak 还是旧版明文快照，或主文件已加了口令层（第 4 层）而备份还没加，就用当前主文件覆盖它。
+    /// 前者避免磁盘上残留明文凭据，后者避免旧 .bak 变成绕过口令的后门。
+    /// 覆盖的是备份文件本身，不影响主文件与 .bak 作为"上次内容"的兜底作用。
+    /// </summary>
+    private void EnsureBackupHasNoPlaintext()
+    {
+        var backupPath = HistoryFilePath + ".bak";
+        try
+        {
+            if (!File.Exists(backupPath) || !File.Exists(HistoryFilePath))
+            {
+                return;
+            }
+
+            if (!CredentialProtector.NeedsBackupRefresh(File.ReadAllText(HistoryFilePath), File.ReadAllText(backupPath)))
+            {
+                return;
+            }
+
+            File.WriteAllText(backupPath, File.ReadAllText(HistoryFilePath));
+            AppLog.Info($"已用密文覆盖旧版明文备份：{Path.GetFileName(backupPath)}");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"清理明文备份失败（不影响使用）：{ex.Message}");
+        }
+    }
+
+    // ---------- 凭据库口令层（第 4 层，可选，默认关闭） ----------
+
+    /// <summary>该凭据库文件是否启用了口令层（只读文件头部，不需要先解锁）。</summary>
+    public bool IsVaultPassphraseEnabled => CredentialProtector.IsPassphraseEnabled(HistoryFilePath);
+
+    /// <summary>启用了口令层，但本次会话还没解锁（账号读为空值，写盘会被拒绝）。</summary>
+    public bool IsVaultPassphraseLocked => CredentialProtector.IsPassphraseLocked(HistoryFilePath);
+
+    /// <summary>用口令解锁；成功后可正常读取账号。</summary>
+    public bool TryUnlockVault(string passphrase)
+    {
+        _fileGate.Wait();
+        try
+        {
+            return CredentialProtector.TryUnlockWithPassphrase(HistoryFilePath, passphrase);
+        }
+        finally
+        {
+            _fileGate.Release();
+        }
+    }
+
+    /// <summary>只校验口令是否正确（不改状态），用于「取消口令」前的身份确认。</summary>
+    public bool VerifyVaultPassphrase(string passphrase)
+    {
+        _fileGate.Wait();
+        try
+        {
+            return CredentialProtector.VerifyPassphrase(HistoryFilePath, passphrase);
+        }
+        finally
+        {
+            _fileGate.Release();
+        }
+    }
+
+    /// <summary>设置/更换口令层，并立刻按新头部落盘一次（字段密文与数据密钥都不变）。</summary>
+    public void SetVaultPassphrase(string passphrase)
+    {
+        _fileGate.Wait();
+        try
+        {
+            _ = ReadDocumentForWrite();   // 先确保数据密钥就绪（新建空库时也能设置口令）
+            CredentialProtector.SetPassphrase(HistoryFilePath, passphrase);
+            RewriteVaultHeader();
+        }
+        finally
+        {
+            _fileGate.Release();
+        }
+    }
+
+    /// <summary>取消口令层，并立刻按新头部落盘一次（恢复为程序自动解密）。</summary>
+    public void ClearVaultPassphrase()
+    {
+        _fileGate.Wait();
+        try
+        {
+            CredentialProtector.ClearPassphrase(HistoryFilePath);
+            RewriteVaultHeader();
+        }
+        finally
+        {
+            _fileGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// 用内存里的 vault 头部状态原样回写一次账号文件。只用于口令层的设置/取消：
+    /// 数据密钥与字段密文都不变，改变的只是头部的包装方式。
+    /// </summary>
+    private void RewriteVaultHeader()
+    {
+        var document = ReadDocumentForWrite();
+        WriteDocument(document);
+
+        // 设置/更换/取消口令会改变 .bak 的包装方式：旧备份用旧口令（或没有口令）都解不开，
+        // 这里直接把备份同步成新内容，保证主文件与备份永远能用同一套凭据打开。
+        SyncBackupWithMain();
+    }
+
+    /// <summary>把主文件内容原样复制到 .bak（口令层变更后调用）。</summary>
+    private void SyncBackupWithMain()
+    {
+        try
+        {
+            if (!File.Exists(HistoryFilePath))
+            {
+                return;
+            }
+
+            File.WriteAllText(HistoryFilePath + ".bak", File.ReadAllText(HistoryFilePath));
+            AppLog.Info($"已同步凭据库备份：{Path.GetFileName(HistoryFilePath)}.bak");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"同步凭据库备份失败（不影响使用）：{ex.Message}");
+        }
     }
 
     public async Task<SteamAccountHistoryItem?> GetProfilePreviewAsync(
@@ -835,6 +986,10 @@ internal sealed class AccountHistoryService
             var document = JsonSerializer.Deserialize(json, AccountHistoryJsonContext.Default.AccountHistoryDocument)
                 ?? new AccountHistoryDocument();
             document.Accounts ??= [];
+
+            // 敏感字段（令牌/密码/手机密钥/邮箱密码）落盘为 DPAPI 密文；旧版明文在此解密为明文供运行时使用，
+            // 并标记「需要迁移」，由 Load() 立刻回写一次把文件升级为密文。
+            _plaintextCredentialsDetected |= CredentialProtector.UnprotectInPlace(document, HistoryFilePath, json);
             return document;
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
@@ -1022,8 +1177,24 @@ internal sealed class AccountHistoryService
 
     private void WriteDocument(AccountHistoryDocument document)
     {
+        // 凭据库密钥不可用（文件来自其它密钥方案/被篡改）时，内存里的账号是"解不出来的空壳"，此时落盘会把它们整条丢掉：
+        // 直接拒绝写入（宁可报错，也不能悄悄删账号）。
+        if (CredentialProtector.IsLocked(HistoryFilePath))
+        {
+            throw new InvalidOperationException(Loc.T("Account_Error_VaultLocked"));
+        }
+
+        // 有解不开的密文（被篡改 / 来自别的机器或 Windows 用户）时，内存里的账号是空壳，
+        // 落盘会把它们整条写没 → 同样拒绝写入。
+        if (CredentialProtector.HasUndecryptableData(HistoryFilePath))
+        {
+            throw new InvalidOperationException(Loc.T("Account_Error_VaultUnreadable"));
+        }
+
         Directory.CreateDirectory(HistoryFolderPath);
-        var json = JsonSerializer.Serialize(document, AccountHistoryJsonContext.Default.AccountHistoryDocument);
+        var json = CredentialProtector.ProtectSensitiveFields(
+            JsonSerializer.Serialize(document, AccountHistoryJsonContext.Default.AccountHistoryDocument),
+            HistoryFilePath);
 
         // 先写临时文件再原子替换，避免进程中断导致 accounts.json 半截损坏、下次保存清空全部历史。
         // 临时文件名加随机后缀，避免多次写入间残留的 .tmp 撞名。

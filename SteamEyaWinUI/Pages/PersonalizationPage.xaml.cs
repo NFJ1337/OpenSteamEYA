@@ -37,6 +37,10 @@ public sealed partial class PersonalizationPage : Page, INotifyPropertyChanged
 
     private readonly DispatcherQueue _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
 
+    // 本页底部状态条与主窗口状态栏保持同一节奏：任何等级都在 1.5 秒后自动收起。
+    private static readonly TimeSpan InfoBarAutoDismissDelay = TimeSpan.FromSeconds(1.5);
+    private readonly DispatcherQueueTimer _infoBarDismissTimer;
+
     // 当前源图（原始字节，导出/预览时按选框重新解码裁剪）。null = 尚未载入任何图片。
     private byte[]? _sourceBytes;
     private double _srcW;                 // 源图（含 EXIF 朝向）像素宽
@@ -73,6 +77,11 @@ public sealed partial class PersonalizationPage : Page, INotifyPropertyChanged
 
         // 把缩放/平移后溢出的背景图裁到裁剪台内。
         CropArea.Clip = new RectangleGeometry { Rect = new Rect(0, 0, StageW, StageH) };
+
+        _infoBarDismissTimer = _dispatcherQueue.CreateTimer();
+        _infoBarDismissTimer.Interval = InfoBarAutoDismissDelay;
+        _infoBarDismissTimer.IsRepeating = false;
+        _infoBarDismissTimer.Tick += (_, _) => PageInfoBar.IsOpen = false;
 
         Loc.LanguageChanged += OnLanguageChanged;
     }
@@ -756,6 +765,10 @@ public sealed partial class PersonalizationPage : Page, INotifyPropertyChanged
         PageInfoBar.Message = message;
         PageInfoBar.Severity = severity;
         PageInfoBar.IsOpen = true;
+
+        // 与主窗口状态栏一致：1.5 秒后自动收起。
+        _infoBarDismissTimer.Stop();
+        _infoBarDismissTimer.Start();
     }
 
     // ---- Win32 文件对话框（替代在提权 / 无包装场景下不可靠的 WinRT FileOpenPicker）----

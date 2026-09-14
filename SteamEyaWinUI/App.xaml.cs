@@ -35,6 +35,9 @@ public partial class App : Application
         ApplyTableSeparatorColor(settings.TableSeparatorColor, UiColorService.ResolveEffectiveTheme(settings.Theme, settings.UiColor), settings.ShowTableSeparators);
         AppState.UiColorService.Apply(settings.UiColor, settings.UiColorAnimated, settings.Theme);
 
+        // 上次自动更新下载的安装包：装完之后首次启动时删掉（仍在被安装器占用则跳过）。
+        AppState.UpdateInstallerService.CleanupDownloadedInstallers();
+
         _window = new MainWindow();
         _window.Activate();
     }

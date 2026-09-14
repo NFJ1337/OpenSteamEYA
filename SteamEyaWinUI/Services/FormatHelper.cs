@@ -201,6 +201,44 @@ internal static class FormatHelper
         return new SolidColorBrush(Microsoft.UI.Colors.Gray);
     }
 
+    /// <summary>
+    /// 警示色画刷（Caution 主题色）。<see cref="GetStatusBrush"/> 的 Informational 档是次要文本色，
+    /// 拿来当强调色会与正文同色，故单个核验模块的「需要注意」档单独走这里。
+    /// </summary>
+    public static Brush GetWarningBrush()
+    {
+        if (TryFindThemeBrush("SystemFillColorCautionBrush") is { } themedBrush)
+        {
+            return themedBrush;
+        }
+
+        if (Application.Current.Resources.TryGetValue("SystemFillColorCautionBrush", out var resource) &&
+            resource is Brush brush)
+        {
+            return brush;
+        }
+
+        return new SolidColorBrush(Microsoft.UI.Colors.Orange);
+    }
+    /// <summary>
+    /// 主题感知的正文前景色。核验模块的值文本始终显式设置 Foreground（按状态换色），
+    /// 「正常值」这一档需要与页面默认正文同色，故这里单独取 TextFillColorPrimaryBrush。
+    /// </summary>
+    public static Brush GetPrimaryTextBrush()
+    {
+        if (TryFindThemeBrush("TextFillColorPrimaryBrush") is { } themedBrush)
+        {
+            return themedBrush;
+        }
+
+        if (Application.Current.Resources.TryGetValue("TextFillColorPrimaryBrush", out var resource) &&
+            resource is Brush brush)
+        {
+            return brush;
+        }
+
+        return new SolidColorBrush(Microsoft.UI.Colors.Black);
+    }
     /// <summary>按当前实际主题在 XamlControlsResources 的主题字典中查找画刷；找不到返回 null。</summary>
     private static Brush? TryFindThemeBrush(string key)
     {

@@ -18,29 +18,99 @@
                     Style="{StaticResource PageSubtitleTextStyle}" Visibility="Collapsed" />
             </StackPanel>
 
+            <!-- 机密卡片 + 一键获取18位UID：同一套样式左右并排 -->
+            <Grid ColumnSpacing="14">
+                <!-- 左列 Auto：红色机密卡片宽度跟着文本走（一行放得下就一行）；右列吃掉剩余宽度 -->
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" MinWidth="200" />
+                </Grid.ColumnDefinitions>
+
+                <Button
+                    x:Name="SecretCardButton"
+                    Grid.Column="0"
+                    HorizontalAlignment="Left"
+                    MaxWidth="560"
+                    HorizontalContentAlignment="Stretch"
+                    Padding="18"
+                    CornerRadius="16"
+                    Background="#38DC2626"
+                    BorderBrush="#99EF4444"
+                    BorderThickness="1"
+                    Click="SecretCardButton_Click">
+                    <Button.Resources>
+                        <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#55DC2626" />
+                        <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#70DC2626" />
+                        <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#FFEF4444" />
+                        <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#FFDC2626" />
+                    </Button.Resources>
+                    <TextBlock
+                        Text="{x:Bind Strings.Get('TreasureBox_SecretCard'), Mode=OneWay}"
+                        Foreground="#FFFF6B81"
+                        FontSize="18"
+                        FontWeight="SemiBold"
+                        LineHeight="28"
+                        TextWrapping="Wrap" />
+                </Button>
+
+                <Button
+                    x:Name="UidCardButton"
+                    Grid.Column="1"
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Stretch"
+                    VerticalContentAlignment="Center"
+                    Padding="18"
+                    CornerRadius="16"
+                    Background="#38DC2626"
+                    BorderBrush="#99EF4444"
+                    BorderThickness="1"
+                    Click="UidCardButton_Click">
+                    <Button.Resources>
+                        <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#55DC2626" />
+                        <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#70DC2626" />
+                        <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#FFEF4444" />
+                        <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#FFDC2626" />
+                    </Button.Resources>
+                    <TextBlock
+                        Text="{x:Bind Strings.Get('TreasureBox_UidCard'), Mode=OneWay}"
+                        Foreground="#FFFF6B81"
+                        FontSize="18"
+                        FontWeight="SemiBold"
+                        LineHeight="28"
+                        TextWrapping="Wrap"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center" />
+                </Button>
+            </Grid>
+
+            <!-- 常规科技官网速查：点了弹窗，弹窗里是 标签 + 可点链接（不影响上面两个按钮） -->
             <Button
-                x:Name="SecretCardButton"
+                x:Name="CheatSitesButton"
                 HorizontalAlignment="Stretch"
-                HorizontalContentAlignment="Stretch"
-                Padding="18"
-                CornerRadius="16"
-                Background="#38DC2626"
-                BorderBrush="#99EF4444"
-                BorderThickness="1"
-                Click="SecretCardButton_Click">
-                <Button.Resources>
-                    <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#55DC2626" />
-                    <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#70DC2626" />
-                    <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#FFEF4444" />
-                    <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#FFDC2626" />
-                </Button.Resources>
-                <TextBlock
-                    Text="{x:Bind Strings.Get('TreasureBox_SecretCard'), Mode=OneWay}"
-                    Foreground="#FFFF6B81"
-                    FontSize="18"
-                    FontWeight="SemiBold"
-                    LineHeight="28"
-                    TextWrapping="Wrap" />
+                HorizontalContentAlignment="Center"
+                CornerRadius="12"
+                Padding="14,7"
+                FontWeight="SemiBold"
+                Click="CheatSitesButton_Click">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon x:Name="CheatSitesIcon" Glyph="&#xE774;" FontSize="16" />
+                    <TextBlock x:Name="CheatSitesLabel" Text="{x:Bind Strings.Get('TreasureBox_CheatSitesButton'), Mode=OneWay}" />
+                </StackPanel>
+            </Button>
+
+            <!-- 梯子推荐：点开弹窗的样式与上面 Cheat 官网弹窗一致 -->
+            <Button
+                x:Name="ProxySiteButton"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Center"
+                CornerRadius="12"
+                Padding="14,7"
+                FontWeight="SemiBold"
+                Click="ProxySiteButton_Click">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon x:Name="ProxySiteIcon" Glyph="&#xE774;" FontSize="16" />
+                    <TextBlock x:Name="ProxySiteLabel" Text="{x:Bind Strings.Get('TreasureBox_ProxySite'), Mode=OneWay}" />
+                </StackPanel>
             </Button>
         </StackPanel>
     </ScrollViewer>

@@ -9,6 +9,7 @@ using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using Windows.UI;
 using Microsoft.UI.Xaml.Navigation;
+using SteamEyaWinUI.Controls;
 using SteamEyaWinUI.Localization;
 using SteamEyaWinUI.Services;
 using Windows.Storage;
@@ -77,6 +78,9 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
 
             // 来源账号候选/选中文本用 Settings_Cs2Sync_SourceItem_Format 拼装，跟随语言重建。
             RefreshCs2SyncSources();
+
+            // 口令卡片的状态文案与按钮文字都是代码设置的，语言切换后需要重算。
+            UpdateVaultPassphraseControls();
         });
     }
 
@@ -295,6 +299,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         DataFolderPathText.Text = AppState.SettingsService.AppFolderPath;
         UpdateSteamPathText();
         RefreshCs2SyncSources();
+        UpdateVaultPassphraseControls();
     }
 
     private async void CustomBackgroundToggle_Toggled(object sender, RoutedEventArgs e)
@@ -631,6 +636,123 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     {
         SteamPathText.Text = SteamPathCoordinator.GetPersistedInstallPath() ?? Loc.T("Settings_SteamPath_NotSet");
     }
+    // ---------- 凭据加密口令（第 4 层，可选，默认关闭） ----------
+
+    private const int VaultPassphraseMinLength = 8;
+
+    /// <summary>刷新口令卡片的状态文案与按钮可见性/可用性。</summary>
+    private void UpdateVaultPassphraseControls()
+    {
+        var enabled = CredentialVault.IsPassphraseEnabled;
+        var locked = CredentialVault.IsLocked;
+
+        VaultPassphraseStatusText.Text = Loc.T(locked
+            ? "Settings_VaultPw_Status_Locked"
+            : enabled
+                ? "Settings_VaultPw_Status_On"
+                : "Settings_VaultPw_Status_Off");
+
+        VaultPassphraseUnlockButton.Visibility = locked ? Visibility.Visible : Visibility.Collapsed;
+        VaultPassphraseClearButton.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
+        VaultPassphrasePrimaryButtonText.Text = Loc.T(enabled ? "Settings_VaultPw_Change" : "Settings_VaultPw_Set");
+
+        // 锁定状态下拿不到数据密钥：必须先解锁，才能更换或取消口令。
+        VaultPassphrasePrimaryButton.IsEnabled = !locked;
+        VaultPassphraseClearButton.IsEnabled = !locked;
+    }
+
+    private async void VaultPassphraseUnlockButton_Click(object sender, RoutedEventArgs e)
+    {
+        var passphrase = await VaultPassphraseDialog.AskAsync(
+            XamlRoot, Loc.T("VaultPw_Unlock_Title"), Loc.T("VaultPw_Unlock_Desc"), Loc.T("Common_Confirm"));
+        if (passphrase is null)
+        {
+            return;
+        }
+
+        if (!CredentialVault.TryUnlock(passphrase))
+        {
+            AppState.ShowStatus(Loc.T("VaultPw_Error_Wrong"), InfoBarSeverity.Error);
+            return;
+        }
+
+        AppState.ReloadHistory();
+        AppState.ReloadWhiteAccounts();
+        AppState.ShowStatus(Loc.T("VaultPw_Status_UnlockedOk"), InfoBarSeverity.Success);
+        UpdateVaultPassphraseControls();
+    }
+
+    private async void VaultPassphrasePrimaryButton_Click(object sender, RoutedEventArgs e)
+    {
+        var enabled = CredentialVault.IsPassphraseEnabled;
+        var passphrase = await VaultPassphraseDialog.AskAsync(
+            XamlRoot,
+            Loc.T(enabled ? "VaultPw_Change_Title" : "VaultPw_Set_Title"),
+            Loc.T(enabled ? "VaultPw_Change_Desc" : "VaultPw_Set_Desc"),
+            Loc.T("Common_Confirm"));
+        if (passphrase is null)
+        {
+            return;
+        }
+
+        if (passphrase.Length < VaultPassphraseMinLength)
+        {
+            AppState.ShowStatus(Loc.T("VaultPw_Error_TooShort"), InfoBarSeverity.Error);
+            return;
+        }
+
+        var confirm = await VaultPassphraseDialog.AskAsync(
+            XamlRoot, Loc.T("VaultPw_Set_Title"), Loc.T("VaultPw_Confirm_Desc"), Loc.T("Common_Confirm"));
+        if (confirm is null)
+        {
+            return;
+        }
+
+        if (!string.Equals(passphrase, confirm, StringComparison.Ordinal))
+        {
+            AppState.ShowStatus(Loc.T("VaultPw_Error_Mismatch"), InfoBarSeverity.Error);
+            return;
+        }
+
+        try
+        {
+            CredentialVault.SetPassphrase(passphrase);
+        }
+        catch (Exception ex)
+        {
+            AppState.ShowStatus(Loc.Tf("VaultPw_Error_SetFailed_Format", ex.Message), InfoBarSeverity.Error);
+            return;
+        }
+
+        AppState.ShowStatus(Loc.T("VaultPw_Status_SetOk"), InfoBarSeverity.Success);
+        UpdateVaultPassphraseControls();
+    }
+
+    private async void VaultPassphraseClearButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (CredentialVault.IsLocked)
+        {
+            AppState.ShowStatus(Loc.T("VaultPw_Status_LockedHint"), InfoBarSeverity.Warning);
+            return;
+        }
+
+        var passphrase = await VaultPassphraseDialog.AskAsync(
+            XamlRoot, Loc.T("VaultPw_Clear_Title"), Loc.T("VaultPw_Clear_Desc"), Loc.T("Common_Confirm"));
+        if (passphrase is null)
+        {
+            return;
+        }
+
+        if (!CredentialVault.ClearPassphrase(passphrase))
+        {
+            AppState.ShowStatus(Loc.T("VaultPw_Error_Wrong"), InfoBarSeverity.Error);
+            return;
+        }
+
+        AppState.ShowStatus(Loc.T("VaultPw_Status_ClearedOk"), InfoBarSeverity.Success);
+        UpdateVaultPassphraseControls();
+    }
+
     private void ApplyWindowSizeButton_Click(object sender, RoutedEventArgs e)
     {
         if (!TryParseWindowDimension(WindowWidthBox.Text, MainWindow.MinimumWindowWidth, MainWindow.MaximumWindowWidth, out var width) ||

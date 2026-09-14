@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.UI.Xaml.Controls;
 using SteamEyaWinUI.Localization;
 using SteamEyaWinUI.Models;
@@ -29,6 +30,7 @@ internal static class AppState
     public static SettingsService SettingsService { get; } = new();
     public static Cs2CloudService Cs2CloudService { get; } = new();
     public static UiColorService UiColorService { get; } = new();
+    public static SteamVerifyService VerifyService { get; } = new();
 
     /// <summary>由 MainWindow 注入，向全局状态栏输出消息。</summary>
     public static Action<string, InfoBarSeverity>? StatusReporter { get; set; }
@@ -168,9 +170,53 @@ internal static class AppState
 
     public static string? UpdateCheckError { get; private set; }
 
+    /// <summary>上次检查失败是否属于「网络/代理不通」这类原因（UI 据此给「查看网络或使用VPN」的提示）。</summary>
+    public static bool UpdateCheckFailedByNetwork { get; private set; }
+
+    /// <summary>网络类失败判定：连接失败、超时、DNS/代理不通都算。</summary>
+    internal static bool IsNetworkFailure(Exception exception) =>
+        exception is HttpRequestException or TaskCanceledException or TimeoutException or System.Net.Sockets.SocketException ||
+        exception.InnerException is System.Net.Sockets.SocketException;
+
     public static DateTimeOffset? UpdateCheckedAt { get; private set; }
 
     public static event Action? UpdateStateChanged;
+
+    /// <summary>检查完更新后该做什么。</summary>
+    internal enum UpdateAction
+    {
+        /// <summary>版本一致，只提示。</summary>
+        SameVersion,
+
+        /// <summary>远端更新：只提示（「关于」页会高亮下载按钮），下载要用户点按钮。</summary>
+        UpdateAvailable,
+
+        /// <summary>远端比本机旧（例如刚回滚过 release）：不自动降级，只提示。</summary>
+        LocalNewer,
+
+        /// <summary>版本信息不足以比较（例如 tag 不是版本号）：只提示。</summary>
+        Unknown,
+    }
+
+    /// <summary>
+    /// 依据一次检查结果决定后续动作：
+    /// 版本一致 → SameVersion；远端更新 → UpdateAvailable（只提示，不自动下载）；
+    /// 远端更旧 → LocalNewer；无法比较 → Unknown。
+    /// </summary>
+    internal static UpdateAction DecideUpdateAction(GitHubUpdateInfo update)
+    {
+        if (update.MetadataNotice is { Length: > 0 })
+        {
+            return UpdateAction.Unknown;
+        }
+
+        if (string.Equals(update.LatestVersion, update.CurrentVersion, StringComparison.OrdinalIgnoreCase))
+        {
+            return UpdateAction.SameVersion;
+        }
+
+        return update.IsUpdateAvailable ? UpdateAction.UpdateAvailable : UpdateAction.LocalNewer;
+    }
 
     public static async Task CheckForUpdatesAsync(bool isAutomatic)
     {
@@ -192,30 +238,54 @@ internal static class AppState
             var update = await UpdateService.CheckLatestAsync();
             LatestUpdate = update;
             UpdateCheckError = null;
+            UpdateCheckFailedByNetwork = false;
             UpdateCheckedAt = update.CheckedAt;
 
-            // 自动检查发现新版本只亮「关于」导航项红点（UpdateStateChanged → MainWindow.RefreshUpdateBadge），
-            // 不再弹常驻横幅占用每页底部；手动检查才用状态栏明确反馈结果。
-            if (update.IsUpdateAvailable)
+            switch (DecideUpdateAction(update))
             {
-                if (!isAutomatic)
-                {
-                    ShowStatus(Loc.Tf("AppState_Update_Available_Format", update.LatestTag), InfoBarSeverity.Warning);
-                }
-            }
-            else if (!isAutomatic)
-            {
-                ShowStatus(Loc.Tf("AppState_Update_UpToDate_Format", update.LatestTag), InfoBarSeverity.Success);
+                case UpdateAction.SameVersion:
+                    // 手动检查才提示，避免每次启动都刷一条状态。
+                    if (!isAutomatic)
+                    {
+                        ShowStatus(Loc.Tf("AppState_Update_UpToDate_Format", update.LatestVersion), InfoBarSeverity.Success);
+                    }
+
+                    break;
+
+                case UpdateAction.UpdateAvailable:
+                    // 只提示，不自动下载：「关于」页会把「下载更新」按钮高亮，等用户点了才下载。
+                    ShowStatus(
+                        Loc.Tf("AppState_Update_Available_Format", update.LatestVersion),
+                        InfoBarSeverity.Warning);
+                    break;
+
+                case UpdateAction.LocalNewer:
+                    ShowStatus(Loc.Tf("AppState_Update_LocalNewer_Format", update.LatestVersion), InfoBarSeverity.Warning);
+                    break;
+
+                default:
+                    // 版本无法比较（如仓库没发 latest.json 且 tag 不是版本号）：只把提示带给用户。
+                    if (!isAutomatic && update.MetadataNotice is { Length: > 0 } notice)
+                    {
+                        ShowStatus(notice, InfoBarSeverity.Warning);
+                    }
+
+                    break;
             }
         }
         catch (Exception ex)
         {
             UpdateCheckError = ex.Message;
+            UpdateCheckFailedByNetwork = IsNetworkFailure(ex);
             UpdateCheckedAt = DateTimeOffset.Now;
 
             if (!isAutomatic)
             {
-                ShowStatus(Loc.Tf("AppState_Update_CheckFailed_Format", ex.Message), InfoBarSeverity.Error);
+                ShowStatus(
+                    UpdateCheckFailedByNetwork
+                        ? Loc.T("AppState_Update_NetworkError")
+                        : Loc.Tf("AppState_Update_CheckFailed_Format", ex.Message),
+                    InfoBarSeverity.Error);
             }
         }
         finally

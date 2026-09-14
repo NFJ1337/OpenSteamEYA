@@ -589,17 +589,18 @@
             <ScrollViewer x:Name="HistoryDetailScrollViewer" Grid.Row="1" Grid.Column="1" VerticalScrollBarVisibility="Auto">
                 <Border Style="{StaticResource CardBorderStyle}">
                     <StackPanel x:Name="HistoryDetailContentPanel" Spacing="16">
-                        <StackPanel Spacing="10" HorizontalAlignment="Center">
+                        <StackPanel Spacing="6" HorizontalAlignment="Center">
                             <!-- 不绑 DisplayName：留空才显示默认人像剪影（PersonPicture 会按文案取首字母），
                                  且语言切换重估绑定会把代码里清空的值盖回去。 -->
+                            <!-- 顶部头像块整体缩小一档（92→68 / 20→17 / 间距 10→6），给下方字段留出高度。 -->
                             <PersonPicture
                                 x:Name="HistoryDetailAvatar"
-                                Width="92"
-                                Height="92" />
+                                Width="68"
+                                Height="68" />
                             <TextBlock
                                 x:Name="HistoryDetailAccountNameText"
                                 Text="{x:Bind Strings.Get('History_Detail_NoAccountSelected'), Mode=OneWay}"
-                                FontSize="20"
+                                FontSize="17"
                                 FontWeight="SemiBold"
                                 HorizontalAlignment="Center"
                                 TextWrapping="Wrap" />

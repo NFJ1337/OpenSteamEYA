@@ -1,10 +1,24 @@
 ﻿param(
-    [string]$Version = "1.1.0",
+    [string]$Version = "1.2.9",
     [string]$Configuration = "Release",
-    [string]$Runtime = "win-x64"
+    [string]$Runtime = "win-x64",
+    # 先按「末位 +1，满 10 进位」自增版本号（同步写回 csproj / 本脚本 / iss），再打包。
+    [switch]$Bump
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($Bump) {
+    $bumpScript = Join-Path $PSScriptRoot "bump-version.ps1"
+    $bumpOutput = & $bumpScript
+    $bumped = ($bumpOutput | Where-Object { $_ -like "NewVersion=*" }) -replace "^NewVersion=", ""
+    if ([string]::IsNullOrWhiteSpace($bumped)) {
+        throw "版本自增失败：bump-version.ps1 没有返回 NewVersion。"
+    }
+
+    $Version = $bumped
+    Write-Host "版本自增后：$Version"
+}
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $projectPath = Join-Path $repoRoot "SteamEyaWinUI\SteamEyaWinUI.csproj"

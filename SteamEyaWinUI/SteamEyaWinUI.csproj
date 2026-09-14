@@ -9,10 +9,10 @@
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
-    <Version>1.1.0</Version>
-    <FileVersion>1.1.0.0</FileVersion>
-    <AssemblyVersion>1.1.0.0</AssemblyVersion>
-    <InformationalVersion>v1.1.0-dev</InformationalVersion>
+    <Version>1.2.9</Version>
+    <FileVersion>1.2.9.0</FileVersion>
+    <AssemblyVersion>1.2.9.0</AssemblyVersion>
+    <InformationalVersion>v1.2.9-dev</InformationalVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <!-- 自定义 Program.Main：先拦截 CS2 云推送辅助进程模式（cs2-cloud-push 开关）再走 XAML 启动（见 Program.cs）。 -->
@@ -43,6 +43,7 @@
     <Content Include="Assets\Logo.png" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Startup.mp4" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\GenshinSecret.mp4" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\bilibili-author-avatar.jpg" CopyToOutputDirectory="PreserveNewest" />
     <!-- CS2 武器矢量图标（取自 Juknum/counter-strike-icons，CS2 游戏内 panorama 图标）。 -->
     <Content Include="Assets\weapons\*.svg" CopyToOutputDirectory="PreserveNewest" />
     <!-- Steamworks SDK 再分发库：供「CS2 设置同步」用 ISteamRemoteStorage 强推 cfg 到 Steam 云。

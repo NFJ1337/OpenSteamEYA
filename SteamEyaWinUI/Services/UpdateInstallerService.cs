@@ -88,6 +88,74 @@ internal sealed class UpdateInstallerService
         }
     }
 
+    /// <summary>
+    /// 清理自动更新下载下来的安装包（安装完成后由下次启动调用）：
+    /// 只动本程序自己的临时目录 %TEMP%\SteamEYA\updates；被安装器占用的文件跳过，留待下次启动再删。
+    /// </summary>
+    public void CleanupDownloadedInstallers()
+    {
+        try
+        {
+            var root = Path.Combine(Path.GetTempPath(), "SteamEYA", "updates");
+            if (!Directory.Exists(root))
+            {
+                return;
+            }
+
+            var removed = 0;
+            foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+            {
+                if (TryDeleteFile(file))
+                {
+                    removed++;
+                }
+            }
+
+            foreach (var directory in Directory.EnumerateDirectories(root).OrderByDescending(path => path.Length))
+            {
+                try
+                {
+                    Directory.Delete(directory, recursive: true);
+                }
+                catch (Exception)
+                {
+                    // 目录里还有被占用的文件：留着，下次启动再清。
+                }
+            }
+
+            if (removed > 0)
+            {
+                AppLog.Info($"已清理上次更新下载的安装包：{removed} 个。");
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"清理更新安装包失败（不影响使用）：{ex.Message}");
+        }
+    }
+
+    /// <summary>删除单个已下载的安装包（启动安装器失败时立刻清掉）。</summary>
+    public void TryDeleteDownloadedInstaller(string installerPath) => TryDeleteFile(installerPath);
+
+    private static bool TryDeleteFile(string path)
+    {
+        try
+        {
+            if (!File.Exists(path))
+            {
+                return false;
+            }
+
+            File.Delete(path);
+            return true;
+        }
+        catch (Exception)
+        {
+            // 被占用等情况：交给下次启动的清理。
+            return false;
+        }
+    }
+
     private static void TryDeletePartial(string path)
     {
         try

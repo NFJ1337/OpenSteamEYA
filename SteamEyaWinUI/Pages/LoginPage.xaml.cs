@@ -1,9 +1,11 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
+using System.Text;
 using System.IO;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using SteamEyaWinUI.Localization;
 using SteamEyaWinUI.Models;
 using SteamEyaWinUI.Services;
@@ -30,10 +32,24 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
     private bool _lastLoginHistorySaveFailed;
     private bool _pendingTokenLoginSelection;
     private string? _accountInfoPanelSteamId;
+    private GridLength _sideColumnWidth = new(340);
+    // ---------- 账号核验（卡密）模块状态 ----------
+    // 上游快照按卡密命中缓存，语言切换/重渲染时用 _verifyPayload 重建展示文案，不重复请求。
+    private readonly List<SteamVerifyGameEntry> _verifyLibraryGames = [];
+    private SteamVerifyPayload? _verifyPayload;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _verifyStageTimer;
+    private int _verifyStageIndex;
+    private int _verifyElapsedSeconds;
+    private bool _verifyQueryRunning;
+    private bool _verifyLibraryRecentTab = true;
+    private string _verifyLibrarySort = "playtime";
 
     public LoginPage()
     {
         InitializeComponent();
+
+        // 核验模式会临时把右列宽度归零，这里先记住 XAML 里的原始宽度以便还原。
+        _sideColumnWidth = LayoutGrid.ColumnDefinitions[1].Width;
 
         InitializeUpstreamServers();
 
@@ -43,8 +59,9 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
         Loaded += LoginPage_Loaded;
 
         // SelectorBarItem.IsSelected 在 XAML 解析期不可靠，显式设定初始模式。
-        ModeSelector.SelectedItem = LegacyEyaModeItem;
+        ModeSelector.SelectedItem = TokenLoginModeItem;
         ApplyLanguageModeAvailability();
+        InitializeVerifyModule();
 
         UpdateAccountInfoFromCurrentInputs();
     }
@@ -61,6 +78,8 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 
     private bool IsCredsMode => ModeSelector.SelectedItem == CredsModeItem;
 
+    private bool IsVerifyMode => ModeSelector.SelectedItem == VerifyModeItem;
+
     private void OnLanguageChanged()
     {
         _dispatcherQueue.TryEnqueue(() =>
@@ -70,6 +89,7 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Strings)));
             ApplyLanguageModeAvailability();
             UpdateAccountInfoFromCurrentInputs();
+            UpdateVerifyTexts();
             OnBusyChanged(AppState.IsBusy);
         });
     }
@@ -105,6 +125,16 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
         CredFetchButton.IsEnabled = enabled;
         ClearWorkshopButton.IsEnabled = enabled;
         ApplyLoadoutButton.IsEnabled = enabled;
+        VerifyKeyBox.IsEnabled = enabled;
+        ClearVerifyButton.IsEnabled = enabled;
+        VerifyQueryButton.IsEnabled = enabled;
+        VerifyLibrarySearchBox.IsEnabled = enabled;
+        VerifyLibrarySortButton.IsEnabled = enabled;
+        VerifyLibraryTabSelector.IsEnabled = enabled;
+        VerifyRedeemLoginButton.IsEnabled = enabled;
+        VerifyClearWorkshopButton.IsEnabled = enabled;
+        VerifyApplyLoadoutButton.IsEnabled = enabled;
+        VerifyPersonalizeButton.IsEnabled = enabled;
         LoginButton.IsEnabled = enabled;
         OneClickQueryButton.IsEnabled = enabled;
 
@@ -123,6 +153,8 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
         LegacyResolvedAccountBox.Text = string.Empty;
         LicenseKeyBox.Text = string.Empty;
         ResolvedAccountBox.Text = string.Empty;
+        VerifyKeyBox.Text = string.Empty;
+        ResetVerifyResult();
 
         _cachedAccountData = null;
         _cachedLicenseKey = null;
@@ -611,7 +643,7 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 
 	private void ModeSelector_SelectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
 	{
-		if ((object)ManualPanel != null && (object)LegacyEyaPanel != null && (object)TokenLoginPanel != null && (object)AutoPanel != null && (object)CredsPanel != null && (object)ActionButtonGrid != null)
+		if ((object)ManualPanel != null && (object)LegacyEyaPanel != null && (object)TokenLoginPanel != null && (object)AutoPanel != null && (object)CredsPanel != null && (object)VerifyPanel != null && (object)ActionButtonGrid != null)
 		{
 			ApplyModeVisibility();
 			UpdateAccountInfoFromCurrentInputs();
@@ -624,12 +656,20 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		bool isLegacyEyaMode = IsLegacyEyaMode;
 		bool isTokenLoginMode = IsTokenLoginMode;
 		bool isCredsMode = IsCredsMode;
-		ManualPanel.Visibility = ((isAutoMode | isLegacyEyaMode | isTokenLoginMode | isCredsMode) ? Visibility.Collapsed : Visibility.Visible);
+		bool isVerifyMode = IsVerifyMode;
+		ManualPanel.Visibility = ((isAutoMode | isLegacyEyaMode | isTokenLoginMode | isCredsMode | isVerifyMode) ? Visibility.Collapsed : Visibility.Visible);
 		LegacyEyaPanel.Visibility = ((!isLegacyEyaMode) ? Visibility.Collapsed : Visibility.Visible);
 		TokenLoginPanel.Visibility = ((!isTokenLoginMode) ? Visibility.Collapsed : Visibility.Visible);
 		AutoPanel.Visibility = ((!isAutoMode) ? Visibility.Collapsed : Visibility.Visible);
 		CredsPanel.Visibility = ((!isCredsMode) ? Visibility.Collapsed : Visibility.Visible);
-		ActionButtonGrid.Visibility = (isCredsMode ? Visibility.Collapsed : Visibility.Visible);
+		VerifyPanel.Visibility = ((!isVerifyMode) ? Visibility.Collapsed : Visibility.Visible);
+		// 核验模式只查账号状态，不改 Steam 配置也不落盘，故与账密模式一样收起登录/装配操作区。
+		ActionButtonGrid.Visibility = ((isCredsMode || isVerifyMode) ? Visibility.Collapsed : Visibility.Visible);
+
+		// 右侧账号信息卡描述的是本机 EYA 会话，与核验（远端账号）无关：核验模式下暂时隐藏，
+		// 并把右列宽度归零，让核验面板用满宽度；切回其它模式即恢复。
+		AccountInfoPanel.Visibility = (isVerifyMode ? Visibility.Collapsed : Visibility.Visible);
+		LayoutGrid.ColumnDefinitions[1].Width = (isVerifyMode ? new GridLength(0) : _sideColumnWidth);
 	}
 
 	private void ApplyLanguageModeAvailability()
@@ -637,11 +677,12 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		AutoModeItem.Visibility = Visibility.Collapsed;
 		ManualModeItem.Visibility = Visibility.Collapsed;
 		CredsModeItem.Visibility = Visibility.Collapsed;
-		bool flag = !string.Equals(Loc.CurrentCode, "en", StringComparison.OrdinalIgnoreCase);
-		LegacyEyaModeItem.Visibility = ((!flag) ? Visibility.Collapsed : Visibility.Visible);
-		if ((!flag && IsLegacyEyaMode) || IsAutoMode || IsCredsMode || ModeSelector.SelectedItem == ManualModeItem)
+		LegacyEyaModeItem.Visibility = Visibility.Collapsed;
+		VerifyModeItem.Visibility = Visibility.Visible;
+		// 语言切换不得把用户从核验模式踢回 Token 登录：仅当当前选中项不可见时才回退。
+		if (ModeSelector.SelectedItem != VerifyModeItem)
 		{
-			ModeSelector.SelectedItem = (flag ? LegacyEyaModeItem : TokenLoginModeItem);
+			ModeSelector.SelectedItem = TokenLoginModeItem;
 		}
 		ApplyModeVisibility();
 	}
@@ -707,6 +748,7 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 	{
 		await ResolveTokenLicenseInteractiveAsync();
 	}
+
 
 	private async Task ResolveTokenLicenseInteractiveAsync()
 	{
@@ -1277,4 +1319,493 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 			return result;
 		}
 	}
+    // ---------- 账号核验（卡密） ----------
+    // 复刻 https://xn--rpr1ku6kjs6f.xyz/ 的核心流程：输入卡密 → 上游建立 Steam 会话并抓取账号状态
+    // → 展示封禁、CS2 竞技记录与游戏库。阶段轮播与站点同为 3.2s/步；游戏库默认折叠，
+    // 展开后由列表自身滚动，页面整体高度仍适配默认窗口（1380x810）。
+
+    private const int VerifyStageCount = 3;
+
+    /// <summary>阶段文案键：与站点「正在校验卡密 / 正在建立 Steam 会话 / 正在读取账号、CS2 与游戏库」一一对应。</summary>
+    private static string VerifyStageKey(int index) => $"Login_Verify_Stage_{index + 1}";
+
+    private void InitializeVerifyModule()
+    {
+        VerifyLibraryRecentTabItem.IsSelected = true;
+        VerifyLibraryTabSelector.SelectedItem = VerifyLibraryRecentTabItem;
+
+        _verifyStageTimer = _dispatcherQueue.CreateTimer();
+        // 每秒刷新一次：阶段按站点的 3.2 秒一步推进，同时刷新已等待秒数。
+        _verifyStageTimer.Interval = TimeSpan.FromSeconds(1);
+        _verifyStageTimer.Tick += VerifyStageTimer_Tick;
+
+        UpdateVerifyTexts();
+    }
+
+    private void VerifyStageTimer_Tick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+    {
+        _verifyElapsedSeconds++;
+        _verifyStageIndex = Math.Min((int)(_verifyElapsedSeconds / 3.2), VerifyStageCount - 1);
+        UpdateVerifyProgressText();
+    }
+
+    /// <summary>
+    /// 进度行 = 当前阶段 + 已等待秒数。上游冷查询实测约 35 秒，只轮播三段文案容易让人以为卡死；
+    /// 秒数持续跳动可以区分「还在跑」和「真的断了」。
+    /// </summary>
+    private void UpdateVerifyProgressText()
+    {
+        VerifyProgressText.Text = Loc.Tf(
+            "Login_Verify_Progress_Format",
+            Loc.T(VerifyStageKey(_verifyStageIndex)),
+            _verifyElapsedSeconds);
+    }
+
+    /// <summary>刷新核验模块的命令式文案（按钮、排序项、阶段）；语言切换与忙碌状态变化时调用。</summary>
+    private void UpdateVerifyTexts()
+    {
+        VerifyQueryButtonText.Text = Loc.T(_verifyQueryRunning ? "Login_Verify_Btn_Querying" : "Login_Verify_Btn_Query");
+        UpdateVerifyLibrarySortText();
+
+        if (_verifyQueryRunning)
+        {
+            UpdateVerifyProgressText();
+        }
+
+        if (_verifyPayload is not null)
+        {
+            ApplyVerifyReport(_verifyPayload);
+        }
+    }
+
+    /// <summary>排序按钮文案与菜单项：站点按当前标签页把「时长」显示成近两周/总时长。</summary>
+    private void UpdateVerifyLibrarySortText()
+    {
+        BuildVerifySortFlyout();
+        VerifyLibrarySortText.Text = Loc.T(VerifySortKey(_verifyLibrarySort));
+    }
+
+    private string VerifySortKey(string sort) => sort switch
+    {
+        "name" => "Login_Verify_Library_Sort_Name",
+        "lastPlayed" => "Login_Verify_Library_Sort_LastPlayed",
+        _ => _verifyLibraryRecentTab ? "Login_Verify_Library_Sort_Recent" : "Login_Verify_Library_Sort_Total"
+    };
+
+    private void BuildVerifySortFlyout()
+    {
+        VerifyLibrarySortFlyout.Items.Clear();
+        foreach (var code in new[] { "playtime", "lastPlayed", "name" })
+        {
+            var item = new MenuFlyoutItem
+            {
+                Text = Loc.T(VerifySortKey(code)),
+                Tag = code
+            };
+            item.Click += VerifyLibrarySortMenuItem_Click;
+            VerifyLibrarySortFlyout.Items.Add(item);
+        }
+    }
+
+    private void VerifyLibrarySortMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuFlyoutItem { Tag: string code })
+        {
+            return;
+        }
+
+        _verifyLibrarySort = code;
+        UpdateVerifyLibrarySortText();
+        RefreshVerifyLibraryList();
+    }
+
+    private void VerifyLibraryTabSelector_SelectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
+    {
+        _verifyLibraryRecentTab = VerifyLibraryTabSelector.SelectedItem == VerifyLibraryRecentTabItem;
+        UpdateVerifyLibrarySortText();
+        RefreshVerifyLibraryList();
+    }
+
+    private void VerifyLibrarySearchBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        RefreshVerifyLibraryList();
+    }
+
+    private void ClearVerifyButton_Click(object sender, RoutedEventArgs e)
+    {
+        VerifyKeyBox.Text = string.Empty;
+        ResetVerifyResult();
+    }
+
+    private async void VerifyQueryButton_Click(object sender, RoutedEventArgs e)
+    {
+        await RunVerifyQueryAsync();
+    }
+
+    private async void VerifyKeyBox_KeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key == VirtualKey.Enter && !AppState.IsBusy)
+        {
+            e.Handled = true;
+            await RunVerifyQueryAsync();
+        }
+    }
+
+    /// <summary>清空上一次核验结果，回到「只显示输入框」的状态。</summary>
+    private void ResetVerifyResult()
+    {
+        _verifyPayload = null;
+        _verifyLibraryGames.Clear();
+        VerifyErrorBar.IsOpen = false;
+        VerifyResultPanel.Visibility = Visibility.Collapsed;
+        VerifyLibraryExpander.Visibility = Visibility.Collapsed;
+        VerifyLibraryErrorBar.IsOpen = false;
+        VerifyRecordList.ItemsSource = null;
+        VerifyLibraryList.ItemsSource = null;
+    }
+
+    private async Task RunVerifyQueryAsync()
+    {
+        var key = VerifyKeyBox.Text.Trim();
+        if (key.Length == 0)
+        {
+            ShowStatus(Loc.T("Login_Error_LicenseKeyRequired"), InfoBarSeverity.Warning);
+            return;
+        }
+
+        ResetVerifyResult();
+        _verifyQueryRunning = true;
+        _verifyStageIndex = 0;
+        _verifyElapsedSeconds = 0;
+        UpdateVerifyTexts();
+        UpdateVerifyProgressText();
+        VerifyProgressPanel.Visibility = Visibility.Visible;
+        _verifyStageTimer?.Start();
+
+        var cancellationToken = AppState.BeginBusyOperation();
+        ShowStatus(Loc.T("Login_Verify_Status_Querying"), InfoBarSeverity.Informational);
+        try
+        {
+            var payload = await AppState.VerifyService.VerifyAsync(key, cancellationToken);
+            var report = ApplyVerifyReport(payload);
+            _verifyPayload = payload;
+            VerifyResultPanel.Visibility = Visibility.Visible;
+
+            var steamId = string.IsNullOrWhiteSpace(payload.SteamId)
+                ? Loc.T("Login_Verify_Value_Unknown")
+                : payload.SteamId;
+            ShowStatus(
+                Loc.Tf(report.IsOk ? "Login_Verify_Status_Done_Ok_Format" : "Login_Verify_Status_Done_Attention_Format", steamId),
+                report.IsOk ? InfoBarSeverity.Success : InfoBarSeverity.Warning);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            ShowStatus(Loc.T("Login_Verify_Status_Cancelled"), InfoBarSeverity.Informational);
+        }
+        catch (Exception ex)
+        {
+            VerifyErrorBar.Message = ex.Message;
+            VerifyErrorBar.IsOpen = true;
+            ShowStatus(ex.Message, InfoBarSeverity.Error);
+        }
+        finally
+        {
+            _verifyQueryRunning = false;
+            _verifyStageTimer?.Stop();
+            VerifyProgressPanel.Visibility = Visibility.Collapsed;
+            UpdateVerifyTexts();
+            AppState.EndBusyOperation();
+        }
+    }
+
+    /// <summary>把上游快照铺到界面上；返回值供调用方按状态选提示条严重度。</summary>
+    private SteamVerifyReport ApplyVerifyReport(SteamVerifyPayload payload)
+    {
+        var report = SteamVerifyPresenter.Build(payload, ResolveVerifyToneBrush);
+
+        VerifyHeadIcon.Glyph = report.IsOk ? "\uE73E" : "\uE7BA";
+        VerifyHeadIcon.Foreground = FormatHelper.GetStatusBrush(
+            report.IsOk ? InfoBarSeverity.Success : InfoBarSeverity.Error);
+        VerifyHeadlineText.Text = report.Headline;
+        VerifySublineText.Text = report.Subline;
+        VerifyCachedBadge.Visibility = report.IsCached ? Visibility.Visible : Visibility.Collapsed;
+
+        if (string.IsNullOrEmpty(report.PresenceText))
+        {
+            VerifyPresencePanel.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            VerifyPresenceText.Text = report.PresenceText;
+            VerifyPresenceIcon.Glyph = report.PresenceGlyph;
+            VerifyPresenceIcon.Foreground = report.PresenceUnknown
+                ? FormatHelper.GetStatusBrush(InfoBarSeverity.Informational)
+                : report.PresenceInGame
+                    ? FormatHelper.GetWarningBrush()
+                    : FormatHelper.GetStatusBrush(InfoBarSeverity.Success);
+            VerifyPresencePanel.Visibility = Visibility.Visible;
+        }
+
+        // 四列两行：按行优先切分，视觉顺序与站点 stat-grid 一致。
+        VerifyStatsColumn0.ItemsSource = PickVerifyStats(report.Stats, 0);
+        VerifyStatsColumn1.ItemsSource = PickVerifyStats(report.Stats, 1);
+        VerifyStatsColumn2.ItemsSource = PickVerifyStats(report.Stats, 2);
+        VerifyStatsColumn3.ItemsSource = PickVerifyStats(report.Stats, 3);
+
+        VerifyCooldownBar.Message = report.CooldownMessage ?? string.Empty;
+        VerifyCooldownBar.IsOpen = report.CooldownMessage is not null;
+
+        VerifyRecordList.ItemsSource = report.Records;
+        VerifyRecordsPanel.Visibility = report.Records.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        ApplyVerifyLibrary(report);
+        return report;
+    }
+
+    /// <summary>
+    /// 取该列的两格状态。刻意返回 List 而不是数组：WinUI 的 ItemsControl.ItemsSource 不接受 CLR 数组，
+    /// 赋数组会抛 ArgumentException「Value does not fall within the expected range」（记录表/游戏库用 List 才没问题）。
+    /// </summary>
+    private static List<SteamVerifyStat> PickVerifyStats(IReadOnlyList<SteamVerifyStat> stats, int column)
+    {
+        var picked = new List<SteamVerifyStat>(2);
+        foreach (var index in new[] { column, column + 4 })
+        {
+            if (index < stats.Count)
+            {
+                picked.Add(stats[index]);
+            }
+        }
+
+        return picked;
+    }
+
+    private void ApplyVerifyLibrary(SteamVerifyReport report)
+    {
+        _verifyLibraryGames.Clear();
+        _verifyLibraryGames.AddRange(report.LibraryGames);
+
+        if (!string.IsNullOrEmpty(report.LibraryError))
+        {
+            VerifyLibraryErrorBar.Message = Loc.Tf("Login_Verify_Library_Error_Format", report.LibraryError);
+            VerifyLibraryErrorBar.IsOpen = true;
+            VerifyLibraryExpander.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        VerifyLibraryErrorBar.IsOpen = false;
+        var summary = report.LibrarySummary;
+        if (summary is null)
+        {
+            VerifyLibraryExpander.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        VerifyLibraryExpander.Visibility = Visibility.Visible;
+        VerifyLibraryHeaderText.Text = Loc.Tf("Login_Verify_Library_Header_Format", _verifyLibraryGames.Count);
+        VerifyLibraryFetchedText.Text = report.LibraryFetchedText;
+
+        VerifyLibraryTotalLabel.Text = summary.TotalLabel;
+        VerifyLibraryTotalValue.Text = summary.TotalValue;
+        VerifyLibraryTotalNote.Text = summary.TotalNote;
+        VerifyLibraryTimeLabel.Text = summary.TimeLabel;
+        VerifyLibraryTimeValue.Text = summary.TimeValue;
+        VerifyLibraryTimeNote.Text = summary.TimeNote;
+        VerifyLibraryRecentLabel.Text = summary.RecentLabel;
+        VerifyLibraryRecentValue.Text = summary.RecentValue;
+        VerifyLibraryRecentNote.Text = summary.RecentNote;
+        VerifyLibraryLongestLabel.Text = summary.LongestLabel;
+        VerifyLibraryLongestValue.Text = summary.LongestValue;
+        VerifyLibraryLongestNote.Text = summary.LongestNote;
+
+        RefreshVerifyLibraryList();
+    }
+
+    /// <summary>按当前标签页/搜索/排序重建游戏列表；列表自身滚动，不影响页面高度。</summary>
+    private void RefreshVerifyLibraryList()
+    {
+        var rows = SteamVerifyPresenter.BuildGameRows(
+            _verifyLibraryGames,
+            _verifyLibraryRecentTab,
+            VerifyLibrarySearchBox.Text,
+            _verifyLibrarySort);
+
+        VerifyLibraryList.ItemsSource = rows;
+        VerifyLibraryCountText.Text = Loc.Tf("Login_Verify_Library_Count_Format", rows.Count);
+
+        if (rows.Count > 0)
+        {
+            VerifyLibraryEmptyText.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        VerifyLibraryEmptyText.Text = _verifyLibraryRecentTab
+            ? Loc.T("Login_Verify_Library_Empty_Recent")
+            : VerifyLibrarySearchBox.Text.Trim().Length > 0
+                ? Loc.T("Login_Verify_Library_Empty_Search")
+                : Loc.T("Login_Verify_Library_Empty_All");
+        VerifyLibraryEmptyText.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>状态色调 → 主题画刷；未知档取正文色，保证值文本始终可见。</summary>
+    private static Brush ResolveVerifyToneBrush(SteamVerifyTone tone) => tone switch
+    {
+        SteamVerifyTone.Ok => FormatHelper.GetStatusBrush(InfoBarSeverity.Success),
+        SteamVerifyTone.Bad => FormatHelper.GetStatusBrush(InfoBarSeverity.Error),
+        SteamVerifyTone.Warn => FormatHelper.GetWarningBrush(),
+        _ => FormatHelper.GetPrimaryTextBrush()
+    };
+    /// <summary>
+    /// 窗口尺寸变化时让内部列表跟着伸缩：宽度由星号列自适应（页面不设 MaxWidth，避免被居中漂移）；
+    /// 高度上把多出来的空间给竞技记录与游戏库列表，调矮时收紧，避免「列表固定高、下方一片留白」。
+    /// </summary>
+    // ---------- 核验模块内的「卡密一键登录」 ----------
+
+    /// <summary>新版取名接口客户端：只服务核验模块的一键登录，不参与既有卡密解析链路。</summary>
+    private static readonly NaiweiRedeemClient VerifyRedeemClient = new();
+
+    /// <summary>
+    /// 卡密一键登录：用核验框里的同一张卡密取名（新版 SSE 接口 /api/v1/redeem），成功后切到
+    /// Token登录 面板回填 SteamID/Token，再调用既有的登录按钮处理函数完成上号
+    /// ——上号走的就是 Token登录 的 SteamID + JWT 逻辑（LoginButton_Click → LoginLegacyEyaAsync）。
+    /// 不新增任何上号逻辑，也不清理 Steam 账号缓存。
+    /// </summary>
+    private async void VerifyRedeemLoginButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (AppState.IsBusy)
+        {
+            return;
+        }
+
+        if (!await EnsureVerifyCredentialsAsync())
+        {
+            return;
+        }
+
+        // 切到 Token登录 面板（SteamID + JWT）并交给既有登录流程。
+        ApplyTokenLoginSelection();
+
+        // 上号按「设置页配置的 Steam 路径」走：SteamPathCoordinator 配置有效时直接复用，
+        // 这里只把将要使用的路径透明提示出来，不改动既有路径解析逻辑。
+        string? configuredSteamPath = SteamPathCoordinator.GetPersistedInstallPath();
+        ShowStatus(
+            configuredSteamPath is null
+                ? Loc.T("Settings_SteamPath_NotSet")
+                : Loc.Tf("Login_Verify_SteamPath_Format", configuredSteamPath),
+            configuredSteamPath is null ? InfoBarSeverity.Warning : InfoBarSeverity.Informational);
+
+        LoginButton_Click(LoginButton, new RoutedEventArgs());
+    }
+
+    /// <summary>核验模块里的「登录前可选操作」：与 Token登录 面板那三个按钮同一套。</summary>
+    private enum VerifyPreLoginAction
+    {
+        ClearWorkshop,
+        ApplyLoadout,
+        Personalize
+    }
+
+    private async void VerifyClearWorkshopButton_Click(object sender, RoutedEventArgs e) =>
+        await RunVerifyPreLoginActionAsync(VerifyPreLoginAction.ClearWorkshop);
+
+    private async void VerifyApplyLoadoutButton_Click(object sender, RoutedEventArgs e) =>
+        await RunVerifyPreLoginActionAsync(VerifyPreLoginAction.ApplyLoadout);
+
+    private async void VerifyPersonalizeButton_Click(object sender, RoutedEventArgs e) =>
+        await RunVerifyPreLoginActionAsync(VerifyPreLoginAction.Personalize);
+
+    /// <summary>
+    /// 登录前可选操作：必要时先用卡密取名拿到凭据，再切到 Token登录 面板，然后调用该面板里
+    /// 既有按钮的同一个处理函数——不复制也不改写既有逻辑，走的仍是 SteamID + JWT 的 Token 链路。
+    /// </summary>
+    private async Task RunVerifyPreLoginActionAsync(VerifyPreLoginAction action)
+    {
+        if (AppState.IsBusy)
+        {
+            return;
+        }
+
+        bool hasCredentials = !string.IsNullOrWhiteSpace(TokenSteamIdBox.Text) && !string.IsNullOrWhiteSpace(TokenBox.Text);
+        if (!hasCredentials && !await EnsureVerifyCredentialsAsync())
+        {
+            return;
+        }
+
+        ApplyTokenLoginSelection();
+        switch (action)
+        {
+            case VerifyPreLoginAction.ClearWorkshop:
+                ClearWorkshopButton_Click(ClearWorkshopButton, new RoutedEventArgs());
+                break;
+            case VerifyPreLoginAction.ApplyLoadout:
+                ApplyLoadoutButton_Click(ApplyLoadoutButton, new RoutedEventArgs());
+                break;
+            case VerifyPreLoginAction.Personalize:
+                PersonalizeButton_Click(PersonalizeButton, new RoutedEventArgs());
+                break;
+        }
+    }
+
+    /// <summary>用核验框里的卡密取名并回填 Token登录 面板字段（SteamID + JWT）；成功返回 true。</summary>
+    private async Task<bool> EnsureVerifyCredentialsAsync()
+    {
+        string licenseKey = VerifyKeyBox.Text.Trim();
+        if (licenseKey.Length == 0)
+        {
+            ShowStatus(Loc.T("Login_Error_LicenseKeyRequired"), InfoBarSeverity.Warning);
+            return false;
+        }
+
+        VerifyErrorBar.IsOpen = false;
+        VerifyProgressPanel.Visibility = Visibility.Visible;
+        VerifyProgressText.Text = Loc.T(VerifyStageKey(0));
+
+        CancellationToken cancellationToken = AppState.BeginBusyOperation();
+        ShowStatus(Loc.T("Login_Status_ResolvingLicense"), InfoBarSeverity.Informational);
+        try
+        {
+            NaiweiRedeemClient.RedeemAccount account = await VerifyRedeemClient.RedeemAsync(licenseKey, CreateVerifyRedeemProgressReporter(), cancellationToken);
+            TokenLicenseKeyBox.Text = licenseKey;
+            TokenSteamIdBox.Text = account.SteamId;
+            TokenBox.Text = account.Token;
+            UpdateAccountInfo(account.SteamId, account.Token);
+            ShowStatus(Loc.Tf("Login_Status_LicenseResolved_Format", account.SteamId, account.SteamId), InfoBarSeverity.Success);
+            return true;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            ShowStatus(Loc.T("Login_Status_LicenseResolveCancelled"), InfoBarSeverity.Informational);
+            return false;
+        }
+        catch (Exception ex2)
+        {
+            VerifyErrorBar.Message = ex2.Message;
+            VerifyErrorBar.IsOpen = true;
+            ShowStatus(ex2.Message, InfoBarSeverity.Error);
+            return false;
+        }
+        finally
+        {
+            VerifyProgressPanel.Visibility = Visibility.Collapsed;
+            AppState.EndBusyOperation();
+        }
+    }
+
+    /// <summary>取名进度：把服务端 SSE 文案写进核验模块的进度行，并在状态栏同步一条。</summary>
+    private IProgress<NaiweiRedeemProgress> CreateVerifyRedeemProgressReporter() =>
+        new Progress<NaiweiRedeemProgress>(progress =>
+        {
+            int percent = Math.Clamp(progress.Percent, 0, 100);
+            string text = string.IsNullOrWhiteSpace(progress.Message)
+                ? Loc.Tf("Login_Redeem_Status_Percent_Format", percent)
+                : $"{progress.Message} · {percent}%";
+            VerifyProgressText.Text = text;
+            ShowStatus(text, InfoBarSeverity.Informational);
+        });
+    private void LoginPage_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        var height = e.NewSize.Height;
+        VerifyRecordList.Height = Math.Clamp(height * 0.16, 110, 300);
+        VerifyLibraryList.Height = Math.Clamp(height * 0.44, 180, 560);
+    }
 }

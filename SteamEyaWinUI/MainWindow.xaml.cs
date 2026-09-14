@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Input;
+using SteamEyaWinUI.Controls;
 using SteamEyaWinUI.Localization;
 using SteamEyaWinUI.Models;
 using SteamEyaWinUI.Pages;
@@ -32,8 +33,12 @@ public sealed partial class MainWindow : Window
 
     private static nint s_hwnd;
 
-    // Informational/Success 状态若干秒后自动收起；Warning/Error 常驻，直到被替换或用户手动关闭。
-    private static readonly TimeSpan StatusAutoDismissDelay = TimeSpan.FromSeconds(6);
+    // 状态栏提示的自动收起时间：用户要求所有页面、所有等级（含警告/错误）统一 1.5 秒。
+    // 详情不会丢：警告/错误同时写入 logs\steameya.log，状态栏只做即时反馈。
+    private static readonly TimeSpan StatusAutoDismissDelay = TimeSpan.FromSeconds(1.5);
+    // 提示条底色画刷：不透明，颜色 = 对话框底色 与 UI 主题色 的混合（每次显示前重算，换主题色立即生效）。
+    private readonly SolidColorBrush _statusPanelBrush = new();
+    private bool _statusPanelBrushAttached;
     private readonly DispatcherQueueTimer _statusDismissTimer;
     private MediaPlayer? _introMediaPlayer;
     private bool _introVideoActive;
@@ -307,8 +312,57 @@ public sealed partial class MainWindow : Window
 
         _startupInitializationStarted = true;
         _ = ResolveSteamPathAfterStartupAsync();
+
+        // 凭据库启用了口令层（第 4 层）时，启动后提示输入口令；未启用时该方法立即返回。
+        _ = PromptVaultUnlockAfterStartupAsync();
     }
 
+    /// <summary>
+    /// 启动时若凭据库启用了口令层（第 4 层）且本次会话还没解锁，提示输入口令。
+    /// 取消则本次不载入账号（仍可在设置页解锁）；未启用口令时不做任何事。
+    /// </summary>
+    private async Task PromptVaultUnlockAfterStartupAsync()
+    {
+        try
+        {
+            if (!CredentialVault.IsPassphraseEnabled || !CredentialVault.IsLocked)
+            {
+                return;
+            }
+
+            while (CredentialVault.IsLocked)
+            {
+                var passphrase = await VaultPassphraseDialog.AskAsync(
+                    RootLayoutGrid.XamlRoot,
+                    Loc.T("VaultPw_Unlock_Title"),
+                    Loc.T("VaultPw_Unlock_Desc"),
+                    Loc.T("Common_Confirm"));
+
+                if (passphrase is null)
+                {
+                    ShowStatus(Loc.T("VaultPw_Status_LockedHint"), InfoBarSeverity.Warning);
+                    return;
+                }
+
+                if (!CredentialVault.TryUnlock(passphrase))
+                {
+                    ShowStatus(Loc.T("VaultPw_Error_Wrong"), InfoBarSeverity.Error);
+                    continue;
+                }
+
+                AppState.ReloadHistory();
+                AppState.ReloadWhiteAccounts();
+                ShowStatus(Loc.T("VaultPw_Status_UnlockedOk"), InfoBarSeverity.Success);
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("启动时解锁凭据库失败。", ex);
+        }
+    }
+
+    /// <summary>启动后台解析 Steam 安装路径（失败只记日志，不打扰用户）。</summary>
     private async Task ResolveSteamPathAfterStartupAsync()
     {
         try
@@ -320,6 +374,7 @@ public sealed partial class MainWindow : Window
             AppLog.Error("启动时解析 Steam 安装路径失败。", ex);
         }
     }
+
     public void ShowStatus(string message, InfoBarSeverity severity)
     {
         // 状态可能来自后台线程（如登录后的 CS2 云推送进度），统一封送到 UI 线程。
@@ -329,17 +384,40 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        UpdateStatusPanelBrush();
         StatusInfoBar.Message = message;
         StatusInfoBar.Severity = severity;
         StatusInfoBar.IsOpen = true;
 
+        // 不分等级：任何提示都在 1.5 秒后自动收起（含警告/错误，避免常驻占位）。
         _statusDismissTimer.Stop();
-        if (severity is InfoBarSeverity.Informational or InfoBarSeverity.Success)
-        {
-            _statusDismissTimer.Start();
-        }
+        _statusDismissTimer.Start();
     }
 
+    /// <summary>
+    /// 提示条底色：取对话框底色与当前 UI 主题色做不透明混合（不吃透背后的内容），
+    /// 每次显示提示前重算，因此在设置里改主题色后立刻生效。混合比例固定 22% 主题色。
+    /// </summary>
+    private void UpdateStatusPanelBrush()
+    {
+        var baseColor = Application.Current.Resources.TryGetValue("CustomUiDialogBrush", out var value) && value is SolidColorBrush dialog
+            ? dialog.Color
+            : Microsoft.UI.Colors.Black;
+        var accent = AppState.UiColorService.BaseColor;
+        const double tint = 0.22;
+
+        _statusPanelBrush.Color = Windows.UI.Color.FromArgb(
+            255,
+            (byte)Math.Round(baseColor.R * (1 - tint) + accent.R * tint),
+            (byte)Math.Round(baseColor.G * (1 - tint) + accent.G * tint),
+            (byte)Math.Round(baseColor.B * (1 - tint) + accent.B * tint));
+
+        if (!_statusPanelBrushAttached)
+        {
+            _statusPanelBrushAttached = true;
+            StatusPanel.Background = _statusPanelBrush;
+        }
+    }
     /// <summary>有新版本时在「关于」导航项上亮红点，代替曾经常驻底部的更新横幅。</summary>
     private void RefreshUpdateBadge()
     {
@@ -384,7 +462,6 @@ public sealed partial class MainWindow : Window
             new SuppressNavigationTransitionInfo());
         ContentFrame.BackStack.Clear();
     }
-
 
     private void RootNavigationView_SelectionChanged(
         NavigationView sender,

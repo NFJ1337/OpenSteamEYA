@@ -1,14 +1,108 @@
-<Page
+﻿<Page
     x:Class="SteamEyaWinUI.Pages.LoginPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    NavigationCacheMode="Required">
+    xmlns:models="using:SteamEyaWinUI.Models"
+    NavigationCacheMode="Required"
+    SizeChanged="LoginPage_SizeChanged">
+
+    <Page.Resources>
+        <!-- 核验模块专用模板：站点信息密度高，这里统一走小字号 + 细边卡片，压进一屏。 -->
+        <DataTemplate x:Key="VerifyStatTemplate" x:DataType="models:SteamVerifyStat">
+            <Border
+                Margin="0,0,0,8"
+                Padding="10,8"
+                CornerRadius="10"
+                Background="{ThemeResource AuroraPaneBrush}"
+                BorderBrush="{ThemeResource AuroraGlassBorderBrush}"
+                BorderThickness="1">
+                <StackPanel Spacing="2">
+                    <TextBlock Text="{x:Bind Label}" Style="{StaticResource FieldLabelTextStyle}" />
+                    <TextBlock
+                        Text="{x:Bind Value}"
+                        FontSize="15"
+                        FontWeight="SemiBold"
+                        Foreground="{x:Bind ValueBrush}"
+                        TextTrimming="CharacterEllipsis" />
+                    <TextBlock
+                        Text="{x:Bind Note}"
+                        Style="{StaticResource FieldLabelTextStyle}"
+                        TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <DataTemplate x:Key="VerifyRecordRowTemplate" x:DataType="models:SteamVerifyRecordRow">
+            <Grid Padding="4,6" ColumnSpacing="10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="150" />
+                    <ColumnDefinition Width="90" />
+                    <ColumnDefinition Width="132" />
+                </Grid.ColumnDefinitions>
+                <TextBlock
+                    Text="{x:Bind Map}"
+                    FontSize="13"
+                    TextTrimming="CharacterEllipsis"
+                    VerticalAlignment="Center" />
+                <TextBlock
+                    Grid.Column="1"
+                    Text="{x:Bind Record}"
+                    FontSize="13"
+                    VerticalAlignment="Center" />
+                <TextBlock
+                    Grid.Column="2"
+                    Text="{x:Bind Rank}"
+                    FontSize="13"
+                    TextTrimming="CharacterEllipsis"
+                    VerticalAlignment="Center" />
+                <TextBlock
+                    Grid.Column="3"
+                    Text="{x:Bind LastMatch}"
+                    FontSize="13"
+                    Foreground="{ThemeResource AuroraTextMutedBrush}"
+                    VerticalAlignment="Center" />
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate x:Key="VerifyGameRowTemplate" x:DataType="models:SteamVerifyGameRow">
+            <Grid Padding="4,4" ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="130" />
+                    <ColumnDefinition Width="200" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Spacing="4" VerticalAlignment="Center">
+                    <TextBlock
+                        Text="{x:Bind Name}"
+                        FontSize="13"
+                        TextTrimming="CharacterEllipsis" />
+                    <ProgressBar Height="4" Maximum="100" Value="{x:Bind BarPercent}" />
+                </StackPanel>
+                <TextBlock
+                    Grid.Column="1"
+                    Text="{x:Bind PlaytimeText}"
+                    FontSize="13"
+                    FontWeight="SemiBold"
+                    VerticalAlignment="Center" />
+                <TextBlock
+                    Grid.Column="2"
+                    Text="{x:Bind SecondaryText}"
+                    FontSize="12"
+                    Foreground="{ThemeResource AuroraTextMutedBrush}"
+                    TextTrimming="CharacterEllipsis"
+                    VerticalAlignment="Center" />
+            </Grid>
+        </DataTemplate>
+    </Page.Resources>
 
     <ScrollViewer
         HorizontalScrollBarVisibility="Disabled"
         VerticalScrollBarVisibility="Auto"
         Padding="32,24,32,16">
-        <Grid ColumnSpacing="24" MaxWidth="1280" HorizontalAlignment="Stretch">
+        <!-- 宽度随窗口适配：刻意不给网格写 MaxWidth —— WinUI 对「MaxWidth + Stretch」的元素会做居中，
+             窗口一拉宽内容就会整体右移并停止变宽。 -->
+        <Grid x:Name="LayoutGrid" ColumnSpacing="24" HorizontalAlignment="Stretch">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="340" />
@@ -29,14 +123,19 @@
                     </Grid.ColumnDefinitions>
 
                     <SelectorBar x:Name="ModeSelector" SelectionChanged="ModeSelector_SelectionChanged" Background="{ThemeResource AuroraGlassStrongBrush}" BorderBrush="{ThemeResource AuroraGlassBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="4">
-                        <SelectorBarItem x:Name="LegacyEyaModeItem" Text="{x:Bind Strings.Get('Login_Mode_LegacyEya'), Mode=OneWay}">
-                            <SelectorBarItem.Icon>
-                                <FontIcon Glyph="&#xE8D4;" />
-                            </SelectorBarItem.Icon>
-                        </SelectorBarItem>
                         <SelectorBarItem x:Name="TokenLoginModeItem" Text="{x:Bind Strings.Get('Login_Mode_TokenLogin'), Mode=OneWay}">
                             <SelectorBarItem.Icon>
                                 <FontIcon Glyph="&#xE8D7;" />
+                            </SelectorBarItem.Icon>
+                        </SelectorBarItem>
+                        <SelectorBarItem x:Name="VerifyModeItem" Text="{x:Bind Strings.Get('Login_Mode_Verify'), Mode=OneWay}">
+                            <SelectorBarItem.Icon>
+                                <FontIcon Glyph="&#xE73E;" />
+                            </SelectorBarItem.Icon>
+                        </SelectorBarItem>
+                        <SelectorBarItem x:Name="LegacyEyaModeItem" Text="{x:Bind Strings.Get('Login_Mode_LegacyEya'), Mode=OneWay}" Visibility="Collapsed">
+                            <SelectorBarItem.Icon>
+                                <FontIcon Glyph="&#xE8D4;" />
                             </SelectorBarItem.Icon>
                         </SelectorBarItem>
                         <SelectorBarItem x:Name="AutoModeItem" Text="{x:Bind Strings.Get('Login_Mode_Auto'), Mode=OneWay}" Visibility="Collapsed">
@@ -266,7 +365,346 @@
                             TextChanged="TokenLoginBox_TextChanged" />
                     </StackPanel>
                 </Border>
-                <Border x:Name="AutoPanel" Style="{StaticResource CardBorderStyle}" Visibility="Collapsed">
+                <!-- 账号核验（卡密）：复刻 Steam 账号核验站的验号结果——封禁状态、CS2 竞技记录与游戏库。
+                     版式按软件默认窗口（1380x810）压缩：小字号、细边卡片、列表各自内部滚动、游戏库默认折叠。 -->
+                <Border x:Name="VerifyPanel" Style="{StaticResource CardBorderStyle}" Visibility="Collapsed">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="{x:Bind Strings.Get('Login_Verify_Section'), Mode=OneWay}" Style="{StaticResource SectionTitleTextStyle}" />
+                        <TextBlock
+                            Text="{x:Bind Strings.Get('Login_Verify_Desc'), Mode=OneWay}"
+                            Foreground="{ThemeResource AuroraTextMutedBrush}"
+                            TextWrapping="Wrap" />
+
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBox
+                                x:Name="VerifyKeyBox"
+                                Header="{x:Bind Strings.Get('Login_Field_LicenseKey'), Mode=OneWay}"
+                                PlaceholderText="{x:Bind Strings.Get('Login_Verify_Key_Placeholder'), Mode=OneWay}"
+                                IsSpellCheckEnabled="False"
+                                KeyDown="VerifyKeyBox_KeyDown" />
+
+                            <Button
+                                x:Name="ClearVerifyButton"
+                                Grid.Column="1"
+                                MinWidth="80"
+                                VerticalAlignment="Bottom"
+                                Click="ClearVerifyButton_Click">
+                                <TextBlock Text="{x:Bind Strings.Get('Common_Clear'), Mode=OneWay}" />
+                            </Button>
+
+                            <Button
+                                x:Name="VerifyQueryButton"
+                                Grid.Column="2"
+                                MinWidth="112"
+                                VerticalAlignment="Bottom"
+                                Style="{StaticResource AccentButtonStyle}"
+                                Click="VerifyQueryButton_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE721;" FontSize="16" />
+                                    <TextBlock x:Name="VerifyQueryButtonText" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+
+                        <!-- 卡密一键登录：只用核验模块内的这张卡密走新版取名接口（SSE /api/v1/redeem），
+                             成功后切到 Token登录 并把 SteamID/Token 填好，再交给既有登录流程。
+                             不改动既有面板的行为，也不清理 Steam 账号缓存。 -->
+                        <StackPanel Spacing="6">
+                            <TextBlock
+                                Text="{x:Bind Strings.Get('Login_Verify_Login_Hint'), Mode=OneWay}"
+                                Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                TextWrapping="Wrap" />
+                            <Button
+                                x:Name="VerifyRedeemLoginButton"
+                                HorizontalAlignment="Stretch"
+                                Padding="0,12"
+                                Style="{StaticResource AccentButtonStyle}"
+                                Click="VerifyRedeemLoginButton_Click"
+                                ToolTipService.ToolTip="{x:Bind Strings.Get('Login_Btn_RedeemAndLogin_Tip'), Mode=OneWay}">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE8D4;" FontSize="16" />
+                                    <TextBlock Text="{x:Bind Strings.Get('Login_Btn_RedeemAndLogin'), Mode=OneWay}" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+
+                        <!-- 登录前可选操作：与 Token登录 面板完全相同的三个按钮（点击后切到 Token登录 面板，
+                             并调用该面板既有按钮的同一个处理函数；登录/这些操作都走 SteamID + JWT 的 Token 逻辑）。 -->
+                        <StackPanel Spacing="6">
+                            <TextBlock
+                                Text="{x:Bind Strings.Get('Login_Verify_PreLoginActions_Hint'), Mode=OneWay}"
+                                Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                TextWrapping="Wrap" />
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Button
+                                    x:Name="VerifyClearWorkshopButton"
+                                    HorizontalAlignment="Stretch"
+                                    Padding="0,10"
+                                    Click="VerifyClearWorkshopButton_Click"
+                                    ToolTipService.ToolTip="{x:Bind Strings.Get('Login_Btn_ClearWorkshop_Tip'), Mode=OneWay}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE74D;" FontSize="16" />
+                                        <TextBlock Text="{x:Bind Strings.Get('Login_Btn_ClearWorkshop'), Mode=OneWay}" />
+                                    </StackPanel>
+                                </Button>
+                                <Button
+                                    x:Name="VerifyApplyLoadoutButton"
+                                    Grid.Column="1"
+                                    HorizontalAlignment="Stretch"
+                                    Padding="0,10"
+                                    Click="VerifyApplyLoadoutButton_Click"
+                                    ToolTipService.ToolTip="{x:Bind Strings.Get('Login_Btn_ApplyLoadout_Tip'), Mode=OneWay}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE7C1;" FontSize="16" />
+                                        <TextBlock Text="{x:Bind Strings.Get('Login_Btn_ApplyLoadout'), Mode=OneWay}" />
+                                    </StackPanel>
+                                </Button>
+                                <Button
+                                    x:Name="VerifyPersonalizeButton"
+                                    Grid.Column="2"
+                                    HorizontalAlignment="Stretch"
+                                    Padding="0,10"
+                                    Click="VerifyPersonalizeButton_Click"
+                                    ToolTipService.ToolTip="{x:Bind Strings.Get('Login_Btn_Personalize_Tip'), Mode=OneWay}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE779;" FontSize="16" />
+                                        <TextBlock Text="{x:Bind Strings.Get('Login_Btn_Personalize'), Mode=OneWay}" />
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+                        </StackPanel>
+
+                        <StackPanel x:Name="VerifyProgressPanel" Orientation="Horizontal" Spacing="10" Visibility="Collapsed">
+                            <ProgressRing Width="18" Height="18" IsActive="True" />
+                            <TextBlock
+                                x:Name="VerifyProgressText"
+                                VerticalAlignment="Center"
+                                Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                        </StackPanel>
+
+                        <InfoBar
+                            x:Name="VerifyErrorBar"
+                            IsOpen="False"
+                            IsClosable="False"
+                            Severity="Error" />
+
+                        <StackPanel x:Name="VerifyResultPanel" Spacing="12" Visibility="Collapsed">
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon
+                                    x:Name="VerifyHeadIcon"
+                                    FontSize="22"
+                                    VerticalAlignment="Center"
+                                    Glyph="&#xE73E;" />
+                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock x:Name="VerifyHeadlineText" FontSize="16" FontWeight="SemiBold" />
+                                    <TextBlock
+                                        x:Name="VerifySublineText"
+                                        FontSize="12"
+                                        Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                        TextWrapping="Wrap" />
+                                </StackPanel>
+                                <Border
+                                    x:Name="VerifyCachedBadge"
+                                    Grid.Column="2"
+                                    Padding="8,3"
+                                    CornerRadius="10"
+                                    VerticalAlignment="Center"
+                                    Visibility="Collapsed"
+                                    Background="{ThemeResource AuroraPillBrush}">
+                                    <TextBlock
+                                        Text="{x:Bind Strings.Get('Login_Verify_Cached_Badge'), Mode=OneWay}"
+                                        FontSize="11"
+                                        Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                                </Border>
+                            </Grid>
+
+                            <StackPanel x:Name="VerifyPresencePanel" Orientation="Horizontal" Spacing="8" Visibility="Collapsed">
+                                <FontIcon x:Name="VerifyPresenceIcon" FontSize="14" VerticalAlignment="Center" />
+                                <TextBlock
+                                    x:Name="VerifyPresenceText"
+                                    FontSize="12"
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <!-- 8 项状态四列两行（每列两格），与站点 stat-grid 的阅读顺序一致。 -->
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <ItemsControl x:Name="VerifyStatsColumn0" ItemTemplate="{StaticResource VerifyStatTemplate}" />
+                                <ItemsControl x:Name="VerifyStatsColumn1" Grid.Column="1" ItemTemplate="{StaticResource VerifyStatTemplate}" />
+                                <ItemsControl x:Name="VerifyStatsColumn2" Grid.Column="2" ItemTemplate="{StaticResource VerifyStatTemplate}" />
+                                <ItemsControl x:Name="VerifyStatsColumn3" Grid.Column="3" ItemTemplate="{StaticResource VerifyStatTemplate}" />
+                            </Grid>
+
+                            <InfoBar x:Name="VerifyCooldownBar" IsOpen="False" IsClosable="False" Severity="Warning" />
+
+                            <StackPanel x:Name="VerifyRecordsPanel" Spacing="6" Visibility="Collapsed">
+                                <TextBlock Text="{x:Bind Strings.Get('Login_Verify_Records_Title'), Mode=OneWay}" Style="{StaticResource FieldLabelTextStyle}" />
+                                <Grid Padding="4,0" ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="150" />
+                                        <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="132" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{x:Bind Strings.Get('Login_Verify_Col_Mode'), Mode=OneWay}" FontSize="12" Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                                    <TextBlock Grid.Column="1" Text="{x:Bind Strings.Get('Login_Verify_Col_Record'), Mode=OneWay}" FontSize="12" Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                                    <TextBlock Grid.Column="2" Text="{x:Bind Strings.Get('Login_Verify_Col_Rank'), Mode=OneWay}" FontSize="12" Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                                    <TextBlock Grid.Column="3" Text="{x:Bind Strings.Get('Login_Verify_Col_LastMatch'), Mode=OneWay}" FontSize="12" Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                                </Grid>
+                                <ListView
+                                    x:Name="VerifyRecordList"
+                                    Height="132"
+                                    SelectionMode="None"
+                                    ItemTemplate="{StaticResource VerifyRecordRowTemplate}">
+                                    <ListView.ItemContainerStyle>
+                                        <Style TargetType="ListViewItem">
+                                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                            <Setter Property="Padding" Value="4,0" />
+                                            <Setter Property="MinHeight" Value="0" />
+                                        </Style>
+                                    </ListView.ItemContainerStyle>
+                                </ListView>
+                            </StackPanel>
+
+                            <InfoBar x:Name="VerifyLibraryErrorBar" IsOpen="False" IsClosable="False" Severity="Warning" />
+
+                            <!-- 游戏库默认折叠：条目多，展开后由列表自身滚动，不改页面高度。 -->
+                            <Expander
+                                x:Name="VerifyLibraryExpander"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Stretch"
+                                IsExpanded="False"
+                                Visibility="Collapsed">
+                                <Expander.Header>
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE7FC;" FontSize="14" />
+                                        <TextBlock x:Name="VerifyLibraryHeaderText" FontSize="14" FontWeight="SemiBold" />
+                                    </StackPanel>
+                                </Expander.Header>
+                                <StackPanel Spacing="10">
+                                    <TextBlock
+                                        x:Name="VerifyLibraryFetchedText"
+                                        FontSize="12"
+                                        Foreground="{ThemeResource AuroraTextMutedBrush}" />
+
+                                    <Grid ColumnSpacing="10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Spacing="2">
+                                            <TextBlock x:Name="VerifyLibraryTotalLabel" Style="{StaticResource FieldLabelTextStyle}" />
+                                            <TextBlock x:Name="VerifyLibraryTotalValue" FontSize="15" FontWeight="SemiBold" />
+                                            <TextBlock x:Name="VerifyLibraryTotalNote" Style="{StaticResource FieldLabelTextStyle}" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Spacing="2">
+                                            <TextBlock x:Name="VerifyLibraryTimeLabel" Style="{StaticResource FieldLabelTextStyle}" />
+                                            <TextBlock x:Name="VerifyLibraryTimeValue" FontSize="15" FontWeight="SemiBold" />
+                                            <TextBlock x:Name="VerifyLibraryTimeNote" Style="{StaticResource FieldLabelTextStyle}" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2" Spacing="2">
+                                            <TextBlock x:Name="VerifyLibraryRecentLabel" Style="{StaticResource FieldLabelTextStyle}" />
+                                            <TextBlock x:Name="VerifyLibraryRecentValue" FontSize="15" FontWeight="SemiBold" />
+                                            <TextBlock x:Name="VerifyLibraryRecentNote" Style="{StaticResource FieldLabelTextStyle}" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="3" Spacing="2">
+                                            <TextBlock x:Name="VerifyLibraryLongestLabel" Style="{StaticResource FieldLabelTextStyle}" />
+                                            <TextBlock x:Name="VerifyLibraryLongestValue" FontSize="15" FontWeight="SemiBold" />
+                                            <TextBlock x:Name="VerifyLibraryLongestNote" Style="{StaticResource FieldLabelTextStyle}" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox
+                                            x:Name="VerifyLibrarySearchBox"
+                                            PlaceholderText="{x:Bind Strings.Get('Login_Verify_Library_Search_Placeholder'), Mode=OneWay}"
+                                            IsSpellCheckEnabled="False"
+                                            TextChanged="VerifyLibrarySearchBox_TextChanged" />
+                                        <TextBlock
+                                            x:Name="VerifyLibraryCountText"
+                                            Grid.Column="1"
+                                            VerticalAlignment="Center"
+                                            Style="{StaticResource FieldLabelTextStyle}" />
+                                        <DropDownButton
+                                            x:Name="VerifyLibrarySortButton"
+                                            Grid.Column="2"
+                                            Style="{StaticResource UiTintDropDownButtonStyle}">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <FontIcon Glyph="&#xE8CB;" FontSize="14" />
+                                                <TextBlock x:Name="VerifyLibrarySortText" />
+                                            </StackPanel>
+                                            <DropDownButton.Flyout>
+                                                <MenuFlyout x:Name="VerifyLibrarySortFlyout" />
+                                            </DropDownButton.Flyout>
+                                        </DropDownButton>
+                                        <SelectorBar
+                                            x:Name="VerifyLibraryTabSelector"
+                                            Grid.Column="3"
+                                            Padding="2"
+                                            Background="{ThemeResource AuroraGlassStrongBrush}"
+                                            BorderBrush="{ThemeResource AuroraGlassBorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="12"
+                                            SelectionChanged="VerifyLibraryTabSelector_SelectionChanged">
+                                            <SelectorBarItem x:Name="VerifyLibraryRecentTabItem" Text="{x:Bind Strings.Get('Login_Verify_Library_Tab_Recent'), Mode=OneWay}" />
+                                            <SelectorBarItem x:Name="VerifyLibraryAllTabItem" Text="{x:Bind Strings.Get('Login_Verify_Library_Tab_All'), Mode=OneWay}" />
+                                        </SelectorBar>
+                                    </Grid>
+
+                                    <ListView
+                                        x:Name="VerifyLibraryList"
+                                        Height="216"
+                                        SelectionMode="None"
+                                        ItemTemplate="{StaticResource VerifyGameRowTemplate}">
+                                        <ListView.ItemContainerStyle>
+                                            <Style TargetType="ListViewItem">
+                                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                                <Setter Property="Padding" Value="4,0" />
+                                                <Setter Property="MinHeight" Value="0" />
+                                            </Style>
+                                        </ListView.ItemContainerStyle>
+                                    </ListView>
+
+                                    <TextBlock
+                                        x:Name="VerifyLibraryEmptyText"
+                                        Visibility="Collapsed"
+                                        Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                                </StackPanel>
+                            </Expander>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>                <Border x:Name="AutoPanel" Style="{StaticResource CardBorderStyle}" Visibility="Collapsed">
                     <StackPanel Spacing="14">
                         <TextBlock Text="{x:Bind Strings.Get('Login_Auto_Section'), Mode=OneWay}" Style="{StaticResource SectionTitleTextStyle}" />
 
@@ -418,7 +856,7 @@
                 </Button>
             </StackPanel>
 
-            <Border Grid.Column="1" Style="{StaticResource CardBorderStyle}" VerticalAlignment="Top">
+            <Border x:Name="AccountInfoPanel" Grid.Column="1" Style="{StaticResource CardBorderStyle}" VerticalAlignment="Top">
                 <StackPanel Spacing="14">
                     <TextBlock Text="{x:Bind Strings.Get('Login_AccountInfo_Section'), Mode=OneWay}" Style="{StaticResource SectionTitleTextStyle}" />
 

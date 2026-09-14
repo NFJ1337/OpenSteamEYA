@@ -1,4 +1,4 @@
-﻿<Window
+<Window
     x:Class="SteamEyaWinUI.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -155,7 +155,9 @@
                         VerticalAlignment="Center"
                         IsActive="False"
                         Visibility="Collapsed" />
+                    <!-- 提示条底色：不透明，按 UI 主题色着色（底色与主题色混合，见 MainWindow.UpdateStatusPanelBrush）。 -->
                     <Border
+                        x:Name="StatusPanel"
                         Grid.Column="1"
                         Background="{ThemeResource CustomUiDialogBrush}"
                         BorderBrush="{ThemeResource AuroraGlassBorderBrush}"
@@ -166,7 +168,22 @@
                             Background="Transparent"
                             IsOpen="False"
                             IsClosable="True"
-                            Severity="Informational" />
+                            Severity="Informational">
+                            <InfoBar.Resources>
+                                <!-- 让底部提示跟随应用主题（含设置里的 UI 主题色）：
+                                     · 严重级图标色统一指向 CustomUiBrush —— UiColorService 原地改这个画刷的颜色，换主题色即实时生效；
+                                     · 严重级背景一律透明，露出外层随主题的卡片底色（CustomUiDialogBrush + AuroraGlassBorderBrush）；
+                                     · 正文与关闭按钮沿用系统主题前景色（WinUI 默认），深浅色自动适配。 -->
+                                <StaticResource x:Key="SystemFillColorAttentionBrush" ResourceKey="CustomUiBrush" />
+                                <StaticResource x:Key="SystemFillColorSuccessBrush" ResourceKey="CustomUiBrush" />
+                                <StaticResource x:Key="SystemFillColorCautionBrush" ResourceKey="CustomUiBrush" />
+                                <StaticResource x:Key="SystemFillColorCriticalBrush" ResourceKey="CustomUiBrush" />
+                                <SolidColorBrush x:Key="InfoBarInformationalSeverityBackgroundBrush" Color="Transparent" />
+                                <SolidColorBrush x:Key="InfoBarSuccessSeverityBackgroundBrush" Color="Transparent" />
+                                <SolidColorBrush x:Key="InfoBarWarningSeverityBackgroundBrush" Color="Transparent" />
+                                <SolidColorBrush x:Key="InfoBarErrorSeverityBackgroundBrush" Color="Transparent" />
+                            </InfoBar.Resources>
+                        </InfoBar>
                     </Border>
                 </Grid>
             </Grid>
