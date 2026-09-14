@@ -34,9 +34,9 @@ public sealed partial class MainWindow : Window
 
     private static nint s_hwnd;
 
-    // 状态栏提示的自动收起时间：用户要求所有页面、所有等级（含警告/错误）统一 1.5 秒。
+    // 状态栏提示的自动收起时间：用户要求所有页面、所有等级（含警告/错误）统一 3 秒。
     // 详情不会丢：警告/错误同时写入 logs\steameya.log，状态栏只做即时反馈。
-    private static readonly TimeSpan StatusAutoDismissDelay = TimeSpan.FromSeconds(1.5);
+    private static readonly TimeSpan StatusAutoDismissDelay = TimeSpan.FromSeconds(3);
     // 提示条底色画刷：不透明，颜色 = 对话框底色 与 UI 主题色 的混合（每次显示前重算，换主题色立即生效）。
     private readonly SolidColorBrush _statusPanelBrush = new();
     private bool _statusPanelBrushAttached;
@@ -112,7 +112,33 @@ public sealed partial class MainWindow : Window
         // 等内容进入可视树（XamlRoot 就绪）后再跑，检测失败才需要弹框。
         RootLayoutGrid.Loaded += OnRootLayoutGridLoaded;
 
-        _ = AppState.CheckForUpdatesAsync(isAutomatic: true);
+        _ = RunStartupUpdateCheckAsync();
+    }
+
+    /// <summary>
+    /// 启动时的更新检查：失败（网络刚起来 / 代理还没就绪）时静默重试一次。
+    /// 这类失败对自动检查是完全静默的，用户会以为「没提示更新」，第二次打开才看到 —— 所以补一次。
+    /// 注意整个过程留在 UI 线程（async/await 不切上下文），UpdateStateChanged 的订阅方才能安全刷 UI。
+    /// </summary>
+    private async Task RunStartupUpdateCheckAsync()
+    {
+        await AppState.CheckForUpdatesAsync(isAutomatic: true);
+
+        if (AppState.UpdateCheckError is null)
+        {
+            return;
+        }
+
+        try
+        {
+            AppLog.Info($"启动更新检查失败（{AppState.UpdateCheckError}），6 秒后自动重试一次。");
+            await Task.Delay(TimeSpan.FromSeconds(6));
+            await AppState.CheckForUpdatesAsync(isAutomatic: true);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"启动更新检查重试失败：{ex.Message}");
+        }
     }
 
     private void OnRootLayoutGridLoaded(object sender, RoutedEventArgs e)
@@ -397,7 +423,7 @@ public sealed partial class MainWindow : Window
         StatusInfoBar.Severity = severity;
         StatusInfoBar.IsOpen = true;
 
-        // 不分等级：任何提示都在 1.5 秒后自动收起（含警告/错误，避免常驻占位）。
+        // 不分等级：任何提示都在 3 秒后自动收起（含警告/错误，避免常驻占位）。
         _statusDismissTimer.Stop();
         _statusDismissTimer.Start();
     }

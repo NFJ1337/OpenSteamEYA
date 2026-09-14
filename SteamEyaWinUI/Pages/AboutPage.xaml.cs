@@ -109,45 +109,40 @@ public sealed partial class AboutPage : Page, INotifyPropertyChanged
         _downloadCts = new CancellationTokenSource();
         Render();
 
+        // ---------- 阶段 1：下载安装包 ----------
+        string installerPath;
         try
         {
-                AppState.ShowStatus(Loc.T("About_Update_Downloading"), InfoBarSeverity.Informational);
+            AppState.ShowStatus(Loc.T("About_Update_Downloading"), InfoBarSeverity.Informational);
 
-                var progress = new Progress<UpdateDownloadProgress>(p =>
-                {
-                    _downloadBytesReceived = p.BytesReceived;
-                    _downloadTotalBytes = p.TotalBytes;
-                    Render();
-                });
+            var progress = new Progress<UpdateDownloadProgress>(p =>
+            {
+                _downloadBytesReceived = p.BytesReceived;
+                _downloadTotalBytes = p.TotalBytes;
+                Render();
+            });
 
-                var installerPath = await AppState.UpdateInstallerService.DownloadInstallerAsync(
-                    update, progress, _downloadCts.Token);
-                AppState.ShowStatus(Loc.T("About_Update_Downloaded"), InfoBarSeverity.Success);
-
-                if (!AppState.UpdateInstallerService.LaunchInstaller(installerPath))
-                {
-                    AppState.ShowStatus(Loc.T("About_Update_InstallerLaunchFailed"), InfoBarSeverity.Error);
-                    return;
-                }
-
-                AppState.ShowStatus(Loc.T("About_Update_InstallerLaunched"), InfoBarSeverity.Warning);
-
-                // 安装器已启动：先清掉残留实例，再强制结束当前进程，避免文件占用导致安装失败。
-                var current = Process.GetCurrentProcess();
-                AppState.UpdateInstallerService.ForceCloseOtherInstances(current.ProcessName, current.Id);
-                current.Kill(entireProcessTree: true);
+            installerPath = await AppState.UpdateInstallerService.DownloadInstallerAsync(
+                update, progress, _downloadCts.Token);
+            AppState.ShowStatus(Loc.T("About_Update_Downloaded"), InfoBarSeverity.Success);
         }
         catch (OperationCanceledException)
         {
             AppState.ShowStatus(Loc.T("About_Update_DownloadCanceled"), InfoBarSeverity.Informational);
+            return;
         }
         catch (TimeoutException ex)
         {
+            AppLog.Warn($"下载更新安装包超时：{ex.Message}");
             AppState.ShowStatus(ex.Message, InfoBarSeverity.Warning);
+            return;
         }
         catch (Exception ex)
         {
+            // 只有「下载」这一阶段的失败才叫下载失败。
+            AppLog.Error("下载更新安装包失败。", ex);
             AppState.ShowStatus(Loc.Tf("About_Update_DownloadFailed_Format", ex.Message), InfoBarSeverity.Error);
+            return;
         }
         finally
         {
@@ -158,8 +153,56 @@ public sealed partial class AboutPage : Page, INotifyPropertyChanged
             _downloadTotalBytes = null;
             Render();
         }
+
+        // ---------- 阶段 2：启动安装器 ----------
+        // 这一段出错以前会被上面的总 catch 说成「下载安装包失败」（下载其实已经成功），
+        // 现在单独报「安装器启动失败」并保留安装包，用户可以直接双击那个文件装。
+        try
+        {
+            if (!AppState.UpdateInstallerService.LaunchInstaller(installerPath))
+            {
+                AppState.ShowStatus(
+                    Loc.Tf("About_Update_InstallerLaunchFailed_Format", Loc.T("About_Update_InstallerLaunchFailed"), installerPath),
+                    InfoBarSeverity.Error);
+                return;
+            }
+
+            AppState.ShowStatus(Loc.T("About_Update_InstallerLaunched"), InfoBarSeverity.Warning);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error($"启动更新安装器失败（安装包已保留：{installerPath}）。", ex);
+            AppState.ShowStatus(
+                Loc.Tf("About_Update_InstallerLaunchFailed_Format", ex.Message, installerPath),
+                InfoBarSeverity.Error);
+            return;
+        }
+
+        // ---------- 阶段 3：结束自身，让安装器覆盖文件 ----------
+        ExitForUpdate();
     }
 
+    /// <summary>
+    /// 结束本进程，把文件让给安装器。
+    /// 注意不能用 Process.Kill(entireProcessTree: true) 杀「自己」——.NET 在这种情况下会直接抛
+    /// InvalidOperationException（消息里带 "containing the calling process"），这正是之前「下载完却提示
+    /// 下载安装包失败」的真凶。这里改成先清掉别的残留实例，再干净退出。
+    /// </summary>
+    private void ExitForUpdate()
+    {
+        try
+        {
+            var current = Process.GetCurrentProcess();
+            AppState.UpdateInstallerService.ForceCloseOtherInstances(current.ProcessName, current.Id);
+        }
+        catch (Exception ex)
+        {
+            // best-effort：清别的实例失败不影响安装（安装器自己带 /FORCECLOSEAPPLICATIONS）。
+            AppLog.Warn($"清理其它主程序实例失败（不影响安装）：{ex.Message}");
+        }
+
+        Environment.Exit(0);
+    }
     private void CancelDownloadButton_Click(object sender, RoutedEventArgs e)
     {
         _downloadCts?.Cancel();

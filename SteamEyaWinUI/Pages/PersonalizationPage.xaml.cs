@@ -37,8 +37,8 @@ public sealed partial class PersonalizationPage : Page, INotifyPropertyChanged
 
     private readonly DispatcherQueue _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
 
-    // 本页底部状态条与主窗口状态栏保持同一节奏：任何等级都在 1.5 秒后自动收起。
-    private static readonly TimeSpan InfoBarAutoDismissDelay = TimeSpan.FromSeconds(1.5);
+    // 本页底部状态条与主窗口状态栏保持同一节奏：任何等级都在 3 秒后自动收起。
+    private static readonly TimeSpan InfoBarAutoDismissDelay = TimeSpan.FromSeconds(3);
     private readonly DispatcherQueueTimer _infoBarDismissTimer;
 
     // 当前源图（原始字节，导出/预览时按选框重新解码裁剪）。null = 尚未载入任何图片。
@@ -766,7 +766,7 @@ public sealed partial class PersonalizationPage : Page, INotifyPropertyChanged
         PageInfoBar.Severity = severity;
         PageInfoBar.IsOpen = true;
 
-        // 与主窗口状态栏一致：1.5 秒后自动收起。
+        // 与主窗口状态栏一致：3 秒后自动收起。
         _infoBarDismissTimer.Stop();
         _infoBarDismissTimer.Start();
     }

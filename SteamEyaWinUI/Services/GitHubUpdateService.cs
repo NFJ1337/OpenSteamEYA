@@ -41,26 +41,77 @@ internal sealed class GitHubUpdateService
         _selectedProxyCode = ResolveSite(proxyCode).Code;
     }
 
+    /// <summary>单次检查最多尝试几个站点（首选 + 兜底），避免全部超时把启动拖太久。</summary>
+    private const int MaxSitesPerCheck = 3;
+
+    /// <summary>单站点请求超时；比 HttpClient 的 20 秒短，好在站点不通时尽快换下一个。</summary>
+    private static readonly TimeSpan SiteAttemptTimeout = TimeSpan.FromSeconds(8);
+
+    /// <summary>
+    /// 检查更新：先走用户选的站点；遇到网络/TLS 这类瞬时故障就换下一个站点再试（最多 3 个）。
+    /// 这是「第一次打开没提示更新、第二次才有」的主因之一：启动瞬间经代理站的 TLS 握手偶发失败，
+    /// 而自动检查失败是完全静默的，用户就以为没有更新。
+    /// </summary>
     public async Task<GitHubUpdateInfo> CheckLatestAsync(CancellationToken cancellationToken = default)
     {
-        var site = ResolveSite(_selectedProxyCode);
+        var primary = ResolveSite(_selectedProxyCode);
+        var candidates = new List<GitHubProxySite> { primary };
+        candidates.AddRange(ProxySites.Where(site => site.Code != primary.Code));
 
-        using var metadataResponse = await HttpClient.GetAsync(BuildUrl(site, LatestMetadataUrl), cancellationToken);
+        return await CheckLatestWithSitesAsync(candidates.Take(MaxSitesPerCheck).ToArray(), cancellationToken);
+    }
+
+    /// <summary>按给定站点顺序依次尝试；只在瞬时网络故障时换站点，业务性错误直接抛出。</summary>
+    internal async Task<GitHubUpdateInfo> CheckLatestWithSitesAsync(
+        IReadOnlyList<GitHubProxySite> sites,
+        CancellationToken cancellationToken = default)
+    {
+        Exception? lastError = null;
+        foreach (var site in sites)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                return await CheckLatestViaSiteAsync(site, cancellationToken);
+            }
+            catch (Exception ex) when (IsTransientNetworkFailure(ex))
+            {
+                lastError = ex;
+                AppLog.Warn($"更新检查经 {site.DisplayName} 失败（{ex.Message}），换下一个站点重试。");
+            }
+        }
+
+        throw lastError ?? new InvalidOperationException(Loc.T("Update_EmptyResponse"));
+    }
+
+    /// <summary>瞬时网络/TLS 故障（可以换站点重试）；其它异常（例如响应格式不对）不重试。</summary>
+    private static bool IsTransientNetworkFailure(Exception exception) =>
+        exception is HttpRequestException or TaskCanceledException or TimeoutException or IOException or System.Net.Sockets.SocketException;
+
+    private async Task<GitHubUpdateInfo> CheckLatestViaSiteAsync(GitHubProxySite site, CancellationToken cancellationToken)
+    {
+        using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        attemptCts.CancelAfter(SiteAttemptTimeout);
+        var token = attemptCts.Token;
+
+        using var metadataResponse = await HttpClient.SendAsync(
+            CreateNoCacheRequest(BuildMetadataUrl(site)),
+            token);
 
         // 仓库手工发版（没跑 release 工作流）时没有 latest.json：退一步用 Releases API 读最新 release，
         // 避免把原始 404 直接甩给用户。
         if (metadataResponse.StatusCode == HttpStatusCode.NotFound)
         {
-            return await CheckLatestViaReleasesApiAsync(site, cancellationToken);
+            return await CheckLatestViaReleasesApiAsync(site, token);
         }
 
         metadataResponse.EnsureSuccessStatusCode();
 
-        await using var metadataStream = await metadataResponse.Content.ReadAsStreamAsync(cancellationToken);
+        await using var metadataStream = await metadataResponse.Content.ReadAsStreamAsync(token);
         GitHubReleaseMetadataDto metadata = await JsonSerializer.DeserializeAsync(
             metadataStream,
             GitHubUpdateJsonContext.Default.GitHubReleaseMetadataDto,
-            cancellationToken)
+            token)
             ?? throw new InvalidOperationException(Loc.T("Update_EmptyResponse"));
 
         var latestTag = string.IsNullOrWhiteSpace(metadata.Tag)
@@ -97,7 +148,7 @@ internal sealed class GitHubUpdateService
     /// </summary>
     private async Task<GitHubUpdateInfo> CheckLatestViaReleasesApiAsync(GitHubProxySite site, CancellationToken cancellationToken)
     {
-        using var response = await HttpClient.GetAsync(BuildUrl(site, LatestReleaseApiUrl), cancellationToken);
+        using var response = await HttpClient.SendAsync(CreateNoCacheRequest(BuildReleaseApiUrl(site)), cancellationToken);
         response.EnsureSuccessStatusCode();
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
@@ -193,7 +244,7 @@ internal sealed class GitHubUpdateService
     public async Task<TimeSpan> ProbeLatencyAsync(string? proxyCode = null, CancellationToken cancellationToken = default)
     {
         var site = ResolveSite(proxyCode ?? _selectedProxyCode);
-        var probeUrl = BuildUrl(site, LatestMetadataUrl);
+        var probeUrl = BuildMetadataUrl(site);
         var stopwatch = Stopwatch.StartNew();
         using var response = await HttpClient.GetAsync(probeUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         response.EnsureSuccessStatusCode();
@@ -242,6 +293,30 @@ internal sealed class GitHubUpdateService
     /// 也不套下载代理前缀：gh-proxy 这类站点只加速下载，套上去页面反而打不开。
     /// </summary>
     internal static string BuildReleasePageUrl() => ReleasesUrl;
+
+    /// <summary>
+    /// 元数据地址：附带一个每次都不同的查询串，并声明不缓存。
+    /// gh-proxy / CDN 会按完整 URL 缓存 latest.json，刚发布新版本时客户端可能读到旧元数据 ——
+    /// 表现就是「第一次打开说已是最新，第二次打开才提示有新版本」。
+    /// </summary>
+    internal static string BuildMetadataUrl(GitHubProxySite site) =>
+        $"{BuildUrl(site, LatestMetadataUrl)}{(LatestMetadataUrl.Contains('?') ? '&' : '?')}_={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+
+    /// <summary>同一个套路用于 Releases API 兜底地址。</summary>
+    private static string BuildReleaseApiUrl(GitHubProxySite site) =>
+        $"{BuildUrl(site, LatestReleaseApiUrl)}?_={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+
+    /// <summary>构造「不吃缓存」的 GET 请求（no-cache + no-store）。</summary>
+    private static HttpRequestMessage CreateNoCacheRequest(string url)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.CacheControl = new System.Net.Http.Headers.CacheControlHeaderValue
+        {
+            NoCache = true,
+            NoStore = true
+        };
+        return request;
+    }
 
     private static string? BuildArtifactUrl(GitHubProxySite site, string latestTag, string? artifactName)
     {

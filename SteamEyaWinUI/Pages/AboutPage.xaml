@@ -185,6 +185,13 @@
                         Text="{x:Bind Strings.Get('About_Usage_Intro'), Mode=OneWay}"
                         Foreground="{ThemeResource AuroraTextMutedBrush}"
                         TextWrapping="Wrap" />
+                    <!-- 特别强调：账号核验模块已适配 奶味验号.xyz -->
+                    <TextBlock
+                        Text="{x:Bind Strings.Get('About_Usage_NaiweiNote'), Mode=OneWay}"
+                        Foreground="{ThemeResource CustomUiBrush}"
+                        FontWeight="SemiBold"
+                        TextWrapping="Wrap"
+                        LineHeight="22" />
                     <TextBlock Text="{x:Bind Strings.Get('About_Usage_ManagedAccounts'), Mode=OneWay}" TextWrapping="Wrap" LineHeight="22" />
                     <TextBlock Text="{x:Bind Strings.Get('About_Usage_Query'), Mode=OneWay}" TextWrapping="Wrap" LineHeight="22" />
                     <TextBlock Text="{x:Bind Strings.Get('About_Usage_Login'), Mode=OneWay}" TextWrapping="Wrap" LineHeight="22" />
@@ -194,6 +201,8 @@
                     <TextBlock Text="{x:Bind Strings.Get('About_Usage_Personalize'), Mode=OneWay}" TextWrapping="Wrap" LineHeight="22" />
                     <TextBlock Text="{x:Bind Strings.Get('About_Usage_TreasureBox'), Mode=OneWay}" TextWrapping="Wrap" LineHeight="22" />
                     <TextBlock Text="{x:Bind Strings.Get('About_Usage_Settings'), Mode=OneWay}" TextWrapping="Wrap" LineHeight="22" />
+                    <TextBlock Text="{x:Bind Strings.Get('About_Usage_Security'), Mode=OneWay}" TextWrapping="Wrap" LineHeight="22" />
+                    <TextBlock Text="{x:Bind Strings.Get('About_Usage_Update'), Mode=OneWay}" TextWrapping="Wrap" LineHeight="22" />
                 </StackPanel>
             </Border>
 

@@ -1339,7 +1339,61 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
         _verifyStageTimer.Interval = TimeSpan.FromSeconds(1);
         _verifyStageTimer.Tick += VerifyStageTimer_Tick;
 
+        // 切到核验模式（面板显示）时拉一次上游公告；只影响核验模块自己的提示条。
+        VerifyPanel.RegisterPropertyChangedCallback(
+            UIElement.VisibilityProperty,
+            (_, _) =>
+            {
+                if (VerifyPanel.Visibility == Visibility.Visible)
+                {
+                    _ = RefreshVerifyServiceInfoAsync();
+                }
+            });
+
         UpdateVerifyTexts();
+    }
+
+    // ---------- 账号核验：上游服务公告（9095 /api/v1/health） ----------
+
+    /// <summary>最近一次拉到的上游公告；null = 还没拉到，空串 = 服务在线但没有公告。</summary>
+    private string? _verifyServiceAnnouncement;
+
+    private bool _verifyServiceOnline;
+
+    /// <summary>拉取上游服务公告并显示在核验面板顶部（失败只影响这条提示，不影响验号）。</summary>
+    private async Task RefreshVerifyServiceInfoAsync()
+    {
+        try
+        {
+            var health = await VerifyRedeemClient.CheckHealthAsync();
+            _verifyServiceOnline = health?.Ok == true;
+            _verifyServiceAnnouncement = health?.Announcement?.Trim() ?? string.Empty;
+        }
+        catch (Exception ex)
+        {
+            _verifyServiceOnline = false;
+            _verifyServiceAnnouncement = null;
+            AppLog.Warn($"核验：读取上游服务公告失败：{ex.Message}");
+        }
+
+        UpdateVerifyServiceBar();
+    }
+
+    /// <summary>按当前语言和最近一次结果刷新公告条。</summary>
+    private void UpdateVerifyServiceBar()
+    {
+        if (_verifyServiceAnnouncement is null && !_verifyServiceOnline)
+        {
+            VerifyServiceBar.Severity = InfoBarSeverity.Warning;
+            VerifyServiceBar.Message = Loc.T("Login_Verify_Service_Offline");
+            VerifyServiceBar.IsOpen = true;
+            return;
+        }
+
+        // 在线时显示固定公告（服务端原文仅用于判断是否连上，不再直接展示）。
+        VerifyServiceBar.Severity = InfoBarSeverity.Informational;
+        VerifyServiceBar.Message = Loc.T("Login_Verify_Service_Announcement");
+        VerifyServiceBar.IsOpen = true;
     }
 
     private void VerifyStageTimer_Tick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
@@ -1365,6 +1419,12 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
     private void UpdateVerifyTexts()
     {
         VerifyQueryButtonText.Text = Loc.T(_verifyQueryRunning ? "Login_Verify_Btn_Querying" : "Login_Verify_Btn_Query");
+
+        // 公告条的前缀文案跟随语言（有拉到过结果才重刷，避免语言切换触发一次网络请求）。
+        if (_verifyServiceAnnouncement is not null || _verifyServiceOnline)
+        {
+            UpdateVerifyServiceBar();
+        }
         UpdateVerifyLibrarySortText();
 
         if (_verifyQueryRunning)

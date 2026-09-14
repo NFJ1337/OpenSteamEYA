@@ -7,6 +7,10 @@
     SizeChanged="LoginPage_SizeChanged">
 
     <Page.Resources>
+        <!-- 两个模式名称（Token登录 / 账号核验）下方那条蓝条 = SelectorBar 的 PART_SelectionVisual；
+             它默认只有 4×3，这里只在黑号登录页把它拉长（按钮本身尺寸不动）。 -->
+        <x:Double x:Key="SelectorBarItemPillWidth">62</x:Double>
+        <x:Double x:Key="SelectorBarItemPillHeight">3</x:Double>
         <!-- 核验模块专用模板：站点信息密度高，这里统一走小字号 + 细边卡片，压进一屏。 -->
         <DataTemplate x:Key="VerifyStatTemplate" x:DataType="models:SteamVerifyStat">
             <Border
@@ -374,6 +378,13 @@
                             Text="{x:Bind Strings.Get('Login_Verify_Desc'), Mode=OneWay}"
                             Foreground="{ThemeResource AuroraTextMutedBrush}"
                             TextWrapping="Wrap" />
+
+                        <!-- 上游服务公告/状态：来自 111.170.18.37:9095 的 /api/v1/health（只属于核验模块） -->
+                        <InfoBar
+                            x:Name="VerifyServiceBar"
+                            IsOpen="False"
+                            IsClosable="True"
+                            Severity="Informational" />
 
                         <Grid ColumnSpacing="12">
                             <Grid.ColumnDefinitions>
