@@ -447,6 +447,9 @@ internal sealed class AppSettings
     /// <summary>代理模式：rule = 规则（按订阅 rules 分流）；global = 全局（所有流量走代理）。默认 rule。</summary>
     public string VpnMode { get; set; } = VpnCoreService.ModeRule;
 
+    /// <summary>「轻松音乐」页默认选中的平台 key（netease / qishui / kugou / qq）；null = 清单里第一个。</summary>
+    public string? MusicPlatform { get; set; }
+
     /// <summary>
     /// 内核本地控制口的 secret（首次使用时自动生成）。控制口只监听 127.0.0.1，用它查节点延迟。
     /// </summary>

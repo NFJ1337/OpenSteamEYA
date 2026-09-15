@@ -104,52 +104,16 @@
                 </Button>
             </Grid>
 
-            <!-- 常规科技官网速查：点了弹窗，弹窗里是 标签 + 可点链接（不影响上面两个按钮） -->
-            <Button
-                x:Name="CheatSitesButton"
-                HorizontalAlignment="Stretch"
-                HorizontalContentAlignment="Center"
-                CornerRadius="12"
-                Padding="14,7"
-                FontWeight="SemiBold"
-                Click="CheatSitesButton_Click">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <FontIcon x:Name="CheatSitesIcon" Glyph="&#xE774;" FontSize="16" />
-                    <TextBlock x:Name="CheatSitesLabel" Text="{x:Bind Strings.Get('TreasureBox_CheatSitesButton'), Mode=OneWay}" />
-                </StackPanel>
-            </Button>
+            <!-- 按钮分两列：左边是点开清单弹窗的，右边是直接用浏览器跳转的（机密卡与 UID 卡保持原样在上面）。 -->
+            <Grid ColumnSpacing="14">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
 
-            <!-- 梯子推荐：点开弹窗的样式与上面 Cheat 官网弹窗一致 -->
-            <Button
-                x:Name="ProxySiteButton"
-                HorizontalAlignment="Stretch"
-                HorizontalContentAlignment="Center"
-                CornerRadius="12"
-                Padding="14,7"
-                FontWeight="SemiBold"
-                Click="ProxySiteButton_Click">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <FontIcon x:Name="ProxySiteIcon" Glyph="&#xE774;" FontSize="16" />
-                    <TextBlock x:Name="ProxySiteLabel" Text="{x:Bind Strings.Get('TreasureBox_ProxySite'), Mode=OneWay}" />
-                </StackPanel>
-            </Button>
-
-            <!-- 好看的精品壁纸网站：与上面「梯子推荐」同款样式，点击用系统默认浏览器打开。 -->
-            <Button
-                x:Name="WallpaperSiteButton"
-                HorizontalAlignment="Stretch"
-                HorizontalContentAlignment="Center"
-                CornerRadius="12"
-                Padding="14,7"
-                FontWeight="SemiBold"
-                Click="WallpaperSiteButton_Click">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <FontIcon x:Name="WallpaperSiteIcon" Glyph="&#xE91B;" FontSize="16" />
-                    <TextBlock x:Name="WallpaperSiteLabel" Text="{x:Bind Strings.Get('TreasureBox_WallpaperSite'), Mode=OneWay}" />
-                </StackPanel>
-            </Button>
-
-            <!-- 推荐卡网：弹窗与「查看Cheat官网」同款（标签 + 可点链接）。 -->
+                <!-- 左列：点开弹窗 -->
+                <StackPanel Grid.Column="0" Spacing="14">
+                <!-- 推荐卡网：弹窗与「查看Cheat官网」同款（标签 + 可点链接）。 -->
             <Button
                 x:Name="CardSitesButton"
                 HorizontalAlignment="Stretch"
@@ -164,7 +128,22 @@
                 </StackPanel>
             </Button>
 
-            <!-- HVH 服务器：弹窗与上面几个清单同款（标签 + 可点链接）。 -->
+                <!-- 常规科技官网速查：点了弹窗，弹窗里是 标签 + 可点链接（不影响上面两个按钮） -->
+            <Button
+                x:Name="CheatSitesButton"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Center"
+                CornerRadius="12"
+                Padding="14,7"
+                FontWeight="SemiBold"
+                Click="CheatSitesButton_Click">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon x:Name="CheatSitesIcon" Glyph="&#xE774;" FontSize="16" />
+                    <TextBlock x:Name="CheatSitesLabel" Text="{x:Bind Strings.Get('TreasureBox_CheatSitesButton'), Mode=OneWay}" />
+                </StackPanel>
+            </Button>
+
+                <!-- HVH 服务器：弹窗与上面几个清单同款（标签 + 可点链接）。 -->
             <Button
                 x:Name="HvhServersButton"
                 HorizontalAlignment="Stretch"
@@ -178,8 +157,41 @@
                     <TextBlock x:Name="HvhServersLabel" Text="{x:Bind Strings.Get('TreasureBox_HvhServersButton'), Mode=OneWay}" />
                 </StackPanel>
             </Button>
+                </StackPanel>
 
-            <!-- 枫喵 CS2 LUA 注入器：点击直接用系统默认浏览器打开。 -->
+                <!-- 右列：直接跳转 -->
+                <StackPanel Grid.Column="1" Spacing="14">
+                <!-- 梯子推荐：点开弹窗的样式与上面 Cheat 官网弹窗一致 -->
+            <Button
+                x:Name="ProxySiteButton"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Center"
+                CornerRadius="12"
+                Padding="14,7"
+                FontWeight="SemiBold"
+                Click="ProxySiteButton_Click">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon x:Name="ProxySiteIcon" Glyph="&#xE774;" FontSize="16" />
+                    <TextBlock x:Name="ProxySiteLabel" Text="{x:Bind Strings.Get('TreasureBox_ProxySite'), Mode=OneWay}" />
+                </StackPanel>
+            </Button>
+
+                <!-- 好看的精品壁纸网站：与上面「梯子推荐」同款样式，点击用系统默认浏览器打开。 -->
+            <Button
+                x:Name="WallpaperSiteButton"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Center"
+                CornerRadius="12"
+                Padding="14,7"
+                FontWeight="SemiBold"
+                Click="WallpaperSiteButton_Click">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon x:Name="WallpaperSiteIcon" Glyph="&#xE91B;" FontSize="16" />
+                    <TextBlock x:Name="WallpaperSiteLabel" Text="{x:Bind Strings.Get('TreasureBox_WallpaperSite'), Mode=OneWay}" />
+                </StackPanel>
+            </Button>
+
+                <!-- 枫喵 CS2 LUA 注入器：点击直接用系统默认浏览器打开。 -->
             <Button
                 x:Name="LuaInjectorButton"
                 HorizontalAlignment="Stretch"
@@ -193,6 +205,8 @@
                     <TextBlock x:Name="LuaInjectorLabel" Text="{x:Bind Strings.Get('TreasureBox_LuaInjectorButton'), Mode=OneWay}" />
                 </StackPanel>
             </Button>
+                </StackPanel>
+            </Grid>
         </StackPanel>
     </ScrollViewer>
 </Page>

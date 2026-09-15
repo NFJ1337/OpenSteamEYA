@@ -122,6 +122,13 @@
             </NavigationView.MenuItems>
             <NavigationView.FooterMenuItems>
                 <NavigationViewItem
+                    x:Name="MusicNavItem"
+                    Tag="music">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8D6;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
                     x:Name="TreasureBoxNavItem"
                     Tag="treasureBox">
                     <NavigationViewItem.Icon>

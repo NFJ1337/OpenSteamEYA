@@ -9,10 +9,10 @@
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
-    <Version>1.5.2</Version>
-    <FileVersion>1.5.2.0</FileVersion>
-    <AssemblyVersion>1.5.2.0</AssemblyVersion>
-    <InformationalVersion>v1.5.2-dev</InformationalVersion>
+    <Version>1.5.5</Version>
+    <FileVersion>1.5.5.0</FileVersion>
+    <AssemblyVersion>1.5.5.0</AssemblyVersion>
+    <InformationalVersion>v1.5.5-dev</InformationalVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <!-- 自定义 Program.Main：先拦截 CS2 云推送辅助进程模式（cs2-cloud-push 开关）再走 XAML 启动（见 Program.cs）。 -->
@@ -72,6 +72,8 @@
          避免 WindowsAppSDK 元包拖入 onnxruntime/DirectML/AI 等无用载荷（约 40 MB）。
          自包含模式下 WinUI 组件包自带运行时 DLL，无需 Runtime 包。 -->
     <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.2.1" />
+    <!-- 「轻松音乐」页内嵌平台官方网页（WebView2）：AOT 下已实测可用。 -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
   </ItemGroup>
 
   <!-- workaround：无打包 WinUI 应用 dotnet publish 时不会复制 PRI 资源索引文件，

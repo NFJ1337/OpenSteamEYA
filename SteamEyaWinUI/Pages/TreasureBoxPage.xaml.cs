@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
+using SteamEyaWinUI.Controls;
 using SteamEyaWinUI.Localization;
 using SteamEyaWinUI.Services;
 
@@ -109,7 +110,8 @@ public sealed partial class TreasureBoxPage : Page, INotifyPropertyChanged
         ("", "", [
             ("小泽代理(CS2白号，各别Cheat)", "accountcheat.xzhvh.cc"),
             ("奶味卡网(优先黑号)", "奶味.cc"),
-            ("爱代购(SK、NL、Pri、午夜)", "爱代购.com")
+            ("爱代购(SK、NL、Pri、午夜)", "爱代购.com"),
+            ("1t FA续费", "shop.fumo.cat")
         ])
     ];
 
@@ -118,7 +120,12 @@ public sealed partial class TreasureBoxPage : Page, INotifyPropertyChanged
     [
         ("", "", [
             ("Flux", "https://cshvh.cn/servers"),
-            ("5x5平台", "https://mmhvh.cn")
+            ("5x5平台", "https://mmhvh.cn"),
+            ("HVH名人堂", "https://cs.hvh.one"),
+            ("457 HVH", "https://457hvh.com"),
+            ("RW0TER(Meme插件)", "https://rw0ter.tech"),
+            ("低调余-武装直升机", "dev.武装直升机.vip"),
+            ("茶社CSGO", "https://www.teahvh.cc/servers")
         ])
     ];
 
@@ -134,30 +141,9 @@ public sealed partial class TreasureBoxPage : Page, INotifyPropertyChanged
 
     private async void CheatSitesButton_Click(object sender, RoutedEventArgs e)
     {
-        // 弹窗沿用程序自带的 ContentDialog 样式（圆角、实色不透明底、随主题走），内容超过高度时可滚动。
-        var dialog = new ContentDialog
-        {
-            Content = new ScrollViewer
-            {
-                Content = BuildSitesGrid(CheatSites, 3),
-                MaxHeight = 420,
-                HorizontalAlignment = HorizontalAlignment.Left,
-                HorizontalContentAlignment = HorizontalAlignment.Left,
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto
-            },
-            CloseButtonText = Loc.T("Common_Close"),
-            CloseButtonStyle = (Style)Application.Current.Resources["AuroraGlassButtonStyle"],
-            DefaultButton = ContentDialogButton.Close,
-            XamlRoot = XamlRoot
-        };
-
-        // 弹窗默认最大宽度只有 548（WinUI 的 ContentDialogMaxWidth），三列链接放不下会被裁掉；
-        // 这里放宽到 920，保证每一行 3 条链接都能完整显示。
-        dialog.Resources["ContentDialogMinWidth"] = 560d;
-        dialog.Resources["ContentDialogMaxWidth"] = 920d;
-
-        await dialog.ShowAsync();
+        // 与「推荐卡网」「HVH论坛」共用同一套弹窗：关闭按钮居中、宽度放宽到 920 以便放下三列链接。
+        // （以前这里是单独一份 ContentDialog，关闭按钮留在右下角，和另外两个不一致。）
+        await ShowSitesDialogAsync(BuildSitesGrid(CheatSites, 3));
     }
 
     /// <summary>「梯子推荐」：点击直接用系统默认浏览器打开（不弹窗）。</summary>
@@ -255,7 +241,9 @@ public sealed partial class TreasureBoxPage : Page, INotifyPropertyChanged
 
                 var link = new HyperlinkButton
                 {
-                    Content = url,
+                    // 显示只留域名：去掉 https:// 前缀与 /路径（https://cshvh.cn/servers → cshvh.cn）；
+                    // 点开时仍用清单里的完整地址，保证能正常访问。
+                    Content = DisplayUrl(url),
                     Padding = new Thickness(0),
                     VerticalAlignment = VerticalAlignment.Center,
                     HorizontalAlignment = HorizontalAlignment.Left,   // 域名从「：」右边开始左对齐
@@ -271,6 +259,20 @@ public sealed partial class TreasureBoxPage : Page, INotifyPropertyChanged
         }
 
         return grid;
+    }
+
+    /// <summary>把链接简化成只显示域名：去掉协议前缀与路径部分；清单里没写协议的（如 奶味.cc）原样返回。</summary>
+    private static string DisplayUrl(string url)
+    {
+        var text = url.Trim();
+        var scheme = text.IndexOf("://", StringComparison.Ordinal);
+        if (scheme >= 0)
+        {
+            text = text[(scheme + 3)..];
+        }
+
+        var slash = text.IndexOf('/');
+        return slash >= 0 ? text[..slash] : text;
     }
 
     /// <summary>
@@ -300,24 +302,43 @@ public sealed partial class TreasureBoxPage : Page, INotifyPropertyChanged
         }
     }
 
-    /// <summary>弹出「标签：链接」清单（Cheat 官网与推荐卡网共用同一套外观）。</summary>
+    /// <summary>
+    /// 弹出「标签：链接」清单（Cheat 官网 / 推荐卡网 / HVH论坛共用同一套外观）。
+    /// 关闭按钮做成内容区里的居中按钮：ContentDialog 自带的 CloseButton 被模板固定在右下角，
+    /// 改不成居中，所以不用它。
+    /// </summary>
     private async Task ShowSitesDialogAsync(Grid content)
     {
         var dialog = new ContentDialog
         {
-            Content = new ScrollViewer
-            {
-                Content = content,
-                MaxHeight = 420,
-                HorizontalAlignment = HorizontalAlignment.Left,
-                HorizontalContentAlignment = HorizontalAlignment.Left,
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto
-            },
-            CloseButtonText = Loc.T("Common_Close"),
-            CloseButtonStyle = (Style)Application.Current.Resources["AuroraGlassButtonStyle"],
-            DefaultButton = ContentDialogButton.Close,
             XamlRoot = XamlRoot
+        };
+
+        var closeButton = new Button
+        {
+            Content = Loc.T("Common_Close"),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            MinWidth = 120,
+            Style = (Style)Application.Current.Resources["AuroraGlassButtonStyle"]
+        };
+        closeButton.Click += (_, _) => dialog.Hide();
+
+        dialog.Content = new StackPanel
+        {
+            Spacing = 12,
+            Children =
+            {
+                new ScrollViewer
+                {
+                    Content = content,
+                    MaxHeight = 420,
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    HorizontalContentAlignment = HorizontalAlignment.Left,
+                    HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                    VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+                },
+                closeButton
+            }
         };
 
         dialog.Resources["ContentDialogMinWidth"] = 560d;
@@ -342,56 +363,8 @@ public sealed partial class TreasureBoxPage : Page, INotifyPropertyChanged
     /// 底色用不透明的主题色（不是 AuroraGlassButtonBrush / CustomUiButtonBrush 那种半透明玻璃），
     /// 文字与图标颜色按底色明度自动取深色或白色；悬停/按下各亮/暗一档。
     /// </summary>
-    private static void ApplySolidThemeColor(Button button, TextBlock label, FontIcon icon)
-    {
-        var accent = AppState.UiColorService.BaseColor;
-        var hover = Blend(accent, Microsoft.UI.Colors.White, 0.16);
-        var pressed = Blend(accent, Microsoft.UI.Colors.Black, 0.14);
-        var textColor = ReadableTextColor(accent);
-
-        var background = new SolidColorBrush(accent);
-        var foreground = new SolidColorBrush(textColor);
-
-        button.Background = background;
-        button.BorderBrush = background;
-        button.Foreground = foreground;
-        label.Foreground = foreground;
-        icon.Foreground = foreground;
-
-        button.Resources["ButtonBackground"] = background;
-        button.Resources["ButtonBackgroundPointerOver"] = new SolidColorBrush(hover);
-        button.Resources["ButtonBackgroundPressed"] = new SolidColorBrush(pressed);
-        button.Resources["ButtonBorderBrush"] = background;
-        button.Resources["ButtonBorderBrushPointerOver"] = new SolidColorBrush(hover);
-        button.Resources["ButtonBorderBrushPressed"] = new SolidColorBrush(pressed);
-        button.Resources["ButtonForeground"] = foreground;
-        button.Resources["ButtonForegroundPointerOver"] = foreground;
-        button.Resources["ButtonForegroundPressed"] = foreground;
-    }
-
-    /// <summary>底色亮就配深字、底色暗就配白字，保证按钮文字始终看得清。</summary>
-    private static Windows.UI.Color ReadableTextColor(Windows.UI.Color background)
-    {
-        var luminance = (0.2126 * Channel(background.R)) + (0.7152 * Channel(background.G)) + (0.0722 * Channel(background.B));
-        return luminance > 0.62
-            ? Windows.UI.Color.FromArgb(255, 32, 28, 60)
-            : Microsoft.UI.Colors.White;
-
-        static double Channel(byte value)
-        {
-            var normalized = value / 255.0;
-            return normalized <= 0.03928
-                ? normalized / 12.92
-                : Math.Pow((normalized + 0.055) / 1.055, 2.4);
-        }
-    }
-
-    private static Windows.UI.Color Blend(Windows.UI.Color from, Windows.UI.Color to, double amount) =>
-        Windows.UI.Color.FromArgb(
-            255,
-            (byte)Math.Round(from.R + ((to.R - from.R) * amount)),
-            (byte)Math.Round(from.G + ((to.G - from.G) * amount)),
-            (byte)Math.Round(from.B + ((to.B - from.B) * amount)));
+    private static void ApplySolidThemeColor(Button button, TextBlock label, FontIcon icon) =>
+        AuroraAccentTheme.ApplySolidAccent(button, label, icon);
 
     /// <summary>把 "#AARRGGBB" 或 "#RRGGBB" 解析成颜色；解析失败返回 null（标题就保持默认前景色）。</summary>
     private static Windows.UI.Color? ParseColor(string hex)

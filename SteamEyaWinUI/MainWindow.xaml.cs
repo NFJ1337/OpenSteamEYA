@@ -109,6 +109,7 @@ public sealed partial class MainWindow : Window
         // 上次退出时 VPN 是开启状态 → 启动后自动连回来。
         _ = RestoreVpnOnStartupAsync();
 
+
         // 后台预热 Steam 侧连接：首次点「一键查询 / 清空无效账号」不用再等冷启动。
         _ = PrewarmSteamConnectionsAsync();
         StatusInfoBar.RegisterPropertyChangedCallback(
@@ -572,6 +573,7 @@ public sealed partial class MainWindow : Window
             "cachedAccounts" => typeof(CachedAccountsPage),
             "loadout" => typeof(LoadoutPage),
             "personalization" => typeof(PersonalizationPage),
+            "music" => typeof(MusicPage),
             "treasureBox" => typeof(TreasureBoxPage),
             "settings" => typeof(SettingsPage),
             "about" => typeof(AboutPage),
@@ -726,6 +728,7 @@ public sealed partial class MainWindow : Window
         CachedAccountsNavItem.Content = Loc.T("Nav_CachedAccounts");
         LoadoutNavItem.Content = Loc.T("Nav_Loadout");
         PersonalizationNavItem.Content = Loc.T("Nav_Personalization");
+        MusicNavItem.Content = Loc.T("Nav_Music");
         TreasureBoxNavItem.Content = Loc.T("Nav_TreasureBox");
         SettingsNavItem.Content = Loc.T("Nav_Settings");
         AboutNavItem.Content = Loc.T("Nav_About");

@@ -1,5 +1,5 @@
 ﻿param(
-    [string]$Version = "1.5.2",
+    [string]$Version = "1.5.5",
     [string]$Configuration = "Release",
     [string]$Runtime = "win-x64",
     # 先按「末位 +1，满 10 进位」自增版本号（同步写回 csproj / 本脚本 / iss），再打包。
@@ -70,12 +70,9 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Get-ChildItem -LiteralPath $publishDir -Filter "*.pdb" -File | Remove-Item -Force
-foreach ($pattern in @(
-    "Microsoft.Web.WebView2.Core*.dll",
-    "WebView2Loader.dll"
-)) {
-    Get-ChildItem -LiteralPath $publishDir -Filter $pattern -File | Remove-Item -Force
-}
+
+# 注意：WebView2 的两个 DLL（Microsoft.Web.WebView2.Core.dll / WebView2Loader.dll）必须留在产物里 ——
+# 「轻松音乐」标签用 WebView2 内嵌平台网页，缺了它们运行时会初始化失败。
 
 # Inno Setup 6 是 32 位应用，默认装到 Program Files (x86)；IS7 x64 版才在 Program Files。两个 hive 都探。
 $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
