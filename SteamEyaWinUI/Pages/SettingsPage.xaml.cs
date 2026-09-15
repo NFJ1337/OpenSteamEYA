@@ -38,6 +38,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     private bool _vpnConnecting;
     private bool _vpnNodeMenuBuilt;
     private IReadOnlyList<string> _vpnNodeMenuNodes = [];
+    private IReadOnlyDictionary<string, int> _vpnNodeMenuDelays = new Dictionary<string, int>(StringComparer.Ordinal);
 
     public SettingsPage()
     {
@@ -1346,9 +1347,14 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
 
         VpnNodeButtonText.Text = selected ?? Loc.T("Settings_Vpn_Node_Auto");
 
-        if (!_vpnNodeMenuBuilt || !_vpnNodeMenuNodes.SequenceEqual(nodes, StringComparer.Ordinal))
+        // 延迟也是这样：自动连回来的那次测量发生在设置页创建之前，进页面时必须把数字补上。
+        var delays = VpnCoreService.NodeDelays;
+        if (!_vpnNodeMenuBuilt ||
+            !_vpnNodeMenuNodes.SequenceEqual(nodes, StringComparer.Ordinal) ||
+            !DelaysEqual(_vpnNodeMenuDelays, delays))
         {
             _vpnNodeMenuNodes = nodes;
+            _vpnNodeMenuDelays = delays;
             VpnNodeFlyout.Items.Clear();
             VpnNodeFlyout.Items.Add(BuildNodeMenuItem(null, Loc.T("Settings_Vpn_Node_Auto")));
 
@@ -1375,6 +1381,11 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             autoItem.Text = Loc.T("Settings_Vpn_Node_Auto");   // 语言切换后「自动」项文案要跟着变
         }
     }
+
+    /// <summary>两份延迟快照是否一致（数量 + 每个节点的数值）。</summary>
+    private static bool DelaysEqual(IReadOnlyDictionary<string, int> left, IReadOnlyDictionary<string, int> right) =>
+        left.Count == right.Count &&
+        left.All(pair => right.TryGetValue(pair.Key, out var value) && value == pair.Value);
 
     /// <summary>菜单项文案：节点名 + 最近一次测到的延迟（没测到或测不通显示 —）。</summary>
     private static string BuildNodeLabel(string node)
@@ -1426,27 +1437,8 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     /// </summary>
     private async Task RefreshNodeDelaysQuietlyAsync()
     {
-        var nodes = VpnCoreService.ListNodes();
-        if (nodes.Count == 0)
-        {
-            return;
-        }
-
-        for (var attempt = 1; attempt <= 2; attempt++)
-        {
-            try
-            {
-                await Task.Delay(attempt == 1 ? 800 : 1500);
-                await VpnCoreService.MeasureNodeDelaysAsync(nodes);
-                RebuildVpnNodeMenu();
-                AppLog.Info($"已自动刷新 {nodes.Count} 个节点的延迟。");
-                return;
-            }
-            catch (Exception ex)
-            {
-                AppLog.Info($"自动测节点延迟第 {attempt} 次未完成：{ex.Message}");
-            }
-        }
+        await VpnCoreService.RefreshNodeDelaysAsync();
+        RebuildVpnNodeMenu();
     }
 
     private MenuFlyoutItem BuildNodeMenuItem(string? node, string text)

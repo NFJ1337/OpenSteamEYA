@@ -52,6 +52,22 @@ public sealed partial class MainWindow : Window
     /// <summary>主窗口句柄，供文件/目录选择器等 WinRT 互操作（InitializeWithWindow）使用；在 ConfigureWindowSize 中赋值。</summary>
     public static nint Hwnd => s_hwnd;
 
+    /// <summary>
+    /// 启动时按上次状态连回 VPN：稍等一下再连，避免连接流程（TUN 还需要 UAC）挤在窗口弹出的瞬间。
+    /// </summary>
+    private static async Task RestoreVpnOnStartupAsync()
+    {
+        try
+        {
+            await Task.Delay(1500);
+            await VpnCoreService.TryRestoreOnStartupAsync();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Info($"启动时自动连回 VPN 未完成：{ex.Message}");
+        }
+    }
+
     public MainWindow()
     {
         Instance = this;
@@ -61,6 +77,9 @@ public sealed partial class MainWindow : Window
         // 关闭软件 = 断开 VPN：窗口真正关闭时显式收掉内核并还原系统代理。
         // 不依赖 ProcessExit —— 它只是进程级兜底，触发时机在窗口关闭之后，被强杀时更不会跑。
         Closed += (_, _) => VpnProxyService.SafeStopCore();
+
+        // 上次退出时 VPN 是开启状态 → 启动后自动连回来。
+        _ = RestoreVpnOnStartupAsync();
         StatusInfoBar.RegisterPropertyChangedCallback(
             InfoBar.IsOpenProperty,
             (_, _) => StatusOverlay.Visibility = StatusInfoBar.IsOpen ? Visibility.Visible : Visibility.Collapsed);

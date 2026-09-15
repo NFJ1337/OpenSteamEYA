@@ -336,6 +336,83 @@ internal static class VpnCoreService
         }
     }
 
+    /// <summary>
+    /// 启动时按上次状态连回来：上次退出时开关是「已启用」就自动拉起内核并重新接管网络。
+    /// （用户明确要求：勾选了代理启动，重开软件就该是连着的状态，否则软件自己的网络功能会不可用。）
+    /// 失败只写日志：设置保持原样，用户手动点一下即可，不擅自把开关关掉。
+    /// </summary>
+    public static async Task<bool> TryRestoreOnStartupAsync()
+    {
+        var settings = AppState.SettingsService.Load();
+        if (!settings.VpnProxyEnabled)
+        {
+            return false;
+        }
+
+        if (!HasSubscription)
+        {
+            AppLog.Info("上次是已启用状态，但设置里没有订阅链接，跳过自动连接。");
+            return false;
+        }
+
+        try
+        {
+            if (!IsRunning || !await VpnProxyService.ProbeAsync(ConfiguredPort, 400))
+            {
+                await EnsureRunningAsync();
+            }
+
+            var port = VpnProxyService.CachedPort > 0 ? VpnProxyService.CachedPort : ConfiguredPort;
+            if (string.Equals(CurrentTakeover, TakeoverTun, StringComparison.OrdinalIgnoreCase))
+            {
+                SystemProxyService.RestoreIfApplied();
+            }
+            else
+            {
+                SystemProxyService.Apply(port);
+            }
+
+            AppLog.Info($"已按上次状态自动连回 VPN（方式 {CurrentTakeover}，模式 {CurrentMode}，端口 {port}）。");
+
+            // 用户要求：启动自动连接之后，接着把节点延迟也刷一遍。
+            await RefreshNodeDelaysAsync();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"自动连回 VPN 失败（可在设置页手动重连）：{ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 测一轮节点延迟并写入缓存（菜单里显示成 · xxx ms）。
+    /// 内核算刚起来时测会失败，所以先等一拍、失败再试一次；两次都不成只写日志。
+    /// </summary>
+    public static async Task RefreshNodeDelaysAsync()
+    {
+        var nodes = ListNodes();
+        if (nodes.Count == 0)
+        {
+            return;
+        }
+
+        for (var attempt = 1; attempt <= 2; attempt++)
+        {
+            try
+            {
+                await Task.Delay(attempt == 1 ? 800 : 1500);
+                await MeasureNodeDelaysAsync(nodes);
+                AppLog.Info($"已刷新 {nodes.Count} 个节点的延迟。");
+                return;
+            }
+            catch (Exception ex)
+            {
+                AppLog.Info($"测节点延迟第 {attempt} 次未完成：{ex.Message}");
+            }
+        }
+    }
+
     /// <summary>结束本程序启动的内核（含上次残留的同目录内核）。</summary>
     public static void Stop()
     {
