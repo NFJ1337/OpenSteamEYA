@@ -33,6 +33,15 @@
 - 版本号自增规则与 `1`/`2` 相同（末位 0～9，满 10 进位）。
 - 该触发词的回复：安装包链接 + **一行**确认（例：已替换 release 附件、已推送源码 n 条改动、源码包已上传）。
 - 凭据同 `2`：`GH_TOKEN`/`GITHUB_TOKEN` → 本机 Git 凭据管理器（git push 与 gh 用同一份）。
+## 符号留档（用户明确要求）
+- 每次打包 `build-installer.ps1` 会自动调用 `scripts\archive-symbols.ps1`，把本次 Native AOT 构建的
+  `SteamEyaWinUI.exe` + `SteamEyaWinUI.pdb` 归档到 `artifacts\symbols\<版本>\`（含 manifest.json：PE 时间戳与 sha256）。
+- 目的：崩溃/卡死 dump 只要模块 PE 时间戳对得上，就能用同目录的 exe+pdb 还原符号。
+- 还原命令（AOT 堆栈可直接看到方法名，用法示例见 manifest.json 的 usage 字段）：
+  `DumpScan <dump 路径> D:\GithubProgram\OpenSteamEYA-main\artifacts\symbols\<版本> --frames 60`
+  （DumpScan 工具在本次会话的 viz 目录 `tools\DumpScan`，不在仓库内）
+- 归档失败只告警、不影响出包；`artifacts\symbols` 超过 2 GB 会提醒清理旧版本目录（不自动删）。
+
 ## 打包交付方式（用户明确要求）
 - 打包成功后，**只回传一个东西**：安装包的**单个可点击链接**（Markdown 链接，绝对路径）。
 - **不要自动打开 / 点击查看**：不要调用「在面板中打开文件」（open_in_codex 之类）的动作，也不要替用户打开窗口或资源管理器——只给链接，用户自己决定何时打开。

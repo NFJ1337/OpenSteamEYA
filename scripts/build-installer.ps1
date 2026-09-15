@@ -99,6 +99,16 @@ if (-not $iscc) {
     throw "Inno Setup compiler (ISCC.exe) was not found. Install Inno Setup 6 first."
 }
 
+# 归档本次构建的 exe + pdb 到 artifacts\symbols\<版本>\（用户要求：以后崩溃/卡死现场能直接还原符号）。
+# best-effort：归档失败不影响出包，但要显式告警。
+try {
+    & (Join-Path $PSScriptRoot 'archive-symbols.ps1') -Version $Version -ProjectRoot $repoRoot
+    Ensure-Success 'archive-symbols.ps1'
+}
+catch {
+    Write-Warning "符号归档失败（不影响安装包）：$($_.Exception.Message)"
+}
+
 Write-Host "[3/3] Building installer..."
 & $iscc "/DAppVersion=$Version" "/DPublishDir=$publishDir" "/DOutputDir=$outputDir" $issPath
 Ensure-Success "ISCC"
