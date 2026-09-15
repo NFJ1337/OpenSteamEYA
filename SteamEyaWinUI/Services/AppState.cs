@@ -272,8 +272,7 @@ internal static class AppState
             switch (DecideUpdateAction(update))
             {
                 case UpdateAction.SameVersion:
-                    // 版本一致时底部状态栏不提示（关于页自己会显示「已是最新」之类的状态）；
-                    // 只有版本不一致（有新版本 / 本地更新 / 无法比较）才占用底部提示条。
+                    // 版本一致 → 不提示（关于页自己会显示「已是最新」）。
                     break;
 
                 case UpdateAction.UpdateAvailable:
@@ -284,7 +283,8 @@ internal static class AppState
                     break;
 
                 case UpdateAction.LocalNewer:
-                    ShowStatus(Loc.Tf("AppState_Update_LocalNewer_Format", update.LatestVersion), InfoBarSeverity.Warning);
+                    // 本机版本比发布版更新（例如自己打包的 1.4.2 而线上还是 1.4.1）：属于正常状态，不提示。
+                    // 规矩：只有「本机版本 < 服务器版本」才提示，相等或更高一律安静。
                     break;
 
                 default:
