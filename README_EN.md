@@ -18,8 +18,7 @@ SteamEYA uses EYA tokens, a type of Steam login credential, to replace tradition
 <p align="center">
   <img src="docs/screenshots/One.png" alt="SteamEYA screenshot 1"><br><br>
   <img src="docs/screenshots/Two.png" alt="SteamEYA screenshot 2"><br><br>
-  <img src="docs/screenshots/Three.png" alt="SteamEYA screenshot 3"><br><br>
-  <img src="docs/screenshots/Four.png" alt="SteamEYA screenshot 4">
+  <img src="docs/screenshots/Three.png" alt="SteamEYA screenshot 3">
 </p>
 
 <h1>Nanfangjian Remastered Edition</h1>
