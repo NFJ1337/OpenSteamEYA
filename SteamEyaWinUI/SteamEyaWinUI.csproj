@@ -9,10 +9,10 @@
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
-    <Version>1.4.2</Version>
-    <FileVersion>1.4.2.0</FileVersion>
-    <AssemblyVersion>1.4.2.0</AssemblyVersion>
-    <InformationalVersion>v1.4.2-dev</InformationalVersion>
+    <Version>1.4.5</Version>
+    <FileVersion>1.4.5.0</FileVersion>
+    <AssemblyVersion>1.4.5.0</AssemblyVersion>
+    <InformationalVersion>v1.4.5-dev</InformationalVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <!-- 自定义 Program.Main：先拦截 CS2 云推送辅助进程模式（cs2-cloud-push 开关）再走 XAML 启动（见 Program.cs）。 -->
@@ -50,6 +50,12 @@
          已随仓库入库（Steamworks SDK redistributable_bin\win64\steam_api64.dll），构建/发布自动拷到输出目录，
          确保 CI/CD 产物自带该 DLL。Condition 仅作保底：万一被删除也不阻断编译，运行时会提示“缺少 steam_api64.dll”。 -->
     <Content Include="steam_api64.dll" Condition="Exists('steam_api64.dll')" CopyToOutputDirectory="PreserveNewest" />
+    <!-- 虚拟网卡驱动（TUN 模式必需）：mihomo 通过 wintun.dll 创建虚拟网卡，缺它就起不来。
+         取自 wintun 官方构建 0.14.1（amd64，SHA256 E5DA8447DC2C320EDC0FC52FA01885C103DE8C118481F683643CACC3220DAFCE）。
+         许可见同目录 wintun-LICENSE.txt：WireGuard LLC 允许随「仅通过其 API 使用它」的软件一起分发，
+         即 Clash/mihomo 这类内核；运行期由 VpnCoreService 从程序目录复制到内核工作目录。 -->
+    <Content Include="wintun.dll" Condition="Exists('wintun.dll')" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="wintun-LICENSE.txt" Condition="Exists('wintun-LICENSE.txt')" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

@@ -36,6 +36,19 @@ internal static class VpnProxyService
     /// <summary>运行期动态代理：每个请求现读设置，开关/端口改动无需重建 HttpClient。</summary>
     private static readonly DynamicProxy SharedProxy = new();
 
+    /// <summary>程序退出时收掉内核（异常一律吞掉，退出路径不能抛）。</summary>
+    public static void SafeStopCore()
+    {
+        try
+        {
+            VpnCoreService.Stop();
+        }
+        catch
+        {
+            // 退出路径：忽略一切异常
+        }
+    }
+
     /// <summary>把「动态代理」挂到某个 HttpClientHandler 上（挂一次即可，之后随设置变化自动生效）。</summary>
     public static void Attach(HttpClientHandler handler)
     {
@@ -46,7 +59,11 @@ internal static class VpnProxyService
     /// <summary>当前是否启用本程序走 VPN。</summary>
     public static bool IsEnabled => AppState.SettingsService.Load().VpnProxyEnabled;
 
-    /// <summary>当前实际使用的代理地址；未启用或端口探测不到时返回 null（= 直连）。</summary>
+    /// <summary>探测到的端口缓存（异步探测后写入，请求路径只读缓存，绝不在 UI 线程阻塞）。</summary>
+    private static int _cachedPort;
+    private static DateTime _cachedAt = DateTime.MinValue;
+
+    /// <summary>当前实际使用的代理地址；未启用、或端口未知时返回 null（= 直连）。</summary>
     public static string? CurrentProxyAddress()
     {
         var settings = AppState.SettingsService.Load();
@@ -55,40 +72,92 @@ internal static class VpnProxyService
             return null;
         }
 
-        var port = settings.VpnProxyPort > 0 ? settings.VpnProxyPort : DetectProxyPort();
-        return port is null ? null : $"http://127.0.0.1:{port.Value}";
+        // 优先用「订阅内核」自带的端口，其次用户配置的端口，最后用探测缓存（缓存由 UI 侧异步刷新）。
+        var port = VpnCoreService.ConfiguredPort;
+        if (port <= 0)
+        {
+            port = settings.VpnProxyPort > 0 ? settings.VpnProxyPort : CachedPort;
+        }
+
+        return port <= 0 ? null : $"http://127.0.0.1:{port}";
     }
 
-    /// <summary>探测本地代理端口：返回第一个能连上的常见端口，都连不上返回 null。</summary>
+    /// <summary>最近一次探测到的端口（0 = 还没探到）；请求路径只读它，不做任何阻塞探测。</summary>
+    public static int CachedPort => _cachedPort;
+
+    /// <summary>
+    /// 异步探测端口（结果写入缓存），必须从 UI 之外/异步调用。
+    /// 先认本程序内核自己的端口：它起来后就是唯一正确的答案；下面的常见端口只是
+    /// 「用户自己开着 Clash Verge」时的兜底（内核端口不在这份常见列表里）。
+    /// </summary>
+    public static async Task<int> RefreshProxyPortAsync(int timeoutPerPortMs = 300)
+    {
+        var corePort = VpnCoreService.ConfiguredPort;
+        if (corePort > 0 && await ProbeAsync(corePort, Math.Max(timeoutPerPortMs, 500)))
+        {
+            _cachedPort = corePort;
+            _cachedAt = DateTime.Now;
+            return corePort;
+        }
+
+        var tasks = CommonProxyPorts.Select(port => ProbeAsync(port, timeoutPerPortMs)).ToArray();
+        var results = await Task.WhenAll(tasks);
+        var found = 0;
+        for (var i = 0; i < results.Length; i++)
+        {
+            if (results[i])
+            {
+                found = CommonProxyPorts[i];
+                break;
+            }
+        }
+
+        _cachedPort = found;
+        _cachedAt = DateTime.Now;
+        return found;
+    }
+
+    /// <summary>同步探测（只给后台/非 UI 场景用；UI 请用 RefreshProxyPortAsync，避免卡住界面）。</summary>
     public static int? DetectProxyPort()
     {
+        var corePort = VpnCoreService.ConfiguredPort;
+        if (corePort > 0 && ProbeAsync(corePort, 400).GetAwaiter().GetResult())
+        {
+            _cachedPort = corePort;
+            _cachedAt = DateTime.Now;
+            return corePort;
+        }
+
         foreach (var port in CommonProxyPorts)
         {
-            if (IsPortOpen(port))
+            if (ProbeAsync(port, 220).GetAwaiter().GetResult())
             {
+                _cachedPort = port;
+                _cachedAt = DateTime.Now;
                 return port;
             }
         }
 
+        _cachedPort = 0;
+        _cachedAt = DateTime.Now;
         return null;
     }
 
-    private static bool IsPortOpen(int port)
+    /// <summary>端口是否可连（异步、带超时，不阻塞线程）。</summary>
+    public static async Task<bool> ProbeAsync(int port, int timeoutMs = 300)
     {
         try
         {
             using var client = new TcpClient();
-            var connect = client.BeginConnect(IPAddress.Loopback, port, null, null);
-            var ok = connect.AsyncWaitHandle.WaitOne(TimeSpan.FromMilliseconds(220)) && client.Connected;
-            client.EndConnect(connect);
-            return ok;
+            using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(timeoutMs));
+            await client.ConnectAsync(IPAddress.Loopback, port, cts.Token);
+            return client.Connected;
         }
         catch
         {
             return false;
         }
     }
-
     /// <summary>持久化路径是否仍是可用的可执行文件。</summary>
     public static bool IsValidExecutable(string? path) =>
         !string.IsNullOrWhiteSpace(path) && File.Exists(path) &&
@@ -212,6 +281,32 @@ internal static class VpnProxyService
                 yield return Path.Combine(folder, name);
             }
         }
+    }
+
+    /// <summary>Clash Verge 相关目录候选（安装目录等）：给内核/规则数据探测复用。</summary>
+    public static IEnumerable<string> AutoDetectClashVergeFolders()
+    {
+        var folders = new List<string>();
+        var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        var programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+
+        folders.Add(Path.Combine(programFiles, "Clash Verge"));
+        folders.Add(Path.Combine(programFilesX86, "Clash Verge"));
+        folders.Add(Path.Combine(localAppData, "Programs", "Clash Verge"));
+
+        foreach (var drive in DriveInfo.GetDrives())
+        {
+            if (drive.DriveType != DriveType.Fixed || !drive.IsReady)
+            {
+                continue;
+            }
+
+            folders.Add(Path.Combine(drive.RootDirectory.FullName, "APP", "Clash Verge"));
+            folders.Add(Path.Combine(drive.RootDirectory.FullName, "Clash Verge"));
+        }
+
+        return folders.Where(Directory.Exists);
     }
 
     /// <summary>VPN 程序是否已在运行。</summary>

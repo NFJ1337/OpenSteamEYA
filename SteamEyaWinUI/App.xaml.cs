@@ -24,6 +24,12 @@ public partial class App : Application
     {
         InitializeComponent();
         UnhandledException += OnUnhandledException;
+
+        // 退出时收掉本程序自己拉起的 VPN 内核（订阅直连），避免残留进程占端口。
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => VpnProxyService.SafeStopCore();
+
+        // 上次若是异常退出，系统代理可能还指着已经结束的内核（表现：整台电脑上不了网）→ 启动时先兜底还原。
+        SystemProxyService.RestoreIfApplied();
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)

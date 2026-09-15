@@ -49,6 +49,9 @@ internal sealed class SettingsService
                         settings.Loadout ??= CsLoadoutPreset.Default();
                         settings.Loadout.T ??= new Dictionary<uint, uint>();
                         settings.Loadout.Ct ??= new Dictionary<uint, uint>();
+                        // 同理防护 VPN 选择：旧版本 JSON 没有这两个键（或显式写了 null），回落到默认值。
+                        settings.VpnTakeover = VpnCoreService.NormalizeTakeover(settings.VpnTakeover);
+                        settings.VpnMode = VpnCoreService.NormalizeMode(settings.VpnMode);
                         return settings;
                     }
                 }
@@ -422,6 +425,33 @@ internal sealed class AppSettings
 
     /// <summary>VPN 本地代理端口；0 表示自动探测常见端口（7897/7890/…）。</summary>
     public int VpnProxyPort { get; set; }
+
+    /// <summary>Clash 订阅链接：本程序用它自己拉起内核（不需要启动 Clash 软件）。详见 <see cref="VpnCoreService"/>。</summary>
+    public string? VpnSubscriptionUrl { get; set; }
+
+    /// <summary>本程序内置内核监听的本地端口；0 = 用默认 17897。</summary>
+    public int VpnCorePort { get; set; }
+
+    /// <summary>
+    /// 代理接管方式：system = 系统代理（把 Windows 系统代理指向本程序内核端口，全系统流量都走代理）；
+    /// tun = 虚拟网卡（TUN，接管本机全部流量，需要管理员权限与 wintun.dll）。默认 system。
+    /// 用户在设置页选的这一项会被记住，下次启动按上次的选择来。详见 <see cref="VpnCoreService"/>。
+    /// </summary>
+    public string VpnTakeover { get; set; } = VpnCoreService.TakeoverSystem;
+
+    /// <summary>代理模式：rule = 规则（按订阅 rules 分流）；global = 全局（所有流量走代理）。默认 rule。</summary>
+    public string VpnMode { get; set; } = VpnCoreService.ModeRule;
+
+    /// <summary>
+    /// 内核本地控制口的 secret（首次使用时自动生成）。控制口只监听 127.0.0.1，用它查节点延迟。
+    /// </summary>
+    public string? VpnControllerSecret { get; set; }
+
+    /// <summary>
+    /// 用户在设置页选的节点名（会排进自建分组首位，规则/全局模式都优先走它）。
+    /// null/空 = 自动：按订阅自己的节点顺序。订阅里没有该节点时按自动处理（见 <see cref="VpnCoreService.RewriteConfig"/>）。
+    /// </summary>
+    public string? VpnNode { get; set; }
 }
 
 // 与账号历史一致用 source generator：JsonSerializerDefaults.Web（camelCase、大小写不敏感），AOT 下可读写。

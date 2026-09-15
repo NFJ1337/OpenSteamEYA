@@ -57,6 +57,10 @@ public sealed partial class MainWindow : Window
         Instance = this;
 
         InitializeComponent();
+
+        // 关闭软件 = 断开 VPN：窗口真正关闭时显式收掉内核并还原系统代理。
+        // 不依赖 ProcessExit —— 它只是进程级兜底，触发时机在窗口关闭之后，被强杀时更不会跑。
+        Closed += (_, _) => VpnProxyService.SafeStopCore();
         StatusInfoBar.RegisterPropertyChangedCallback(
             InfoBar.IsOpenProperty,
             (_, _) => StatusOverlay.Visibility = StatusInfoBar.IsOpen ? Visibility.Visible : Visibility.Collapsed);
