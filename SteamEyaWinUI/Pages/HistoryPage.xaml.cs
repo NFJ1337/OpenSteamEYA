@@ -214,6 +214,7 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
         WhiteRefreshHistoryButton.Visibility = whiteOnly ? Visibility.Visible : Visibility.Collapsed;
         HistorySearchBox.Visibility = whiteOnly ? Visibility.Collapsed : Visibility.Visible;
         GroupFilterButton.Visibility = whiteOnly ? Visibility.Collapsed : Visibility.Visible;
+        VpnHintText.Visibility = whiteOnly ? Visibility.Collapsed : Visibility.Visible;
         ManageGroupsButton.Visibility = whiteOnly ? Visibility.Collapsed : Visibility.Visible;
         WhiteAccountsToolbar.Visibility = whiteOnly ? Visibility.Visible : Visibility.Collapsed;
         WhiteManageGroupsButton.Visibility = whiteOnly ? Visibility.Visible : Visibility.Collapsed;

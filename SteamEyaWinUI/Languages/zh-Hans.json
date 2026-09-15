@@ -50,6 +50,7 @@
     "History_Status_BatchQueryDone_Format": "批量查询完成：成功 {0} 个，失败 {1} 个。",
     "History_Status_BatchQueryCanceled_Format": "批量查询已取消：已成功 {0} 个，失败 {1} 个。",
     "History_Group_Filter_Tooltip": "按分组筛选账号",
+    "History_VpnHint_Text": "建议开启梯子或VPN",
     "History_Group_Filter_All": "全部分组",
     "History_Group_Filter_Ungrouped": "未分组",
     "History_Group_Manage": "管理分组",

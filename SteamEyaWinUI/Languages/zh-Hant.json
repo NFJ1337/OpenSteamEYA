@@ -60,6 +60,7 @@
     "History_Status_BatchQueryDone_Format": "批次查詢完成：成功 {0} 個，失敗 {1} 個。",
     "History_Status_BatchQueryCanceled_Format": "批次查詢已取消：已成功 {0} 個，失敗 {1} 個。",
     "History_Group_Filter_Tooltip": "依分組篩選帳號",
+    "History_VpnHint_Text": "建議開啟梯子或VPN",
     "History_Group_Filter_All": "全部分組",
     "History_Group_Filter_Ungrouped": "未分組",
     "History_Group_Manage": "管理分組",

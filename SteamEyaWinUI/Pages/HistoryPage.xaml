@@ -156,6 +156,14 @@
                     <Button x:Name="ManageGroupsButton" VerticalAlignment="Center" Click="ManageGroupsButton_Click" ToolTipService.ToolTip="{x:Bind Strings.Get('History_Group_Manage'), Mode=OneWay}">
                         <FontIcon Glyph="&#xE713;" FontSize="14" />
                     </Button>
+                    <!-- 分组齿轮右侧的提示：查询/验号都要连 Steam，建议开梯子或 VPN（只在历史账号页显示） -->
+                    <TextBlock
+                        x:Name="VpnHintText"
+                        Margin="4,0,0,0"
+                        VerticalAlignment="Center"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Foreground="{ThemeResource AuroraTextMutedBrush}"
+                        Text="{x:Bind Strings.Get('History_VpnHint_Text'), Mode=OneWay}" />
                 </StackPanel>
 
                 <StackPanel x:Name="BatchActionBarBottom" Grid.Row="1" Grid.Column="3" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center" Visibility="Collapsed">

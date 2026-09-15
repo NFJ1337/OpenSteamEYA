@@ -50,6 +50,7 @@
     "History_Status_BatchQueryDone_Format": "Batch query done: {0} succeeded, {1} failed.",
     "History_Status_BatchQueryCanceled_Format": "Batch query canceled: {0} succeeded, {1} failed.",
     "History_Group_Filter_Tooltip": "Filter accounts by group",
+    "History_VpnHint_Text": "VPN or proxy recommended",
     "History_Group_Filter_All": "All groups",
     "History_Group_Filter_Ungrouped": "Ungrouped",
     "History_Group_Manage": "Manage groups",
