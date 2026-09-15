@@ -9,6 +9,27 @@
         VerticalScrollBarVisibility="Auto"
         Padding="32,24,32,16">
         <StackPanel MaxWidth="820" Spacing="14" HorizontalAlignment="Left">
+            <!-- 顶部提示：下面这些只是推荐链接，程序不参与其运营 -->
+            <Border
+                Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
+                BorderBrush="{ThemeResource SystemFillColorCautionBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="12,9">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <FontIcon
+                        Glyph="&#xE7BA;"
+                        FontSize="16"
+                        VerticalAlignment="Top"
+                        Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                    <TextBlock
+                        Text="{x:Bind Strings.Get('TreasureBox_SitesDisclaimer'), Mode=OneWay}"
+                        TextWrapping="Wrap"
+                        FontWeight="SemiBold"
+                        Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                </StackPanel>
+            </Border>
+
             <StackPanel Spacing="4">
                 <TextBlock
                     Text="{x:Bind Strings.Get('TreasureBox_Title'), Mode=OneWay}"
@@ -110,6 +131,66 @@
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <FontIcon x:Name="ProxySiteIcon" Glyph="&#xE774;" FontSize="16" />
                     <TextBlock x:Name="ProxySiteLabel" Text="{x:Bind Strings.Get('TreasureBox_ProxySite'), Mode=OneWay}" />
+                </StackPanel>
+            </Button>
+
+            <!-- 好看的精品壁纸网站：与上面「梯子推荐」同款样式，点击用系统默认浏览器打开。 -->
+            <Button
+                x:Name="WallpaperSiteButton"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Center"
+                CornerRadius="12"
+                Padding="14,7"
+                FontWeight="SemiBold"
+                Click="WallpaperSiteButton_Click">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon x:Name="WallpaperSiteIcon" Glyph="&#xE91B;" FontSize="16" />
+                    <TextBlock x:Name="WallpaperSiteLabel" Text="{x:Bind Strings.Get('TreasureBox_WallpaperSite'), Mode=OneWay}" />
+                </StackPanel>
+            </Button>
+
+            <!-- 推荐卡网：弹窗与「查看Cheat官网」同款（标签 + 可点链接）。 -->
+            <Button
+                x:Name="CardSitesButton"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Center"
+                CornerRadius="12"
+                Padding="14,7"
+                FontWeight="SemiBold"
+                Click="CardSitesButton_Click">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon x:Name="CardSitesIcon" Glyph="&#xE8C7;" FontSize="16" />
+                    <TextBlock x:Name="CardSitesLabel" Text="{x:Bind Strings.Get('TreasureBox_CardSitesButton'), Mode=OneWay}" />
+                </StackPanel>
+            </Button>
+
+            <!-- HVH 服务器：弹窗与上面几个清单同款（标签 + 可点链接）。 -->
+            <Button
+                x:Name="HvhServersButton"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Center"
+                CornerRadius="12"
+                Padding="14,7"
+                FontWeight="SemiBold"
+                Click="HvhServersButton_Click">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon x:Name="HvhServersIcon" Glyph="&#xE968;" FontSize="16" />
+                    <TextBlock x:Name="HvhServersLabel" Text="{x:Bind Strings.Get('TreasureBox_HvhServersButton'), Mode=OneWay}" />
+                </StackPanel>
+            </Button>
+
+            <!-- 枫喵 CS2 LUA 注入器：点击直接用系统默认浏览器打开。 -->
+            <Button
+                x:Name="LuaInjectorButton"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Center"
+                CornerRadius="12"
+                Padding="14,7"
+                FontWeight="SemiBold"
+                Click="LuaInjectorButton_Click">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon x:Name="LuaInjectorIcon" Glyph="&#xE943;" FontSize="16" />
+                    <TextBlock x:Name="LuaInjectorLabel" Text="{x:Bind Strings.Get('TreasureBox_LuaInjectorButton'), Mode=OneWay}" />
                 </StackPanel>
             </Button>
         </StackPanel>

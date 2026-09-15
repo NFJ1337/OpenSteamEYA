@@ -18,6 +18,12 @@ public sealed partial class TreasureBoxPage : Page, INotifyPropertyChanged
 
     // 「梯子推荐」：点击直接用系统默认浏览器打开。
     private const string ProxySiteUrl = "https://ssrsub.com/";
+
+    // 「好看的精品壁纸网站」：点击直接用系统默认浏览器打开。
+    private const string WallpaperSiteUrl = "https://haowallpaper.com/";
+
+    // 「枫喵 CS2 LUA 注入器」：点击直接用系统默认浏览器打开。
+    private const string LuaInjectorUrl = "https://fneko.icu";
     private readonly DispatcherQueue _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
 
     public TreasureBoxPage()
@@ -89,9 +95,42 @@ public sealed partial class TreasureBoxPage : Page, INotifyPropertyChanged
         [
             ("MemeSense", "memesense.gg"),
             ("midnight", "midnight.im"),
-            ("Xone", "xone.fun")
+            ("Xone", "xone.fun"),
+            ("褪黑素", "melatonin.win")
         ])
     ];
+
+    /// <summary>
+    /// 推荐卡网：标签 + 链接（点击用系统默认浏览器打开）。弹窗样式与「查看Cheat官网」完全一致，
+    /// 只是每行一组（标签偏长）。链接文本按商家给的原样显示；含中文的域名在打开时才做 IDN 规范化。
+    /// </summary>
+    private static readonly (string SectionKey, string HeaderColor, (string Label, string Url)[] Entries)[] CardSites =
+    [
+        ("", "", [
+            ("小泽代理(CS2白号，各别Cheat)", "accountcheat.xzhvh.cc"),
+            ("奶味卡网(优先黑号)", "奶味.cc"),
+            ("爱代购(SK、NL、Pri、午夜)", "爱代购.com")
+        ])
+    ];
+
+    /// <summary>HVH 服务器：标签 + 链接，弹窗与上面几个清单同一套外观。</summary>
+    private static readonly (string SectionKey, string HeaderColor, (string Label, string Url)[] Entries)[] HvhServers =
+    [
+        ("", "", [
+            ("Flux", "https://cshvh.cn/servers"),
+            ("5x5平台", "https://mmhvh.cn")
+        ])
+    ];
+
+    private async void CardSitesButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ShowSitesDialogAsync(BuildSitesGrid(CardSites, 1));
+    }
+
+    private async void HvhServersButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ShowSitesDialogAsync(BuildSitesGrid(HvhServers, 1));
+    }
 
     private async void CheatSitesButton_Click(object sender, RoutedEventArgs e)
     {
@@ -100,7 +139,7 @@ public sealed partial class TreasureBoxPage : Page, INotifyPropertyChanged
         {
             Content = new ScrollViewer
             {
-                Content = BuildCheatSitesGrid(),
+                Content = BuildSitesGrid(CheatSites, 3),
                 MaxHeight = 420,
                 HorizontalAlignment = HorizontalAlignment.Left,
                 HorizontalContentAlignment = HorizontalAlignment.Left,
@@ -127,14 +166,27 @@ public sealed partial class TreasureBoxPage : Page, INotifyPropertyChanged
         await AppState.OpenUrlAsync(ProxySiteUrl);
     }
 
+    /// <summary>「好看的精品壁纸网站」：点击直接用系统默认浏览器打开（不弹窗）。</summary>
+    private async void WallpaperSiteButton_Click(object sender, RoutedEventArgs e)
+    {
+        await AppState.OpenUrlAsync(WallpaperSiteUrl);
+    }
+
+    /// <summary>「枫喵 CS2 LUA 注入器」：点击直接用系统默认浏览器打开（不弹窗）。</summary>
+    private async void LuaInjectorButton_Click(object sender, RoutedEventArgs e)
+    {
+        await AppState.OpenUrlAsync(LuaInjectorUrl);
+    }
+
     /// <summary>
     /// 弹窗正文：每行 3 组「英文标签：域名」，分区标题跨整行。
     /// 每条链接占两列（标签列 + 链接列）并三条共用：标签列 Auto + 标签右对齐 →
     /// 同一列的「：」全部落在同一条竖线上；域名紧接着「：」从左边排（也就是按「：」左对齐）。
     /// </summary>
-    private static Grid BuildCheatSitesGrid()
+    private static Grid BuildSitesGrid(
+        (string SectionKey, string HeaderColor, (string Label, string Url)[] Entries)[] sections,
+        int columnsPerRow)
     {
-        const int ColumnsPerRow = 3;        // 每行 3 组
         const double LabelGap = 4;          // 「：」到域名之间的距离
         const double GroupGap = 18;         // 相邻两组之间的距离
 
@@ -144,45 +196,50 @@ public sealed partial class TreasureBoxPage : Page, INotifyPropertyChanged
             HorizontalAlignment = HorizontalAlignment.Left
         };
 
-        for (var column = 0; column < ColumnsPerRow; column++)
+        for (var column = 0; column < columnsPerRow; column++)
         {
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });   // 标签列
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });   // 链接列
         }
 
         var nextRow = 0;
-        foreach (var (sectionKey, headerColor, entries) in CheatSites)
+        foreach (var (sectionKey, headerColor, entries) in sections)
         {
-            // 分区标题：独占一行，按清单里的色值着色（Rage 红 / Semirage 琥珀 / Legit 绿）。
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            var header = new TextBlock
+            var entryStart = nextRow;
+            if (!string.IsNullOrEmpty(sectionKey))
             {
-                Text = Loc.T(sectionKey),
-                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-                HorizontalAlignment = HorizontalAlignment.Left,
-                Margin = new Thickness(0, nextRow == 0 ? 0 : 6, 0, 0)
-            };
-            if (ParseColor(headerColor) is { } color)
-            {
-                header.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(color);
+                // 分区标题：独占一行，按清单里的色值着色（Rage 红 / Semirage 琥珀 / Legit 绿）。
+                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                var header = new TextBlock
+                {
+                    Text = Loc.T(sectionKey),
+                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    Margin = new Thickness(0, nextRow == 0 ? 0 : 6, 0, 0)
+                };
+                if (ParseColor(headerColor) is { } color)
+                {
+                    header.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(color);
+                }
+
+                Grid.SetRow(header, nextRow);
+                Grid.SetColumn(header, 0);
+                Grid.SetColumnSpan(header, columnsPerRow * 2);
+                grid.Children.Add(header);
+
+                entryStart = nextRow + 1;
             }
 
-            Grid.SetRow(header, nextRow);
-            Grid.SetColumn(header, 0);
-            Grid.SetColumnSpan(header, ColumnsPerRow * 2);
-            grid.Children.Add(header);
-
-            var entryStart = nextRow + 1;
             for (var index = 0; index < entries.Length; index++)
             {
-                if (index % ColumnsPerRow == 0)
+                if (index % columnsPerRow == 0)
                 {
                     grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
                 }
 
-                var (label, domain) = entries[index];
-                var group = index % ColumnsPerRow;
-                var row = entryStart + (index / ColumnsPerRow);
+                var (label, url) = entries[index];
+                var group = index % columnsPerRow;
+                var row = entryStart + (index / columnsPerRow);
 
                 var labelText = new TextBlock
                 {
@@ -198,22 +255,74 @@ public sealed partial class TreasureBoxPage : Page, INotifyPropertyChanged
 
                 var link = new HyperlinkButton
                 {
-                    Content = domain,
+                    Content = url,
                     Padding = new Thickness(0),
                     VerticalAlignment = VerticalAlignment.Center,
                     HorizontalAlignment = HorizontalAlignment.Left,   // 域名从「：」右边开始左对齐
-                    Margin = new Thickness(0, 0, group == ColumnsPerRow - 1 ? 0 : GroupGap, 0)
+                    Margin = new Thickness(0, 0, group == columnsPerRow - 1 ? 0 : GroupGap, 0)
                 };
-                link.Click += async (_, _) => await AppState.OpenUrlAsync("https://" + domain);
+                link.Click += async (_, _) => await AppState.OpenUrlAsync(ToAbsoluteUrl(url));
                 Grid.SetRow(link, row);
                 Grid.SetColumn(link, (group * 2) + 1);
                 grid.Children.Add(link);
             }
 
-            nextRow = entryStart + ((entries.Length + ColumnsPerRow - 1) / ColumnsPerRow);
+            nextRow = entryStart + ((entries.Length + columnsPerRow - 1) / columnsPerRow);
         }
 
         return grid;
+    }
+
+    /// <summary>
+    /// 把清单里的链接文本变成能直接打开的 URL：没写协议就补 https://；
+    /// 域名含中文的（如 奶味.cc）交给 Uri 做 IDN 规范化，否则系统浏览器可能打不开。
+    /// </summary>
+    private static string ToAbsoluteUrl(string url)
+    {
+        var text = url.Trim();
+        if (text.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            text.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            return text;
+        }
+
+        try
+        {
+            // 域名含中文（奶味.cc / 爱代购.com）时要转成 punycode 再交给浏览器：
+            // AbsoluteUri 会保留中文，部分环境下浏览器打不开。
+            var uri = new Uri("https://" + text);
+            var builder = new UriBuilder(uri) { Host = uri.IdnHost };
+            return builder.Uri.AbsoluteUri;
+        }
+        catch
+        {
+            return "https://" + text;
+        }
+    }
+
+    /// <summary>弹出「标签：链接」清单（Cheat 官网与推荐卡网共用同一套外观）。</summary>
+    private async Task ShowSitesDialogAsync(Grid content)
+    {
+        var dialog = new ContentDialog
+        {
+            Content = new ScrollViewer
+            {
+                Content = content,
+                MaxHeight = 420,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                HorizontalContentAlignment = HorizontalAlignment.Left,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+            },
+            CloseButtonText = Loc.T("Common_Close"),
+            CloseButtonStyle = (Style)Application.Current.Resources["AuroraGlassButtonStyle"],
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = XamlRoot
+        };
+
+        dialog.Resources["ContentDialogMinWidth"] = 560d;
+        dialog.Resources["ContentDialogMaxWidth"] = 920d;
+        await dialog.ShowAsync();
     }
     // ---------- 主题色实色按钮（不用透明玻璃底） ----------
 
@@ -222,6 +331,11 @@ public sealed partial class TreasureBoxPage : Page, INotifyPropertyChanged
     {
         ApplySolidThemeColor(CheatSitesButton, CheatSitesLabel, CheatSitesIcon);
         ApplySolidThemeColor(ProxySiteButton, ProxySiteLabel, ProxySiteIcon);
+        // 壁纸网站按钮与「梯子推荐」同款：同样的实色主题底 + 自动深浅文字。
+        ApplySolidThemeColor(WallpaperSiteButton, WallpaperSiteLabel, WallpaperSiteIcon);
+        ApplySolidThemeColor(CardSitesButton, CardSitesLabel, CardSitesIcon);
+        ApplySolidThemeColor(HvhServersButton, HvhServersLabel, HvhServersIcon);
+        ApplySolidThemeColor(LuaInjectorButton, LuaInjectorLabel, LuaInjectorIcon);
     }
 
     /// <summary>
