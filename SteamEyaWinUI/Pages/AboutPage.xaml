@@ -43,24 +43,23 @@
                 </StackPanel>
             </StackPanel>
 
-            <!-- 左：点点关注不迷路（B 站作者）  中：自动更新  右：更新日志（实时读 release 说明） -->
+            <!-- 左：点点关注不迷路 + 自动更新（合并成一张卡，上/下两段）  右：更新日志（实时读 release 说明） -->
             <Grid ColumnSpacing="16">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="300" />
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="300" />
+                    <ColumnDefinition Width="360" />
                 </Grid.ColumnDefinitions>
 
-                <!-- 作者关注卡：头像 + 昵称 + UID + 访问主页；配色全部跟随主题 -->
-                <!-- 两张卡同一行：都不设 VerticalAlignment，默认 Stretch → 高度自动一致 -->
-                <Border Grid.Column="0" Style="{StaticResource CardBorderStyle}">
-                    <Grid>
+                <!-- 合并卡：上半作者关注（点点关注不迷路），下半自动更新；整卡高度固定，更新区内容超出时卡内滚动 -->
+                <Border x:Name="FollowAndUpdateCard" Height="420" Style="{StaticResource CardBorderStyle}">
+                    <Grid RowSpacing="14">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
 
+                        <!-- 上：点点关注不迷路（头像 + 昵称 + UID + 访问主页） -->
                         <StackPanel Grid.Row="0" Spacing="12">
                             <TextBlock
                                 Text="{x:Bind Strings.Get('About_Follow_Title'), Mode=OneWay}"
@@ -89,111 +88,119 @@
                                         LineHeight="20" />
                                 </StackPanel>
                             </StackPanel>
-                        </StackPanel>
 
-                        <Button
-                            x:Name="OpenBilibiliButton"
-                            Grid.Row="2"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Center"
-                            Style="{StaticResource AccentButtonStyle}"
-                            Click="OpenBilibiliButton_Click">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <FontIcon Glyph="&#xE774;" FontSize="16" />
-                                <TextBlock Text="{x:Bind Strings.Get('About_Follow_Button'), Mode=OneWay}" />
-                            </StackPanel>
-                        </Button>
-                    </Grid>
-                </Border>
-
-                <!-- 右：自动更新 -->
-                <Border Grid.Column="1" Style="{StaticResource CardBorderStyle}">
-                <StackPanel Spacing="12">
-                    <Grid>
-                        <TextBlock
-                            Text="{x:Bind Strings.Get('About_Update_Section'), Mode=OneWay}"
-                            Style="{StaticResource SectionTitleTextStyle}" />
-                        <ProgressRing
-                            x:Name="UpdateCheckingRing"
-                            Width="18"
-                            Height="18"
-                            HorizontalAlignment="Right"
-                            IsActive="False"
-                            Visibility="Collapsed" />
-                    </Grid>
-
-                    <TextBlock x:Name="AboutUpdateStatusText" TextWrapping="Wrap" />
-                    <TextBlock
-                        x:Name="AboutArtifactText"
-                        Style="{StaticResource FieldLabelTextStyle}"
-                        Foreground="{ThemeResource AuroraTextMutedBrush}"
-                        TextWrapping="Wrap" />
-                    <TextBlock
-                        x:Name="AboutUpdateCheckedText"
-                        Style="{StaticResource FieldLabelTextStyle}"
-                        Foreground="{ThemeResource AuroraTextMutedBrush}"
-                        TextWrapping="Wrap" />
-
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <Button x:Name="CheckUpdateButton" Click="CheckUpdateButton_Click">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <FontIcon Glyph="&#xE895;" FontSize="16" />
-                                <TextBlock Text="{x:Bind Strings.Get('About_Btn_CheckUpdate'), Mode=OneWay}" />
-                            </StackPanel>
-                        </Button>
-                        <!-- 下载按钮始终显示；只有「有新版本」时这圈描边才变主题色并轻微呼吸（平时是透明描边，不占视觉） -->
-                        <Border
-                            x:Name="UpdateDownloadHighlight"
-                            CornerRadius="8"
-                            BorderThickness="2"
-                            BorderBrush="Transparent"
-                            Padding="2">
                             <Button
-                                x:Name="DownloadUpdateButton"
-                                IsEnabled="False"
+                                x:Name="OpenBilibiliButton"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
                                 Style="{StaticResource AccentButtonStyle}"
-                                Click="DownloadUpdateButton_Click">
+                                Click="OpenBilibiliButton_Click">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <FontIcon Glyph="&#xE896;" FontSize="16" />
-                                    <TextBlock Text="{x:Bind Strings.Get('About_Btn_DownloadUpdate'), Mode=OneWay}" />
+                                    <FontIcon Glyph="&#xE774;" FontSize="16" />
+                                    <TextBlock Text="{x:Bind Strings.Get('About_Follow_Button'), Mode=OneWay}" />
                                 </StackPanel>
                             </Button>
-                        </Border>
-                        <Button x:Name="OpenReleaseButton" Click="OpenReleaseButton_Click">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <FontIcon Glyph="&#xE8A5;" FontSize="16" />
-                                <TextBlock Text="{x:Bind Strings.Get('About_Btn_ReleasePage'), Mode=OneWay}" />
+                        </StackPanel>
+
+                        <!-- 两段之间的分隔线 -->
+                        <Border
+                            Grid.Row="1"
+                            Height="1"
+                            Background="{ThemeResource AuroraGlassBorderBrush}" />
+
+                        <!-- 下：自动更新 -->
+                        <ScrollViewer
+                            x:Name="UpdateSectionScroll"
+                            Grid.Row="2"
+                            HorizontalScrollBarVisibility="Disabled"
+                            VerticalScrollBarVisibility="Auto">
+                            <StackPanel Spacing="12">
+                                <Grid>
+                                    <TextBlock
+                                        Text="{x:Bind Strings.Get('About_Update_Section'), Mode=OneWay}"
+                                        Style="{StaticResource SectionTitleTextStyle}" />
+                                    <ProgressRing
+                                        x:Name="UpdateCheckingRing"
+                                        Width="18"
+                                        Height="18"
+                                        HorizontalAlignment="Right"
+                                        IsActive="False"
+                                        Visibility="Collapsed" />
+                                </Grid>
+
+                                <TextBlock x:Name="AboutUpdateStatusText" TextWrapping="Wrap" />
+                                <TextBlock
+                                    x:Name="AboutArtifactText"
+                                    Style="{StaticResource FieldLabelTextStyle}"
+                                    Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                    TextWrapping="Wrap" />
+                                <TextBlock
+                                    x:Name="AboutUpdateCheckedText"
+                                    Style="{StaticResource FieldLabelTextStyle}"
+                                    Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                    TextWrapping="Wrap" />
+
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <Button x:Name="CheckUpdateButton" Click="CheckUpdateButton_Click">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <FontIcon Glyph="&#xE895;" FontSize="16" />
+                                            <TextBlock Text="{x:Bind Strings.Get('About_Btn_CheckUpdate'), Mode=OneWay}" />
+                                        </StackPanel>
+                                    </Button>
+                                    <!-- 下载按钮始终显示；只有「有新版本」时这圈描边才变主题色并轻微呼吸（平时是透明描边，不占视觉） -->
+                                    <Border
+                                        x:Name="UpdateDownloadHighlight"
+                                        CornerRadius="8"
+                                        BorderThickness="2"
+                                        BorderBrush="Transparent"
+                                        Padding="2">
+                                        <Button
+                                            x:Name="DownloadUpdateButton"
+                                            IsEnabled="False"
+                                            Style="{StaticResource AccentButtonStyle}"
+                                            Click="DownloadUpdateButton_Click">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <FontIcon Glyph="&#xE896;" FontSize="16" />
+                                                <TextBlock Text="{x:Bind Strings.Get('About_Btn_DownloadUpdate'), Mode=OneWay}" />
+                                            </StackPanel>
+                                        </Button>
+                                    </Border>
+                                    <Button x:Name="OpenReleaseButton" Click="OpenReleaseButton_Click">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <FontIcon Glyph="&#xE8A5;" FontSize="16" />
+                                            <TextBlock Text="{x:Bind Strings.Get('About_Btn_ReleasePage'), Mode=OneWay}" />
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
+
+                                <StackPanel x:Name="UpdateDownloadProgressPanel" Spacing="6" Visibility="Collapsed">
+                                    <ProgressBar
+                                        x:Name="UpdateDownloadProgressBar"
+                                        Minimum="0"
+                                        Maximum="100"
+                                        Height="6"
+                                        IsIndeterminate="False"
+                                        Value="0" />
+                                    <Grid>
+                                        <TextBlock
+                                            x:Name="UpdateDownloadProgressText"
+                                            VerticalAlignment="Center"
+                                            Style="{StaticResource FieldLabelTextStyle}"
+                                            Text=""
+                                            TextWrapping="Wrap" />
+                                        <Button
+                                            x:Name="CancelDownloadButton"
+                                            HorizontalAlignment="Right"
+                                            Click="CancelDownloadButton_Click"
+                                            Content="{x:Bind Strings.Get('Common_Cancel'), Mode=OneWay}" />
+                                    </Grid>
+                                </StackPanel>
                             </StackPanel>
-                        </Button>
-                    </StackPanel>
-
-                    <StackPanel x:Name="UpdateDownloadProgressPanel" Spacing="6" Visibility="Collapsed">
-                        <ProgressBar
-                            x:Name="UpdateDownloadProgressBar"
-                            Minimum="0"
-                            Maximum="100"
-                            Height="6"
-                            IsIndeterminate="False"
-                            Value="0" />
-                        <Grid>
-                            <TextBlock
-                                x:Name="UpdateDownloadProgressText"
-                                VerticalAlignment="Center"
-                                Style="{StaticResource FieldLabelTextStyle}"
-                                Text=""
-                                TextWrapping="Wrap" />
-                            <Button
-                                x:Name="CancelDownloadButton"
-                                HorizontalAlignment="Right"
-                                Click="CancelDownloadButton_Click"
-                                Content="{x:Bind Strings.Get('Common_Cancel'), Mode=OneWay}" />
-                        </Grid>
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-
-                <!-- 最右：更新日志；内容实时来自 GitHub Releases 的说明正文 -->
-                <Border Grid.Column="2" Style="{StaticResource CardBorderStyle}">
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+                <!-- 右：更新日志；内容实时来自 GitHub Releases 的说明正文；与左卡等高 -->
+                <Border x:Name="ChangelogCard" Grid.Column="1" Height="420" Style="{StaticResource CardBorderStyle}">
                     <Grid RowSpacing="10">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
@@ -254,8 +261,7 @@
                             <StackPanel x:Name="ChangelogPanel" Spacing="6" />
                         </ScrollViewer>
                     </Grid>
-                </Border>
-            </Grid>
+                </Border>            </Grid>
 
             <Border Style="{StaticResource CardBorderStyle}">
                 <StackPanel Spacing="10">
