@@ -272,12 +272,8 @@ internal static class AppState
             switch (DecideUpdateAction(update))
             {
                 case UpdateAction.SameVersion:
-                    // 手动检查才提示，避免每次启动都刷一条状态。
-                    if (!isAutomatic)
-                    {
-                        ShowStatus(Loc.Tf("AppState_Update_UpToDate_Format", update.LatestVersion), InfoBarSeverity.Success);
-                    }
-
+                    // 版本一致时底部状态栏不提示（关于页自己会显示「已是最新」之类的状态）；
+                    // 只有版本不一致（有新版本 / 本地更新 / 无法比较）才占用底部提示条。
                     break;
 
                 case UpdateAction.UpdateAvailable:
