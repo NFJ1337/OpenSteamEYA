@@ -26,8 +26,13 @@ internal sealed class SettingsService
     private static readonly HashSet<string> AllowedCustomIntroVideoExtensions =
         new(StringComparer.OrdinalIgnoreCase) { ".mp4", ".m4v", ".mov", ".wmv", ".avi", ".mkv" };
 
+    // 自定义背景可选类型：图片（含 GIF）+ 视频（由主窗口用 MediaPlayerElement 静音循环播放）。
     private static readonly HashSet<string> AllowedCustomBackgroundExtensions =
-        new(StringComparer.OrdinalIgnoreCase) { ".png", ".jpg", ".jpeg", ".gif", ".bmp" };
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".png", ".jpg", ".jpeg", ".gif", ".bmp",
+            ".mp4", ".m4v", ".mov", ".wmv", ".avi", ".mkv"
+        };
 
     public AppSettings Load()
     {

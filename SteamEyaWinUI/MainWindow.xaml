@@ -10,7 +10,8 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- 自定义背景图片：放在所有界面内容下方，透明区域由页面渐变色补足。 -->
+        <!-- 自定义背景：图片（含 GIF）与视频（MP4 等）二选一，放在所有界面内容下方，
+             透明区域由页面渐变色补足。视频静音循环播放。 -->
         <Image
             x:Name="CustomBackgroundImage"
             Grid.RowSpan="2"
@@ -18,6 +19,16 @@
             HorizontalAlignment="Stretch"
             VerticalAlignment="Stretch"
             IsHitTestVisible="False"
+            Opacity="0"
+            Visibility="Collapsed" />
+        <MediaPlayerElement
+            x:Name="CustomBackgroundMedia"
+            Grid.RowSpan="2"
+            Stretch="UniformToFill"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Stretch"
+            IsHitTestVisible="False"
+            AreTransportControlsEnabled="False"
             Opacity="0"
             Visibility="Collapsed" />
 

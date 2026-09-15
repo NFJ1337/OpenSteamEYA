@@ -90,6 +90,18 @@ public sealed partial class MainWindow : Window
 
         InitializeComponent();
 
+        // 背景视频的播放器：MediaPlayerElement.MediaPlayer 不会自动创建（只读属性，XAML 里也赋不了），
+        // 必须像入场动画那样显式 new 一个再 SetMediaPlayer，否则永远是 null、视频播不出来。
+        _backgroundPlayer = new MediaPlayer
+        {
+            IsLoopingEnabled = true,
+            IsMuted = true
+        };
+        CustomBackgroundMedia.SetMediaPlayer(_backgroundPlayer);
+
+        // 关窗口时停掉背景视频：及时释放解码器与文件句柄。
+        Closed += (_, _) => StopBackgroundVideo();
+
         // 关闭软件 = 断开 VPN：窗口真正关闭时显式收掉内核并还原系统代理。
         // 不依赖 ProcessExit —— 它只是进程级兜底，触发时机在窗口关闭之后，被强杀时更不会跑。
         Closed += (_, _) => VpnProxyService.SafeStopCore();
@@ -614,14 +626,29 @@ public sealed partial class MainWindow : Window
             settings.CustomBackgroundOpacity);
     }
 
-    /// <summary>应用或隐藏自定义背景；BitmapImage 会保留 GIF 的动画播放。</summary>
-    internal void ApplyCustomBackground(string? imagePath, bool enabled, double opacity)
+    /// <summary>自定义背景视频的播放器（静音循环）。</summary>
+    private readonly MediaPlayer? _backgroundPlayer;
+
+    /// <summary>视频类背景扩展名（与设置页文件选择器、SettingsService 白名单保持一致）。</summary>
+    private static readonly string[] CustomBackgroundVideoExtensions =
+        [".mp4", ".m4v", ".mov", ".wmv", ".avi", ".mkv"];
+
+    /// <summary>应用或隐藏自定义背景：图片走 Image（保留 GIF 动画），视频走 MediaPlayerElement（静音循环）。</summary>
+    internal void ApplyCustomBackground(string? path, bool enabled, double opacity)
     {
-        if (!enabled || string.IsNullOrWhiteSpace(imagePath) || !File.Exists(imagePath))
+        // 两层先都收起来：图片与视频互斥，切换后不能叠在一起。
+        HideBackgroundImage();
+        StopBackgroundVideo();
+
+        if (!enabled || string.IsNullOrWhiteSpace(path) || !File.Exists(path))
         {
-            CustomBackgroundImage.Source = null;
-            CustomBackgroundImage.Opacity = 0;
-            CustomBackgroundImage.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var clamped = Math.Clamp(opacity, 0.1, 0.9);
+        if (CustomBackgroundVideoExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase))
+        {
+            PlayBackgroundVideo(path, clamped);
             return;
         }
 
@@ -629,19 +656,63 @@ public sealed partial class MainWindow : Window
         {
             CustomBackgroundImage.Source = new BitmapImage
             {
-                UriSource = new Uri(Path.GetFullPath(imagePath), UriKind.Absolute),
+                UriSource = new Uri(Path.GetFullPath(path), UriKind.Absolute),
                 CreateOptions = BitmapCreateOptions.IgnoreImageCache
             };
-            CustomBackgroundImage.Opacity = Math.Clamp(opacity, 0.1, 0.9);
+            CustomBackgroundImage.Opacity = clamped;
             CustomBackgroundImage.Visibility = Visibility.Visible;
         }
         catch (Exception ex)
         {
-            CustomBackgroundImage.Source = null;
-            CustomBackgroundImage.Opacity = 0;
-            CustomBackgroundImage.Visibility = Visibility.Collapsed;
+            HideBackgroundImage();
             AppLog.Warn($"加载自定义背景失败：{ex.Message}");
         }
+    }
+
+    private void PlayBackgroundVideo(string path, double opacity)
+    {
+        try
+        {
+            var player = _backgroundPlayer
+                ?? throw new InvalidOperationException("背景视频的播放器未初始化。");
+
+            player.Source = MediaSource.CreateFromUri(new Uri(Path.GetFullPath(path), UriKind.Absolute));
+
+            CustomBackgroundMedia.Opacity = opacity;
+            CustomBackgroundMedia.Visibility = Visibility.Visible;
+            player.Play();
+        }
+        catch (Exception ex)
+        {
+            StopBackgroundVideo();
+            AppLog.Warn($"加载自定义背景视频失败：{ex.Message}");
+        }
+    }
+
+    private void StopBackgroundVideo()
+    {
+        try
+        {
+            if (_backgroundPlayer is { } player)
+            {
+                player.Pause();
+                player.Source = null;   // 释放文件句柄，否则换背景/删文件会被占用
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"停止背景视频失败：{ex.Message}");
+        }
+
+        CustomBackgroundMedia.Opacity = 0;
+        CustomBackgroundMedia.Visibility = Visibility.Collapsed;
+    }
+
+    private void HideBackgroundImage()
+    {
+        CustomBackgroundImage.Source = null;
+        CustomBackgroundImage.Opacity = 0;
+        CustomBackgroundImage.Visibility = Visibility.Collapsed;
     }
 
     private static ElementTheme ParseTheme(string theme, string? customColor) =>

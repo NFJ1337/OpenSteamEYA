@@ -22,7 +22,9 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     private readonly DispatcherQueue _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
     private static readonly string[] ThemeCodes = ["Default", "Light", "Dark", "Custom"];
     private static readonly string[] UpdateProxyCodes = ["direct", "gh-proxy.org", "v4.gh-proxy.org", "v6.gh-proxy.org", "cdn.gh-proxy.org"];
-    private static readonly string[] BackgroundImageExtensions = [".png", ".jpg", ".jpeg", ".gif", ".bmp"];
+    // 自定义背景可选的文件类型：图片（含 GIF）+ 视频（静音循环播放）。
+    private static readonly string[] BackgroundImageExtensions =
+        [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".mp4", ".m4v", ".mov", ".wmv", ".avi", ".mkv"];
     private static readonly string[] IntroVideoExtensions = [".mp4", ".m4v", ".mov", ".wmv", ".avi", ".mkv"];
 
     // 代码设置 ComboBox.SelectedItem 会触发 SelectionChanged，置位以区分“用户选择”与“初始同步”，避免回写/重复应用。
@@ -370,7 +372,8 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         {
             var picker = new FileOpenPicker
             {
-                SuggestedStartLocation = PickerLocationId.PicturesLibrary,
+                // 现在背景也支持视频，起始位置用「此电脑」而不是图片库，免得选视频时还要手动翻目录。
+                SuggestedStartLocation = PickerLocationId.ComputerFolder,
                 ViewMode = PickerViewMode.Thumbnail
             };
             foreach (var extension in BackgroundImageExtensions)
