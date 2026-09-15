@@ -804,6 +804,12 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
             _isDialogFlowActive = false;
         }
 
+        if (AppState.LoginPage is not { } loginPage)
+        {
+            AppState.ShowStatus(Loc.T("History_Status_LoginPageNotReady"), InfoBarSeverity.Error);
+            return;
+        }
+
         var cancellationToken = AppState.BeginBusyOperation();
         var invalid = new List<SteamAccountHistoryItem>();
         var tested = 0;
@@ -824,12 +830,12 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
                     Loc.Tf("History_Status_Testing_Format", tested + 1, accounts.Count, account.AccountTitle),
                     InfoBarSeverity.Informational);
 
-                SteamTokenOnlineValidationResult result;
                 try
                 {
-                    // 与「一键查询」同口径（CM 登录 + 换取 App 令牌）：只测登录会把「登得上、换不到令牌」的
-                    // 账号判成有效，于是出现「一键查询说不能用、清空无效说全正常」的不一致。
-                    result = await AppState.TokenOnlineValidationService.ValidateForLoginAsync(
+                    // 走「一键查询」完全相同的逻辑（历史页详情面板那个按钮调用的同一个方法）：
+                    // 查不动 = 这个账号一键查询也用不了；成功时顺带把最新状态落盘（优先分/等级/冷却/VAC）。
+                    await loginPage.QueryAndSaveCsStatusAsync(
+                        account.AccountName,
                         account.EyaToken,
                         cancellationToken);
                 }
@@ -838,17 +844,22 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
                     canceled = true;
                     break;
                 }
+                catch (SteamCmException ex) when (ex.IsTokenFailure)
+                {
+                    // 令牌被 Steam 拒绝：与「一键查询」同样的判定 → 视为无效账号。
+                    tested++;
+                    invalid.Add(account);
+                    AppLog.Warn($"清空无效账号：{account.AccountTitle} 被判定无效（{ex.Message}）。");
+                    continue;
+                }
                 catch (Exception ex)
                 {
+                    // 其它失败（网络 / GC / 网页超时）不代表账号无效：不删，按既有文案停止剩余测试。
                     networkError = ex.Message;
                     break;
                 }
 
                 tested++;
-                if (!result.IsValid)
-                {
-                    invalid.Add(account);
-                }
             }
 
             var removed = invalid.Count > 0

@@ -68,7 +68,7 @@ internal sealed class SteamTokenOnlineValidationService
         }
         catch (SteamCmException ex) when (ex.IsTokenFailure)
         {
-            return new SteamTokenOnlineValidationResult(false, ex.Message);
+            return new SteamTokenOnlineValidationResult(false, ex.Message, ex.Result);
         }
     }
 }

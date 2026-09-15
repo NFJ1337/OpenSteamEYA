@@ -957,6 +957,16 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		string steamId = tokenInfo.SteamId ?? throw new InvalidOperationException(Loc.T("Login_Error_TokenMissingSteamIdQuery"));
 		AccountHistoryService historyStore = (whiteStore ? AppState.WhiteAccountService : AppState.AccountHistoryService);
 		UpdateAccountInfo(accountName, eyaToken);
+		// 与历史页「清空无效账号」同一个校验入口（CM 登录 + 换取 App 令牌）：
+		// 两边对同一账号的结论因此完全一致；不通过时给统一提示，也省掉后面整轮 CS2 查询的白等。
+		SteamTokenOnlineValidationResult loginCheck = await AppState.TokenOnlineValidationService.ValidateForLoginAsync(eyaToken, cancellationToken);
+		if (!loginCheck.IsValid)
+		{
+			AccountInfoAvailabilityText.Text = Loc.T("Login_Availability_Invalid");
+			AccountInfoAvailabilityText.Foreground = FormatHelper.GetStatusBrush(InfoBarSeverity.Error);
+			throw new SteamCmException(loginCheck.Result, loginCheck.Status + Loc.T("Login_Error_CannotOneClickQuerySuffix"));
+		}
+
 		SteamAccountHistoryItem prefetchedProfile = await UpdateAccountProfileAsync(accountName, eyaToken, !whiteStore);
 		AccountInfoAvailabilityText.Text = Loc.T("Login_Availability_VerifyingAndQuerying");
 		ResetAvailabilityForeground();
@@ -977,7 +987,7 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		{
 			AccountInfoAvailabilityText.Text = Loc.T("Login_Availability_Invalid");
 			AccountInfoAvailabilityText.Foreground = FormatHelper.GetStatusBrush(InfoBarSeverity.Error);
-			throw new InvalidOperationException(ex.Message + Loc.T("Login_Error_CannotOneClickQuerySuffix"), ex);
+			throw new SteamCmException(ex.Result, ex.Message + Loc.T("Login_Error_CannotOneClickQuerySuffix"), ex);
 		}
 		catch
 		{
