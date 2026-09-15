@@ -22,8 +22,6 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 
     private SteamAccountData? _cachedAccountData;
     private string? _cachedLicenseKey;
-    private SteamUpstreamServer? _cachedServer;
-    private SteamUpstreamServer? _selectedServer;
     private SteamAccountData? _cachedLegacyAccountData;
     private string? _cachedLegacyLicenseKey;
 
@@ -50,8 +48,6 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 
         // 核验模式会临时把右列宽度归零，这里先记住 XAML 里的原始宽度以便还原。
         _sideColumnWidth = LayoutGrid.ColumnDefinitions[1].Width;
-
-        InitializeUpstreamServers();
 
         AppState.LoginPage = this;
         AppState.BusyChanged += OnBusyChanged;
@@ -107,7 +103,6 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
         AccountNameBox.IsEnabled = enabled;
         EyaTokenBox.IsEnabled = enabled;
         ClearManualButton.IsEnabled = enabled;
-        UpstreamServerButton.IsEnabled = enabled;
         LicenseKeyBox.IsEnabled = enabled;
         ClearLicenseButton.IsEnabled = enabled;
         ResolveLicenseButton.IsEnabled = enabled;
@@ -158,7 +153,6 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 
         _cachedAccountData = null;
         _cachedLicenseKey = null;
-        _cachedServer = null;
         _cachedLegacyAccountData = null;
         _cachedLegacyLicenseKey = null;
 
@@ -792,41 +786,6 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		}
 	}
 
-	private void InitializeUpstreamServers()
-	{
-		foreach (SteamUpstreamServer server in SteamLicenseClient.Servers)
-		{
-			MenuFlyoutItem menuFlyoutItem = new MenuFlyoutItem
-			{
-				Text = server.Name,
-				Tag = server
-			};
-			menuFlyoutItem.Click += UpstreamServerMenuItem_Click;
-			UpstreamServerFlyout.Items.Add(menuFlyoutItem);
-		}
-		if (SteamLicenseClient.Servers.Count > 0)
-		{
-			_selectedServer = SteamLicenseClient.Servers[0];
-			UpstreamServerText.Text = _selectedServer.Name;
-		}
-	}
-
-	private void UpstreamServerMenuItem_Click(object sender, RoutedEventArgs e)
-	{
-		if (sender is MenuFlyoutItem { Tag: SteamUpstreamServer tag } && !object.Equals(_selectedServer, tag))
-		{
-			_selectedServer = tag;
-			UpstreamServerText.Text = tag.Name;
-			_cachedAccountData = null;
-			_cachedLicenseKey = null;
-			ResolvedAccountBox.Text = "";
-			if (IsAutoMode)
-			{
-				UpdateAccountInfoFromCurrentInputs();
-			}
-		}
-	}
-
 	private void AccountNameBox_KeyDown(object sender, KeyRoutedEventArgs e)
 	{
 		if (e.Key == VirtualKey.Enter)
@@ -962,14 +921,14 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		{
 			throw new InvalidOperationException(Loc.T("Login_Error_LicenseKeyRequired"));
 		}
-		SteamUpstreamServer server = GetSelectedServer();
-		if ((object)_cachedAccountData != null && string.Equals(_cachedLicenseKey, licenseKey, StringComparison.Ordinal) && object.Equals(_cachedServer, server))
+		// 只剩奶味一家上游，取卡固定用它，不再需要服务器选择。
+		SteamUpstreamServer server = SteamLicenseClient.Upstream;
+		if ((object)_cachedAccountData != null && string.Equals(_cachedLicenseKey, licenseKey, StringComparison.Ordinal))
 		{
 			return _cachedAccountData;
 		}
 		SteamAccountData account = (_cachedAccountData = await AppState.LicenseClient.GetAccountDataAsync(licenseKey, server, cancellationToken));
 		_cachedLicenseKey = licenseKey;
-		_cachedServer = server;
 		ResolvedAccountBox.Text = account.User + "  (" + account.SteamId + ")";
 		UpdateAccountInfo(account.User, account.Token);
 		await UpdateAccountProfileAsync(account.User, account.Token);
@@ -985,11 +944,6 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 			return text;
 		}
 		return text.Substring(num + 4).Trim();
-	}
-
-	private SteamUpstreamServer GetSelectedServer()
-	{
-		return _selectedServer ?? throw new InvalidOperationException(Loc.T("Login_Error_UpstreamServerRequired"));
 	}
 
 	public async Task<CsPremierScoreResult> QueryAndSaveCsStatusAsync(string accountName, string eyaToken, CancellationToken cancellationToken = default(CancellationToken), bool whiteStore = false)

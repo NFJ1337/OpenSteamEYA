@@ -719,25 +719,6 @@
                     <StackPanel Spacing="14">
                         <TextBlock Text="{x:Bind Strings.Get('Login_Auto_Section'), Mode=OneWay}" Style="{StaticResource SectionTitleTextStyle}" />
 
-                        <StackPanel Spacing="6">
-                            <TextBlock
-                                Text="{x:Bind Strings.Get('Login_Field_UpstreamServer'), Mode=OneWay}"
-                                Style="{StaticResource FieldLabelTextStyle}" />
-                            <DropDownButton
-                                x:Name="UpstreamServerButton"
-                                MinWidth="166"
-                                HorizontalAlignment="Left"
-                                Style="{StaticResource UiTintDropDownButtonStyle}">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <FontIcon Glyph="&#xE774;" FontSize="16" />
-                                    <TextBlock x:Name="UpstreamServerText" />
-                                </StackPanel>
-                                <DropDownButton.Flyout>
-                                    <MenuFlyout x:Name="UpstreamServerFlyout" />
-                                </DropDownButton.Flyout>
-                            </DropDownButton>
-                        </StackPanel>
-
                         <TextBox
                             x:Name="LicenseKeyBox"
                             Header="{x:Bind Strings.Get('Login_Field_LicenseKey'), Mode=OneWay}"
