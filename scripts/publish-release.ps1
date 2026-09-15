@@ -107,7 +107,7 @@ if ($DryRun) {
     Write-Host "  - 上传（覆盖）：$($file.Name)"
     if ($Commit) { Write-Host '  - 本地提交当前改动（git add -A + commit，不推送）' }
     if ($notesLines.Count -gt 0) {
-        Write-Host '  - 更新 release 正文（更新日志）：'
+        Write-Host "  - 更新 release 正文（更新日志，首行 SteamEYA v$Version）："
         foreach ($line in $notesLines) { Write-Host "      $line" }
     }
     Write-Host '  - 上传（覆盖）：latest.json，内容预览：'
@@ -125,12 +125,14 @@ foreach ($name in $stale) {
 gh release upload $Tag $InstallerPath $metadataPath --repo $Repository --clobber
 
 # 更新日志：写进 release 正文（程序关于页的「更新日志」卡片直接读它）。
+# 首行固定带上版本号（用户要求：发布到 release 的说明要能一眼看出是哪个版本）。
+# 用纯文本而不是 Markdown 标题：客户端是逐行原样显示的，写 "## xxx" 会把井号也显示出来。
 if ($notesLines.Count -gt 0) {
     $bodyPath = Join-Path $ProjectRoot 'artifacts\release-notes.md'
-    $body = ($notesLines | ForEach-Object { if ($_ -match '^[-*]') { $_ } else { "- $_" } }) -join "`n"
-    Set-Content -LiteralPath $bodyPath -Value $body -Encoding utf8NoBOM
+    $bodyLines = @("SteamEYA v$Version", '') + @($notesLines | ForEach-Object { if ($_ -match '^[-*]') { $_ } else { "- $_" } })
+    Set-Content -LiteralPath $bodyPath -Value ($bodyLines -join "`n") -Encoding utf8NoBOM
     gh release edit $Tag --repo $Repository --notes-file $bodyPath
-    Write-Host "已更新 release 正文（$($notesLines.Count) 条更新日志）。"
+    Write-Host "已更新 release 正文（SteamEYA v$Version，$($notesLines.Count) 条更新日志）。"
 }
 
 Write-Host '完成。release 现在的资产：'
