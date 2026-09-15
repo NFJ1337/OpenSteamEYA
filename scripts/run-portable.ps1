@@ -8,18 +8,21 @@
 .PARAMETER Version
   写进 版本.txt 的版本号；默认读 SteamEyaWinUI.csproj 的 <Version>。
 .PARAMETER NoPublish
-  跳过发布，直接启动现有产物。
-.PARAMETER NoLaunch
-  只发布不启动。
+  跳过发布，直接回报现有产物的路径。
+.PARAMETER Launch
+  发布后顺手启动（会先温和结束旧实例）。默认不启动：只发布并把路径回报给用户。
 .EXAMPLE
-  pwsh -File scripts\run-portable.ps1
+  pwsh -File scripts\run-portable.ps1                 # 发布 + 回报路径（不启动）
 .EXAMPLE
-  pwsh -File scripts\run-portable.ps1 -NoPublish      # 只把现有免安装 exe 跑起来
+  pwsh -File scripts\run-portable.ps1 -Launch         # 发布后直接跑起来
+.EXAMPLE
+  pwsh -File scripts\run-portable.ps1 -NoPublish      # 只回报现有产物路径
 #>
 param(
     [string]$Version,
     [switch]$NoPublish,
-    [switch]$NoLaunch
+    # 默认不启动：用户要求「改动完成后只回报免安装 exe 的路径，不要自动打开」。
+    [switch]$Launch
 )
 
 $ErrorActionPreference = "Stop"
@@ -95,11 +98,11 @@ if (-not $NoPublish) {
 $exe = Join-Path $publishDir $exeName
 if (-not (Test-Path -LiteralPath $exe)) { throw "免安装 exe 不存在：$exe" }
 
-if ($NoLaunch) {
-    Write-Host "[3/3] Skipped launch. Output: $exe"
-} else {
+if ($Launch) {
     Write-Host "[3/3] Launching $exe"
     Start-Process -FilePath $exe -WorkingDirectory $publishDir
+} else {
+    Write-Host "[3/3] Skipped launch (pass -Launch to run it)."
 }
 
 Write-Host "Done: $exe"

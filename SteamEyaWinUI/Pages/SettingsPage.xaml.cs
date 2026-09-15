@@ -1858,7 +1858,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             }
             else
             {
-                SystemProxyService.Apply(port);
+                SystemProxyService.Apply(port, VpnCoreService.CoreProcessId);
             }
 
             UpdateVpnControls();

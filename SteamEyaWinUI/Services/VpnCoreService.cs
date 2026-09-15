@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Net.Http;
 using SteamEyaWinUI.Localization;
@@ -20,8 +21,14 @@ namespace SteamEyaWinUI.Services;
 /// 关闭开关或程序退出时：结束我们自己启动的内核，并还原被接管的系统代理。
 /// 与 Clash Verge 互不干扰：独立端口、独立工作目录、不改 Clash Verge 自己的配置。
 /// </summary>
-internal static class VpnCoreService
+internal static partial class VpnCoreService
 {
+    /// <summary>看门狗模式的命令行开关（由 <see cref="Program.Main"/> 识别，不启动界面）。</summary>
+    public const string WatchdogCommandLineSwitch = "--vpn-watchdog";
+
+    /// <summary>本程序启动的内核 PID（0 = 没有）。系统代理备份与看门狗都用它对齐「哪一次会话」。</summary>
+    public static int CoreProcessId { get; private set; }
+
     /// <summary>本程序专用内核端口（避开 Clash Verge 默认的 7897，避免与其同时运行冲突）。</summary>
     public const int DefaultPort = 17897;
 
@@ -369,7 +376,7 @@ internal static class VpnCoreService
             }
             else
             {
-                SystemProxyService.Apply(port);
+                SystemProxyService.Apply(port, CoreProcessId);
             }
 
             AppLog.Info($"已按上次状态自动连回 VPN（方式 {CurrentTakeover}，模式 {CurrentMode}，端口 {port}）。");
@@ -548,6 +555,7 @@ internal static class VpnCoreService
         }
 
         _coreProcess = process;
+        CoreProcessId = process.Id;
         try
         {
             File.WriteAllText(PidFilePath, process.Id.ToString(CultureInfo.InvariantCulture));
@@ -556,6 +564,15 @@ internal static class VpnCoreService
         {
             AppLog.Warn($"写入 VPN 内核 PID 失败：{ex.Message}");
         }
+
+        if (!elevate)
+        {
+            // 主进程一结束（含被任务管理器强杀），Job 句柄关闭 → 内核立即跟着结束。
+            AttachToJobObject(process);
+        }
+
+        // 看门狗是独立进程：主进程即使被强杀，它也会在内核退出后把系统代理还原回去。
+        StartWatchdog(process.Id);
 
         AppLog.Info($"已启动 VPN 内核：\"{corePath}\"（PID {process.Id}，端口 {ConfiguredPort}，方式 {CurrentTakeover}，模式 {CurrentMode}）");
     }
@@ -597,6 +614,199 @@ internal static class VpnCoreService
             return false;
         }
     }
+
+    /// <summary>
+    /// 看门狗进程的主体：盯着内核 PID，内核一退出就还原系统代理。
+    /// 必须独立于主进程 —— 被任务管理器强杀时，主进程里的退出回调（Closed / ProcessExit）根本不会执行。
+    /// </summary>
+    internal static int RunWatchdog(string[] args)
+    {
+        if (args.Length < 2 ||
+            !int.TryParse(args[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var corePid) ||
+            corePid <= 0)
+        {
+            return 1;
+        }
+
+        try
+        {
+            AppLog.Info($"VPN 看门狗已启动，监视内核 PID {corePid}。");
+            while (IsProcessAlive(corePid))
+            {
+                Thread.Sleep(2000);
+            }
+
+            if (SystemProxyService.IsAppliedFor(corePid))
+            {
+                AppLog.Info($"内核（PID {corePid}）已退出，看门狗开始还原系统代理。");
+                SystemProxyService.RestoreIfApplied();
+            }
+
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"VPN 看门狗异常退出：{ex.Message}");
+            return 1;
+        }
+    }
+
+    private static bool IsProcessAlive(int pid)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            return !process.HasExited;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>内核起来后拉起看门狗（独立进程，跟内核 PID 走，不受主进程死活影响）。</summary>
+    private static void StartWatchdog(int corePid)
+    {
+        try
+        {
+            var exe = Environment.ProcessPath;
+            if (string.IsNullOrWhiteSpace(exe))
+            {
+                AppLog.Warn("拿不到自身路径，无法启动 VPN 看门狗。");
+                return;
+            }
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = exe,
+                Arguments = $"{WatchdogCommandLineSwitch} {corePid.ToString(CultureInfo.InvariantCulture)}",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden
+            });
+            AppLog.Info($"已启动 VPN 看门狗（监视内核 PID {corePid}）。");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"启动 VPN 看门狗失败：{ex.Message}");
+        }
+    }
+
+    // ---------- Job 对象：主进程一结束，内核跟着结束 ----------
+
+    private const int JobObjectExtendedLimitInformation = 9;
+    private const uint JobObjectLimitKillOnJobClose = 0x2000;
+
+    private static nint _jobHandle;
+
+    /// <summary>
+    /// 把内核放进一个「最后一个句柄关闭就杀掉全部成员」的 Job：
+    /// 主进程无论正常退出、崩溃还是被任务管理器强杀，内核都会立即结束（TUN 网卡与路由随之回收）。
+    /// 提权启动的内核加不进非提权进程创建的 Job，那条路径只能靠看门狗兜底。
+    /// </summary>
+    private static void AttachToJobObject(Process process)
+    {
+        try
+        {
+            if (_jobHandle == nint.Zero)
+            {
+                _jobHandle = CreateJobObjectW(nint.Zero, nint.Zero);
+                if (_jobHandle is 0 or -1)
+                {
+                    _jobHandle = nint.Zero;
+                    AppLog.Warn("创建 Job 对象失败：内核不会随主进程自动结束（仍有看门狗兜底系统代理）。");
+                    return;
+                }
+
+                var info = new JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+                {
+                    BasicLimitInformation = new JOBOBJECT_BASIC_LIMIT_INFORMATION
+                    {
+                        LimitFlags = JobObjectLimitKillOnJobClose
+                    }
+                };
+
+                var size = Marshal.SizeOf<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>();
+                var buffer = Marshal.AllocHGlobal(size);
+                try
+                {
+                    Marshal.StructureToPtr(info, buffer, fDeleteOld: false);
+                    if (!SetInformationJobObject(_jobHandle, JobObjectExtendedLimitInformation, buffer, (uint)size))
+                    {
+                        AppLog.Warn("设置 Job 限制失败：内核不会随主进程自动结束。");
+                        return;
+                    }
+                }
+                finally
+                {
+                    Marshal.FreeHGlobal(buffer);
+                }
+            }
+
+            if (!AssignProcessToJobObject(_jobHandle, process.Handle))
+            {
+                AppLog.Warn("把内核加入 Job 失败（权限不足？）：内核不会随主进程自动结束。");
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"Job 绑定异常：{ex.Message}");
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct JOBOBJECT_BASIC_LIMIT_INFORMATION
+    {
+        public long PerProcessUserTimeLimit;
+        public long PerJobUserTimeLimit;
+        public uint LimitFlags;
+        public nuint MinimumWorkingSetSize;
+        public nuint MaximumWorkingSetSize;
+        public uint ActiveProcessLimit;
+        public nuint Affinity;
+        public uint PriorityClass;
+        public uint SchedulingClass;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct IO_COUNTERS
+    {
+        public ulong ReadOperationCount;
+        public ulong WriteOperationCount;
+        public ulong OtherOperationCount;
+        public ulong ReadTransferCount;
+        public ulong WriteTransferCount;
+        public ulong OtherTransferCount;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+    {
+        public JOBOBJECT_BASIC_LIMIT_INFORMATION BasicLimitInformation;
+        public IO_COUNTERS IoInfo;
+        public nuint ProcessMemoryLimit;
+        public nuint JobMemoryLimit;
+        public nuint PeakProcessMemoryUsed;
+        public nuint PeakJobMemoryUsed;
+    }
+
+    [LibraryImport("kernel32.dll", EntryPoint = "CreateJobObjectW", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial nint CreateJobObjectW(nint lpJobAttributes, nint lpName);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool SetInformationJobObject(
+        nint hJob,
+        int jobObjectInformationClass,
+        nint lpJobObjectInformation,
+        uint cbJobObjectInformationLength);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool AssignProcessToJobObject(nint hJob, nint hProcess);
 
     /// <summary>当前进程是否已提权（TUN 需要管理员权限才能创建虚拟网卡）。</summary>
     private static bool IsAdministrator()

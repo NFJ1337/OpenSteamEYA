@@ -19,6 +19,12 @@ public static class Program
             return Cs2CloudPushWorker.Run(args);
         }
 
+        // VPN 看门狗模式：独立进程，主进程被强杀时负责把系统代理还原回去（不初始化 XAML/窗口）。
+        if (args.Length > 0 && args[0] == VpnCoreService.WatchdogCommandLineSwitch)
+        {
+            return VpnCoreService.RunWatchdog(args);
+        }
+
         WinRT.ComWrappersSupport.InitializeComWrappers();
         Application.Start(p =>
         {

@@ -51,12 +51,13 @@
 - **不要再罗列**目录清单、体积、文件数、哈希、发布目录明细等。
 - 只有以下情况才额外说明：打包**失败**、需要用户决策（版本号、AOT 回退、是否覆盖已有产物）、或产物与用户最近一次改动不一致。
 
-## 每轮改动后自动运行免安装 exe（用户明确要求）
-- 每轮代码改动完成（编译 0 警告 0 错误、冒烟无 `crash.log`）之后，**再执行 `scripts\run-portable.ps1`**：
-  它会把当前代码 publish 成免安装版（Native AOT Release → `artifacts\publish\win-x64`，刷新其中的 `版本.txt`）
-  并启动 `SteamEyaWinUI.exe`，让用户直接看到最新效果。
-- 脚本行为：发布前先温和结束免安装目录里正在运行的旧实例（否则 exe 被占用无法覆盖）；
-  `-NoPublish` 只启动现有产物，`-NoLaunch` 只发布不启动，`-Version <x.y.z>` 覆盖版本号（默认读 csproj）。
+## 每轮改动后更新免安装 exe，只回报路径（用户明确要求）
+- 每轮代码改动完成（编译 0 警告 0 错误、冒烟无 `crash.log`）之后，执行 `scripts\run-portable.ps1`：
+  把当前代码 publish 成免安装版（Native AOT Release → `artifacts\publish\win-x64`，刷新其中的 `版本.txt`）。
+- **不要自动打开它**（用户明确要求：「不用自动打开免安装版本，告诉我路径就行」）：
+  脚本默认只发布，完成后把 `artifacts\publish\win-x64\SteamEyaWinUI.exe` 的绝对路径回报给用户，由用户自己决定何时运行。
+- 只有本机需要立刻验证时才加 `-Launch`（会先温和结束旧实例再启动）；`-NoPublish` 只回报现有产物路径；
+  `-Version <x.y.z>` 覆盖版本号（默认读 csproj）。
 - 这与触发词 `1`/`2`/`3` 无关：免安装 exe 只供本机验证，**不做版本号自增、不上传、不发布**。
 
 ## 改动范围

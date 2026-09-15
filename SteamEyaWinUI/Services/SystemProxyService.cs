@@ -42,8 +42,12 @@ internal static partial class SystemProxyService
         }
     }
 
-    /// <summary>把系统代理指向本程序内核端口（127.0.0.1:port）。重复调用只更新端口，不会覆盖最初的备份。</summary>
-    public static void Apply(int port)
+    /// <summary>
+    /// 把系统代理指向本程序内核端口（127.0.0.1:port）。重复调用只更新端口，不会覆盖最初的备份。
+    /// <paramref name="corePid"/> 会被记进备份文件：看门狗据此判断「这份备份是不是本次内核会话留下的」，
+    /// 避免旧会话的看门狗把新会话的接管误还原掉。
+    /// </summary>
+    public static void Apply(int port, int corePid = 0)
     {
         if (port <= 0)
         {
@@ -53,7 +57,7 @@ internal static partial class SystemProxyService
         using var key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath, writable: true)
             ?? throw new InvalidOperationException("打不开 WinINET 代理注册表键。");
 
-        EnsureBackup(key);
+        EnsureBackup(key, corePid);
 
         key.SetValue("ProxyEnable", 1, RegistryValueKind.DWord);
         key.SetValue("ProxyServer", $"127.0.0.1:{port}", RegistryValueKind.String);
@@ -64,6 +68,37 @@ internal static partial class SystemProxyService
 
         NotifySystem();
         AppLog.Info($"已接管系统代理：127.0.0.1:{port}");
+    }
+
+    /// <summary>
+    /// 这份备份是不是 <paramref name="corePid"/> 这次内核会话留下的。
+    /// 看门狗用它做「该不该还原」的判据：旧会话的看门狗不该动新会话的接管。
+    /// </summary>
+    public static bool IsAppliedFor(int corePid)
+    {
+        if (!IsApplied)
+        {
+            return false;
+        }
+
+        try
+        {
+            foreach (var line in File.ReadAllLines(BackupPath))
+            {
+                var parts = line.Split('\t', 2);
+                if (parts.Length == 2 && parts[0] == "corepid")
+                {
+                    return int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var pid) &&
+                           pid == corePid;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"读取系统代理备份失败：{ex.Message}");
+        }
+
+        return false;
     }
 
     /// <summary>还原成接管前的系统代理设置；没有备份（= 不是我们改的）时什么也不做。</summary>
@@ -108,7 +143,7 @@ internal static partial class SystemProxyService
     }
 
     /// <summary>首次接管前把原值写进备份文件；已有备份就保留（多次开关也不会把我们的值当成原始值存下来）。</summary>
-    private static void EnsureBackup(RegistryKey key)
+    private static void EnsureBackup(RegistryKey key, int corePid)
     {
         if (IsApplied)
         {
@@ -120,7 +155,8 @@ internal static partial class SystemProxyService
             $"enable\t{ReadValue(key, "ProxyEnable")}",
             $"server\t{ReadValue(key, "ProxyServer")}",
             $"override\t{ReadValue(key, "ProxyOverride")}",
-            $"autoconfig\t{ReadValue(key, "AutoConfigURL")}"
+            $"autoconfig\t{ReadValue(key, "AutoConfigURL")}",
+            $"corepid\t{corePid.ToString(CultureInfo.InvariantCulture)}"
         };
 
         Directory.CreateDirectory(VpnCoreService.DataFolder);
