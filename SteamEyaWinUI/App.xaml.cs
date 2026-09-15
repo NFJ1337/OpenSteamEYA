@@ -29,7 +29,11 @@ public partial class App : Application
         AppDomain.CurrentDomain.ProcessExit += (_, _) => VpnProxyService.SafeStopCore();
 
         // 上次若是异常退出，系统代理可能还指着已经结束的内核（表现：整台电脑上不了网）→ 启动时先兜底还原。
-        SystemProxyService.RestoreIfApplied();
+        // 但已有别的客户端窗口在跑时不能动：系统代理可能是它正在用的。
+        if (!VpnCoreService.HasOtherAppInstance())
+        {
+            SystemProxyService.RestoreIfApplied();
+        }
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)

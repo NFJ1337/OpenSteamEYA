@@ -36,9 +36,18 @@ internal static class VpnProxyService
     /// <summary>运行期动态代理：每个请求现读设置，开关/端口改动无需重建 HttpClient。</summary>
     private static readonly DynamicProxy SharedProxy = new();
 
-    /// <summary>程序退出时收掉内核（异常一律吞掉，退出路径不能抛）。</summary>
+    /// <summary>
+    /// 程序退出时收掉内核（异常一律吞掉，退出路径不能抛）。
+    /// 但若还有别的客户端窗口开着，就别动 VPN —— 那个窗口还在用，停掉会把它的连接一起断掉。
+    /// </summary>
     public static void SafeStopCore()
     {
+        if (VpnCoreService.HasOtherAppInstance())
+        {
+            AppLog.Info("还有其它客户端窗口在运行，本次退出不停 VPN、不还原系统代理。");
+            return;
+        }
+
         try
         {
             VpnCoreService.Stop();

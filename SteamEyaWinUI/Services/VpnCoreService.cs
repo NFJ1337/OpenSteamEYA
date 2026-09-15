@@ -344,12 +344,55 @@ internal static partial class VpnCoreService
     }
 
     /// <summary>
+    /// 除本进程外，是否还有别的「客户端窗口」在跑。
+    /// 同名进程里的看门狗（--vpn-watchdog）没有窗口，所以用「有没有主窗口」来区分，
+    /// 免得把看门狗当成另一个客户端。
+    /// </summary>
+    public static bool HasOtherAppInstance()
+    {
+        try
+        {
+            var currentId = Environment.ProcessId;
+            var name = Process.GetCurrentProcess().ProcessName;
+            foreach (var process in Process.GetProcessesByName(name))
+            {
+                using (process)
+                {
+                    if (process.Id == currentId)
+                    {
+                        continue;
+                    }
+
+                    if (process.MainWindowHandle != nint.Zero)
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"检测其它客户端实例失败：{ex.Message}");
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// 启动时按上次状态连回来：上次退出时开关是「已启用」就自动拉起内核并重新接管网络。
     /// （用户明确要求：勾选了代理启动，重开软件就该是连着的状态，否则软件自己的网络功能会不可用。）
     /// 失败只写日志：设置保持原样，用户手动点一下即可，不擅自把开关关掉。
     /// </summary>
-    public static async Task<bool> TryRestoreOnStartupAsync()
+    public static async Task<bool> TryRestoreOnStartupAsync(bool ignoreOtherInstances = false)
     {
+        // 已经有别的客户端在跑：VPN 交给它管，别去抢内核（两个实例互相停内核会来回断线）。
+        // 例外：自愈场景（开关开着但内核已经不在了）要允许接管，否则另一个窗口退出后会一直没网。
+        if (!ignoreOtherInstances && HasOtherAppInstance())
+        {
+            AppLog.Info("检测到已打开的其它客户端窗口，本实例不接管 VPN（由已有的那个负责）。");
+            return false;
+        }
+
         var settings = AppState.SettingsService.Load();
         if (!settings.VpnProxyEnabled)
         {

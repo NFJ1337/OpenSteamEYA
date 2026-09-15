@@ -109,6 +109,14 @@ public sealed partial class MainWindow : Window
         // 上次退出时 VPN 是开启状态 → 启动后自动连回来。
         _ = RestoreVpnOnStartupAsync();
 
+        // VPN 兜底自愈：开关是「已启用」但内核不在了就自动连回（见 EnsureVpnAliveAsync）。
+        // 间隔压到 5 秒：多实例场景下，前一个窗口退出会把内核一起带走（Job 保险），
+        // 这个间隔就是「另一个窗口要等多久才把 VPN 接回来」，越短越接近无感。
+        _vpnWatchTimer = DispatcherQueue.CreateTimer();
+        _vpnWatchTimer.Interval = TimeSpan.FromSeconds(5);
+        _vpnWatchTimer.Tick += async (_, _) => await EnsureVpnAliveAsync();
+        _vpnWatchTimer.Start();
+
 
         // 后台预热 Steam 侧连接：首次点「一键查询 / 清空无效账号」不用再等冷启动。
         _ = PrewarmSteamConnectionsAsync();
@@ -171,28 +179,53 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 启动时的更新检查：失败（网络刚起来 / 代理还没就绪）时静默重试一次。
-    /// 这类失败对自动检查是完全静默的，用户会以为「没提示更新」，第二次打开才看到 —— 所以补一次。
+    /// 启动时的更新检查。
+    ///   · 先等一拍再查：VPN 自动连回是「先接管系统代理、内核随后就绪」，这个窗口里发请求会直接被拒
+    ///     （日志里的「连接被拒 (127.0.0.1:17897)」就是这么来的），等内核起来再查成功率最高；
+    ///   · 自动检查原本只在失败时写日志、界面上完全静默，用户会误以为「没检测到新版本」——
+    ///     所以这里失败会多试两轮（6 秒 / 15 秒），并把每一轮结果都记进日志，方便排查。
     /// 注意整个过程留在 UI 线程（async/await 不切上下文），UpdateStateChanged 的订阅方才能安全刷 UI。
     /// </summary>
     private async Task RunStartupUpdateCheckAsync()
     {
-        await AppState.CheckForUpdatesAsync(isAutomatic: true);
-
-        if (AppState.UpdateCheckError is null)
-        {
-            return;
-        }
-
         try
         {
-            AppLog.Info($"启动更新检查失败（{AppState.UpdateCheckError}），6 秒后自动重试一次。");
-            await Task.Delay(TimeSpan.FromSeconds(6));
-            await AppState.CheckForUpdatesAsync(isAutomatic: true);
+            await Task.Delay(TimeSpan.FromSeconds(8));
         }
-        catch (Exception ex)
+        catch
         {
-            AppLog.Warn($"启动更新检查重试失败：{ex.Message}");
+            // 取消/异常都不影响后续检查
+        }
+
+        var delays = new[] { TimeSpan.FromSeconds(6), TimeSpan.FromSeconds(15) };
+        for (var attempt = 0; attempt <= delays.Length; attempt++)
+        {
+            await AppState.CheckForUpdatesAsync(isAutomatic: true);
+
+            if (AppState.UpdateCheckError is null)
+            {
+                var latest = AppState.LatestUpdate;
+                AppLog.Info(
+                    $"更新检查完成：本机 {GitHubUpdateService.CurrentVersion}，" +
+                    $"线上 {latest?.LatestVersion ?? "未知"}（有更新：{latest?.IsUpdateAvailable == true}）。");
+                return;
+            }
+
+            AppLog.Warn($"启动更新检查第 {attempt + 1} 次失败：{AppState.UpdateCheckError}");
+
+            if (attempt >= delays.Length)
+            {
+                break;
+            }
+
+            try
+            {
+                await Task.Delay(delays[attempt]);
+            }
+            catch
+            {
+                return;
+            }
         }
     }
 
@@ -626,6 +659,31 @@ public sealed partial class MainWindow : Window
             AppState.SettingsService.GetCustomBackgroundImagePath(settings),
             settings.CustomBackgroundEnabled,
             settings.CustomBackgroundOpacity);
+    }
+
+    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _vpnWatchTimer;
+
+    /// <summary>
+    /// VPN 兜底自愈：开关是「已启用」但内核已经不在了（最常见的是另一个窗口退出时把内核一起带走，
+    /// 或内核自己崩了）→ 静默重新连回。开关关着、内核在跑、或正在连接时都不动手。
+    /// </summary>
+    private static async Task EnsureVpnAliveAsync()
+    {
+        try
+        {
+            var settings = AppState.SettingsService.Load();
+            if (!settings.VpnProxyEnabled || VpnCoreService.IsRunning)
+            {
+                return;
+            }
+
+            AppLog.Info("VPN 开关处于启用状态但内核不在运行，自动连回…");
+            await VpnCoreService.TryRestoreOnStartupAsync(ignoreOtherInstances: true);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"VPN 自愈检查失败：{ex.Message}");
+        }
     }
 
     /// <summary>自定义背景视频的播放器（静音循环）。</summary>
