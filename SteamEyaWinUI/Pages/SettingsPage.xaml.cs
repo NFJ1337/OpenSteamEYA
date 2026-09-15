@@ -34,6 +34,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     private bool _movingDataFolder;
     private bool _pickingBackground;
     private bool _pickingIntroVideo;
+    private bool _pickingVpnPath;
 
     public SettingsPage()
     {
@@ -79,6 +80,9 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
 
             // 未设置时 SteamPathText 显示的是本地化占位文案，需随语言刷新（已设置时是中性路径，刷新无副作用）。
             UpdateSteamPathText();
+
+            // VPN 卡片文案（状态/占位）也是代码设置的，语言切换后重算。
+            UpdateVpnControls();
 
             // 来源账号候选/选中文本用 Settings_Cs2Sync_SourceItem_Format 拼装，跟随语言重建。
             RefreshCs2SyncSources();
@@ -303,6 +307,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         DataFolderPathText.Text = AppState.SettingsService.AppFolderPath;
         UpdateSteamPathText();
         RefreshCs2SyncSources();
+        UpdateVpnControls();
         UpdateVaultPassphraseControls();
     }
 
@@ -1178,6 +1183,164 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     private void Cs2SyncRefreshButton_Click(object sender, RoutedEventArgs e)
     {
         RefreshCs2SyncSources();
+    }
+
+    // ---------- VPN（Clash Verge）：仅本程序访问 GitHub 时走它的本地代理端口 ----------
+
+    /// <summary>刷新 VPN 卡片：路径文本、开关状态、状态说明。</summary>
+    private void UpdateVpnControls()
+    {
+        if (VpnPathText is null)
+        {
+            return;
+        }
+
+        var settings = AppState.SettingsService.Load();
+        VpnPathText.Text = VpnProxyService.IsValidExecutable(settings.VpnExecutablePath)
+            ? settings.VpnExecutablePath!
+            : Loc.T("Settings_Vpn_Path_None");
+
+        _syncing = true;
+        try
+        {
+            VpnProxyToggle.IsOn = settings.VpnProxyEnabled;
+        }
+        finally
+        {
+            _syncing = false;
+        }
+
+        VpnProxyStatusText.Text = DescribeVpnProxy(settings);
+    }
+
+    /// <summary>开关状态说明：未启用 / 已启用并显示实际代理端口 / 已启用但没探测到端口。</summary>
+    private static string DescribeVpnProxy(AppSettings settings)
+    {
+        if (!settings.VpnProxyEnabled)
+        {
+            return Loc.T("Settings_Vpn_Proxy_Off");
+        }
+
+        var port = settings.VpnProxyPort > 0 ? settings.VpnProxyPort : VpnProxyService.DetectProxyPort();
+        return port is null
+            ? Loc.T("Settings_Vpn_Proxy_NoPort")
+            : Loc.Tf("Settings_Vpn_Proxy_On_Format", port.Value);
+    }
+
+    private void DetectVpnButton_Click(object sender, RoutedEventArgs e)
+    {
+        var detected = VpnProxyService.AutoDetectExecutablePath();
+        if (detected is null)
+        {
+            AppState.ShowStatus(Loc.T("Settings_Vpn_Status_DetectFail"), InfoBarSeverity.Warning);
+            UpdateVpnControls();
+            return;
+        }
+
+        var settings = AppState.SettingsService.Load();
+        settings.VpnExecutablePath = detected;
+        AppState.SettingsService.Save(settings);
+        AppState.ShowStatus(Loc.Tf("Settings_Vpn_Status_Detected_Format", detected), InfoBarSeverity.Success);
+        UpdateVpnControls();
+    }
+
+    private async void ChangeVpnPathButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_pickingVpnPath)
+        {
+            return;
+        }
+
+        _pickingVpnPath = true;
+        try
+        {
+            var picker = new FileOpenPicker
+            {
+                SuggestedStartLocation = PickerLocationId.ComputerFolder,
+                ViewMode = PickerViewMode.List
+            };
+            picker.FileTypeFilter.Add(".exe");
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, MainWindow.Hwnd);
+
+            StorageFile? file;
+            try
+            {
+                file = await picker.PickSingleFileAsync();
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error("打开 VPN 选择器失败。", ex);
+                AppState.ShowStatus(Loc.T("Settings_Vpn_Status_PathInvalid"), InfoBarSeverity.Error);
+                return;
+            }
+
+            if (file is null)
+            {
+                return;
+            }
+
+            if (!VpnProxyService.IsValidExecutable(file.Path))
+            {
+                AppState.ShowStatus(Loc.T("Settings_Vpn_Status_PathInvalid"), InfoBarSeverity.Error);
+                return;
+            }
+
+            var settings = AppState.SettingsService.Load();
+            settings.VpnExecutablePath = file.Path;
+            AppState.SettingsService.Save(settings);
+            AppState.ShowStatus(Loc.Tf("Settings_Vpn_Status_PathSaved_Format", file.Path), InfoBarSeverity.Success);
+            UpdateVpnControls();
+        }
+        finally
+        {
+            _pickingVpnPath = false;
+        }
+    }
+
+    private void LaunchVpnButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (VpnProxyService.IsRunning())
+        {
+            AppState.ShowStatus(Loc.T("Settings_Vpn_Status_AlreadyRunning"), InfoBarSeverity.Informational);
+            UpdateVpnControls();
+            return;
+        }
+
+        if (VpnProxyService.TryLaunch(out var error))
+        {
+            AppState.ShowStatus(Loc.T("Settings_Vpn_Status_Launched"), InfoBarSeverity.Success);
+        }
+        else
+        {
+            AppState.ShowStatus(
+                error is null ? Loc.T("Settings_Vpn_Error_NotFound") : Loc.Tf("Settings_Vpn_Status_LaunchFail_Format", error),
+                InfoBarSeverity.Error);
+        }
+
+        UpdateVpnControls();
+    }
+
+    private void VpnProxyToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        var settings = AppState.SettingsService.Load();
+        settings.VpnProxyEnabled = VpnProxyToggle.IsOn;
+        AppState.SettingsService.Save(settings);
+
+        // 打开开关时顺手探一次端口并显示；探不到就提示先启动 Clash Verge。
+        VpnProxyStatusText.Text = DescribeVpnProxy(settings);
+        if (settings.VpnProxyEnabled)
+        {
+            AppState.ShowStatus(
+                VpnProxyService.CurrentProxyAddress() is { } address
+                    ? Loc.Tf("Settings_Vpn_Status_ProxyOn_Format", address)
+                    : Loc.T("Settings_Vpn_Proxy_NoPort"),
+                VpnProxyService.CurrentProxyAddress() is null ? InfoBarSeverity.Warning : InfoBarSeverity.Success);
+        }
     }
 
     private async void Cs2SyncPushNowButton_Click(object sender, RoutedEventArgs e)

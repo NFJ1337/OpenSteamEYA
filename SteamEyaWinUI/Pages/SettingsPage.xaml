@@ -490,6 +490,79 @@
                 </StackPanel>
             </Border>
 
+            <!-- VPN（Clash Verge）：仅本程序访问 GitHub 时走它的本地代理端口，不动系统代理 -->
+            <Border Style="{StaticResource CardBorderStyle}">
+                <StackPanel Spacing="10">
+                    <TextBlock
+                        Text="{x:Bind Strings.Get('Settings_Vpn_Section'), Mode=OneWay}"
+                        Style="{StaticResource SectionTitleTextStyle}" />
+                    <TextBlock
+                        Text="{x:Bind Strings.Get('Settings_Vpn_Desc'), Mode=OneWay}"
+                        Foreground="{ThemeResource AuroraTextMutedBrush}"
+                        TextWrapping="Wrap" />
+
+                    <!-- 可执行文件路径：自动检测 / 手动更改 / 启动 -->
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            x:Name="VpnPathText"
+                            Grid.Column="0"
+                            VerticalAlignment="Center"
+                            IsTextSelectionEnabled="True"
+                            TextTrimming="CharacterEllipsis"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                        <Button x:Name="DetectVpnButton" Grid.Column="1" Click="DetectVpnButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE721;" FontSize="16" />
+                                <TextBlock Text="{x:Bind Strings.Get('Settings_Vpn_Btn_Detect'), Mode=OneWay}" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="ChangeVpnPathButton" Grid.Column="2" Click="ChangeVpnPathButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE838;" FontSize="16" />
+                                <TextBlock Text="{x:Bind Strings.Get('Settings_Vpn_Btn_Change'), Mode=OneWay}" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="LaunchVpnButton" Grid.Column="3" Click="LaunchVpnButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE768;" FontSize="16" />
+                                <TextBlock Text="{x:Bind Strings.Get('Settings_Vpn_Btn_Launch'), Mode=OneWay}" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+
+                    <!-- 仅本程序走 VPN 的开关 + 当前状态（代理端口） -->
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                            <TextBlock Text="{x:Bind Strings.Get('Settings_Vpn_Proxy_Label'), Mode=OneWay}" />
+                            <TextBlock
+                                x:Name="VpnProxyStatusText"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ToggleSwitch
+                            x:Name="VpnProxyToggle"
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            MinWidth="0"
+                            OnContent="{x:Null}"
+                            OffContent="{x:Null}"
+                            Toggled="VpnProxyToggle_Toggled" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
             <!-- Steam 安装路径：上号用的 Steam；装有多个 Steam 时可手动指定要用哪一个 -->
             <Border Style="{StaticResource CardBorderStyle}">
                 <StackPanel Spacing="10">

@@ -413,6 +413,15 @@ internal sealed class AppSettings
 
     /// <summary>更新检查使用的 GitHub 站点代码（direct / gh-proxy.org / v4.gh-proxy.org / v6.gh-proxy.org / cdn.gh-proxy.org），与 GitHubUpdateService.ProxySites 保持一致；未知值回退 direct。</summary>
     public string UpdateProxySite { get; set; } = "direct";
+
+    /// <summary>VPN（Clash Verge）可执行文件路径；空表示尚未探测。详见 <see cref="VpnProxyService"/>。</summary>
+    public string? VpnExecutablePath { get; set; }
+
+    /// <summary>是否让本程序访问 GitHub（更新检查/下载安装包）时走 VPN 的本地代理端口；默认关闭。</summary>
+    public bool VpnProxyEnabled { get; set; }
+
+    /// <summary>VPN 本地代理端口；0 表示自动探测常见端口（7897/7890/…）。</summary>
+    public int VpnProxyPort { get; set; }
 }
 
 // 与账号历史一致用 source generator：JsonSerializerDefaults.Web（camelCase、大小写不敏感），AOT 下可读写。

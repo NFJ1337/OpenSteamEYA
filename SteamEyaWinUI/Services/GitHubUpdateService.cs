@@ -320,7 +320,11 @@ internal sealed class GitHubUpdateService
 
     private static HttpClient CreateHttpClient()
     {
-        var client = new HttpClient
+        // 挂动态代理：设置页开启「本程序走 VPN」后，这里的 GitHub 请求自动走 VPN 本地端口（不启用则直连）。
+        var handler = new HttpClientHandler();
+        VpnProxyService.Attach(handler);
+
+        var client = new HttpClient(handler)
         {
             Timeout = TimeSpan.FromSeconds(20)
         };
