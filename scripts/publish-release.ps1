@@ -40,7 +40,7 @@ if (-not (Test-Path -LiteralPath $InstallerPath)) {
 
 Connect-GitHub
 
-if ($Commit) {
+if ($Commit -and -not $DryRun) {
     $pending = @(git status --porcelain).Count
     if ($pending -gt 0) {
         git add -A | Out-Host
@@ -54,7 +54,7 @@ if ($Commit) {
 }
 $file = Get-Item -LiteralPath $InstallerPath
 $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $InstallerPath).Hash.ToLowerInvariant()
-$commit = "$(git rev-parse HEAD 2>$null)".Trim()
+$commitHash = "$(git rev-parse HEAD 2>$null)".Trim()
 
 $metadata = [ordered]@{
     version        = $Version
@@ -64,7 +64,7 @@ $metadata = [ordered]@{
     tag            = "latest"
     channel        = 'stable'
     platform       = 'win-x64'
-    commit         = $commit
+    commit         = $commitHash
     artifactName   = $file.Name
     artifactSize   = $file.Length
     artifactSha256 = $hash
@@ -89,6 +89,7 @@ if ($DryRun) {
     Write-Host '[DryRun] 将要执行：'
     foreach ($name in $stale) { Write-Host "  - 删除旧安装包资产：$name" }
     Write-Host "  - 上传（覆盖）：$($file.Name)"
+    if ($Commit) { Write-Host '  - 本地提交当前改动（git add -A + commit，不推送）' }
     Write-Host '  - 上传（覆盖）：latest.json，内容预览：'
     Write-Host ($metadata | ConvertTo-Json -Depth 4)
     return
