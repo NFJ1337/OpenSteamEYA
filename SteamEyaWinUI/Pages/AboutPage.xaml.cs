@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
+using Microsoft.UI.Text;
 using Microsoft.UI.Xaml.Navigation;
 using SteamEyaWinUI.Localization;
 using SteamEyaWinUI.Services;
@@ -18,6 +19,12 @@ public sealed partial class AboutPage : Page, INotifyPropertyChanged
     private long _downloadBytesReceived;
     private long? _downloadTotalBytes;
     private CancellationTokenSource? _downloadCts;
+
+    // 更新日志卡片：内容实时来自 GitHub Releases 的说明正文（点刷新/进页面时拉一次）。
+    private GitHubUpdateService.ReleaseChangelogInfo? _changelog;
+    private bool _changelogLoading;
+    private string? _changelogError;
+    private bool _changelogFailedByNetwork;
 
     public AboutPage()
     {
@@ -41,6 +48,9 @@ public sealed partial class AboutPage : Page, INotifyPropertyChanged
         {
             _ = AppState.CheckForUpdatesAsync(isAutomatic: true);
         }
+
+        // 更新日志同样按需实时拉取（已读到过就不重复请求）。
+        _ = LoadChangelogAsync();
     }
 
     private void OnLanguageChanged()
@@ -50,13 +60,149 @@ public sealed partial class AboutPage : Page, INotifyPropertyChanged
             // 静态 x:Bind 文本随 Strings 重算；命令式文本（版本/更新状态）重跑 Render 即可换语言。
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Strings)));
             Render();
+            RenderChangelog();
         });
     }
 
     private async void CheckUpdateButton_Click(object sender, RoutedEventArgs e)
     {
         await AppState.CheckForUpdatesAsync(isAutomatic: false);
+        // 手动检查时把更新日志也拉一次，保证看到的是发布页上的最新内容。
+        await LoadChangelogAsync(force: true);
     }
+
+    private void RefreshChangelogButton_Click(object sender, RoutedEventArgs e) => _ = LoadChangelogAsync(force: true);
+
+    /// <summary>读取最新 release 的更新日志（说明正文）。force=false 时已有内容就跳过。</summary>
+    private async Task LoadChangelogAsync(bool force = false)
+    {
+        if (_changelogLoading || (!force && _changelog is not null))
+        {
+            return;
+        }
+
+        _changelogLoading = true;
+        RenderChangelog();
+        try
+        {
+            _changelog = await AppState.UpdateService.FetchChangelogAsync();
+            _changelogError = null;
+            _changelogFailedByNetwork = false;
+        }
+        catch (Exception ex)
+        {
+            _changelogError = ex.Message;
+            _changelogFailedByNetwork = AppState.IsNetworkFailure(ex);
+        }
+        finally
+        {
+            _changelogLoading = false;
+            RenderChangelog();
+        }
+    }
+
+    /// <summary>把更新日志渲染进卡片：加载中 / 失败 / 空 / 逐行内容 四种状态。</summary>
+    private void RenderChangelog()
+    {
+        if (ChangelogLoadingRing is null)
+        {
+            return;
+        }
+
+        ChangelogLoadingRing.IsActive = _changelogLoading;
+        ChangelogLoadingRing.Visibility = _changelogLoading ? Visibility.Visible : Visibility.Collapsed;
+        RefreshChangelogButton.IsEnabled = !_changelogLoading;
+
+        if (_changelog is null)
+        {
+            ChangelogVersionText.Text = string.Empty;
+            ChangelogStatusText.Text = !_changelogLoading && _changelogError is not null
+                ? (_changelogFailedByNetwork
+                    ? Loc.T("About_Changelog_Network_Error")
+                    : Loc.Tf("About_Changelog_Error_Format", _changelogError))
+                : Loc.T("About_Changelog_Loading");
+            ChangelogStatusText.Visibility = Visibility.Visible;
+            ChangelogScroll.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        ChangelogVersionText.Text = Loc.Tf("About_Changelog_Version_Format", _changelog.Version);
+        if (_changelog.Lines.Count == 0)
+        {
+            ChangelogStatusText.Text = Loc.T("About_Changelog_Empty");
+            ChangelogStatusText.Visibility = Visibility.Visible;
+            ChangelogScroll.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        ChangelogStatusText.Visibility = Visibility.Collapsed;
+        ChangelogScroll.Visibility = Visibility.Visible;
+        ChangelogPanel.Children.Clear();
+        foreach (var line in _changelog.Lines)
+        {
+            AddChangelogLine(line);
+        }
+    }
+
+    /// <summary>逐行添加：去掉 Markdown 记号，标题加粗、「- 」转项目符号、--- 画成分隔线。</summary>
+    private void AddChangelogLine(string raw)
+    {
+        var text = raw.Trim();
+        if (text.Length == 0)
+        {
+            return;
+        }
+
+        if (text.All(ch => ch is '-' or '*' or '_' or ' '))
+        {
+            var separator = new Border
+            {
+                Height = 1,
+                Margin = new Thickness(0, 6, 0, 2),
+                Background = ThemeBrush("AuroraGlassBorderBrush")
+            };
+            ChangelogPanel.Children.Add(separator);
+            return;
+        }
+
+        var isHeading = text.StartsWith('#');
+        if (isHeading)
+        {
+            text = text.TrimStart('#').Trim();
+        }
+
+        var isBullet = text.StartsWith("- ") || text.StartsWith("* ");
+        if (isBullet)
+        {
+            text = text[2..].Trim();
+        }
+
+        text = text.Replace("**", string.Empty).Replace("`", string.Empty);
+        if (text.Length == 0)
+        {
+            return;
+        }
+
+        var block = new TextBlock
+        {
+            Text = isBullet ? "•  " + text : text,
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = isHeading ? 14 : 13,
+            FontWeight = isHeading ? FontWeights.SemiBold : FontWeights.Normal,
+            Foreground = ThemeBrush(isHeading ? "AuroraTextHeadingBrush" : "AuroraTextBodyBrush")
+        };
+        if (isBullet)
+        {
+            block.Margin = new Thickness(2, 0, 0, 0);
+        }
+
+        ChangelogPanel.Children.Add(block);
+    }
+
+    private static Brush ThemeBrush(string key) =>
+        Application.Current.Resources.TryGetValue(key, out var value) && value is Brush brush
+            ? brush
+            : new SolidColorBrush(Microsoft.UI.Colors.Transparent);
 
     private async void DownloadUpdateButton_Click(object sender, RoutedEventArgs e)
     {

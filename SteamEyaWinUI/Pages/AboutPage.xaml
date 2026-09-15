@@ -43,11 +43,12 @@
                 </StackPanel>
             </StackPanel>
 
-            <!-- 左：点点关注不迷路（B 站作者）  右：自动更新 -->
+            <!-- 左：点点关注不迷路（B 站作者）  中：自动更新  右：更新日志（实时读 release 说明） -->
             <Grid ColumnSpacing="16">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="300" />
                     <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="300" />
                 </Grid.ColumnDefinitions>
 
                 <!-- 作者关注卡：头像 + 昵称 + UID + 访问主页；配色全部跟随主题 -->
@@ -190,6 +191,70 @@
                     </StackPanel>
                 </StackPanel>
             </Border>
+
+                <!-- 最右：更新日志；内容实时来自 GitHub Releases 的说明正文 -->
+                <Border Grid.Column="2" Style="{StaticResource CardBorderStyle}">
+                    <Grid RowSpacing="10">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <Grid Grid.Row="0" ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock
+                                Text="{x:Bind Strings.Get('About_Changelog_Title'), Mode=OneWay}"
+                                Style="{StaticResource SectionTitleTextStyle}"
+                                VerticalAlignment="Center" />
+                            <StackPanel
+                                Grid.Column="1"
+                                Orientation="Horizontal"
+                                Spacing="6"
+                                VerticalAlignment="Center">
+                                <ProgressRing
+                                    x:Name="ChangelogLoadingRing"
+                                    Width="16"
+                                    Height="16"
+                                    IsActive="False"
+                                    Visibility="Collapsed" />
+                                <Button
+                                    x:Name="RefreshChangelogButton"
+                                    Padding="8,4"
+                                    Click="RefreshChangelogButton_Click"
+                                    ToolTipService.ToolTip="{x:Bind Strings.Get('About_Changelog_Refresh_Tooltip'), Mode=OneWay}">
+                                    <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+
+                        <TextBlock
+                            x:Name="ChangelogVersionText"
+                            Grid.Row="1"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Foreground="{ThemeResource AuroraTextMutedBrush}"
+                            TextWrapping="Wrap" />
+
+                        <TextBlock
+                            x:Name="ChangelogStatusText"
+                            Grid.Row="2"
+                            Foreground="{ThemeResource AuroraTextMutedBrush}"
+                            TextWrapping="Wrap"
+                            Visibility="Collapsed" />
+
+                        <ScrollViewer
+                            x:Name="ChangelogScroll"
+                            Grid.Row="2"
+                            MaxHeight="300"
+                            VerticalScrollBarVisibility="Auto"
+                            Visibility="Collapsed">
+                            <StackPanel x:Name="ChangelogPanel" Spacing="6" />
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
             </Grid>
 
             <Border Style="{StaticResource CardBorderStyle}">

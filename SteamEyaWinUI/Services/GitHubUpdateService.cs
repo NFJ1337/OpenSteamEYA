@@ -141,6 +141,72 @@ internal sealed class GitHubUpdateService
     }
 
     /// <summary>
+    /// 实时读取最新 release 的更新日志（说明正文）：「关于」页那张日志卡直接展示它，
+    /// 与 GitHub Releases 页面保持同步。走与更新检查同一套站点/代理兜底。
+    /// </summary>
+    public async Task<ReleaseChangelogInfo> FetchChangelogAsync(CancellationToken cancellationToken = default)
+    {
+        var primary = ResolveSite(_selectedProxyCode);
+        var candidates = new List<GitHubProxySite> { primary };
+        candidates.AddRange(ProxySites.Where(site => site.Code != primary.Code));
+
+        Exception? lastError = null;
+        foreach (var site in candidates.Take(MaxSitesPerCheck))
+        {
+            try
+            {
+                return await FetchChangelogViaSiteAsync(site, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                lastError = ex;
+                AppLog.Warn($"更新日志读取经 {site.DisplayName} 失败（{ex.Message}），换下一个站点重试。");
+            }
+        }
+
+        throw lastError ?? new InvalidOperationException(Loc.T("Update_EmptyResponse"));
+    }
+
+    private async Task<ReleaseChangelogInfo> FetchChangelogViaSiteAsync(GitHubProxySite site, CancellationToken cancellationToken)
+    {
+        using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        attemptCts.CancelAfter(SiteAttemptTimeout);
+
+        using var response = await HttpClient.SendAsync(
+            CreateNoCacheRequest(BuildReleaseApiUrl(site)),
+            HttpCompletionOption.ResponseHeadersRead,
+            attemptCts.Token);
+        response.EnsureSuccessStatusCode();
+
+        await using var stream = await response.Content.ReadAsStreamAsync(attemptCts.Token);
+        var release = await JsonSerializer.DeserializeAsync(
+            stream,
+            GitHubUpdateJsonContext.Default.GitHubReleaseDto,
+            attemptCts.Token)
+            ?? throw new InvalidOperationException(Loc.T("Update_EmptyResponse"));
+
+        // tag 不是版本号（例如「正式exe」）时退一步从安装包文件名认版本，与更新检查保持一致。
+        var tag = string.IsNullOrWhiteSpace(release.TagName) ? "latest" : release.TagName!;
+        var version = NormalizeVersion(tag);
+        if (!TryParseVersion(version, out _))
+        {
+            var assetName = release.Assets?.FirstOrDefault(item =>
+                item.Name?.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) == true)?.Name;
+            if (assetName is { Length: > 0 } && TryParseVersionFromFileName(assetName, out var fromName))
+            {
+                version = fromName;
+            }
+            else
+            {
+                version = tag;
+            }
+        }
+
+        var title = string.IsNullOrWhiteSpace(release.Name) ? version : release.Name!.Trim();
+        return new ReleaseChangelogInfo(version, title, SplitChangelog(release.Body), release.PublishedAt);
+    }
+
+    /// <summary>
     /// 兜底路径：用 GitHub Releases API 读「最新 release」。
     /// · tag 能解析成版本号 → 与 latest.json 同款结果（能比较版本、能用直链下载安装包）；
     /// · tag 不是版本号（例如「正式exe」）→ 不谎报「已是最新」，只给出提示与发布页入口，也不提供下载按钮
@@ -408,8 +474,17 @@ internal sealed class GitHubUpdateService
     /// <summary>GitHub Releases API 的部分字段（snake_case 需要显式映射）。</summary>
     internal sealed record GitHubReleaseDto(
         [property: JsonPropertyName("tag_name")] string? TagName,
+        [property: JsonPropertyName("name")] string? Name,
         string? Body,
+        [property: JsonPropertyName("published_at")] DateTimeOffset? PublishedAt,
         IReadOnlyList<GitHubReleaseAssetDto>? Assets);
+
+    /// <summary>更新日志（关于页「更新日志」卡片用）：版本号 + 说明正文逐行 + 发布时间。</summary>
+    internal sealed record ReleaseChangelogInfo(
+        string Version,
+        string Title,
+        IReadOnlyList<string> Lines,
+        DateTimeOffset? PublishedAt);
 
     internal sealed record GitHubReleaseAssetDto(
         string? Name,
