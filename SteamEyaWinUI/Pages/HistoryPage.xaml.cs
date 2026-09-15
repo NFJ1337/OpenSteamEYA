@@ -827,7 +827,9 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
                 SteamTokenOnlineValidationResult result;
                 try
                 {
-                    result = await AppState.TokenOnlineValidationService.ValidateAsync(
+                    // 与「一键查询」同口径（CM 登录 + 换取 App 令牌）：只测登录会把「登得上、换不到令牌」的
+                    // 账号判成有效，于是出现「一键查询说不能用、清空无效说全正常」的不一致。
+                    result = await AppState.TokenOnlineValidationService.ValidateForLoginAsync(
                         account.EyaToken,
                         cancellationToken);
                 }
@@ -852,6 +854,10 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
             var removed = invalid.Count > 0
                 ? AccountStore.DeleteAccounts(invalid)
                 : 0;
+            if (invalid.Count > 0)
+            {
+                AppLog.Info($"清空无效账号：测试 {tested} 个，判定无效 {invalid.Count} 个（{string.Join("、", invalid.Select(item => item.AccountTitle))}），实际删除 {removed} 个。");
+            }
             if (removed > 0)
             {
                 ReloadScopedAccounts();

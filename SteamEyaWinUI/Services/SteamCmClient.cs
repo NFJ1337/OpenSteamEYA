@@ -32,6 +32,13 @@ internal sealed class SteamCmException : InvalidOperationException
         Result = result;
     }
 
+    /// <summary>带调用方文案的构造：保留 EResult（IsTokenFailure 才能正确判定），文案仍可写清是哪一步失败的。</summary>
+    public SteamCmException(int result, string message, Exception? innerException = null)
+        : base(message, innerException)
+    {
+        Result = result;
+    }
+
     public int Result { get; }
 
     public bool IsTokenFailure => Result is
@@ -1159,7 +1166,10 @@ internal sealed class SteamCmClient : IAsyncDisposable
     {
         if (response.Result != (int)SteamEresult.Ok)
         {
-            throw new InvalidOperationException(
+            // 用 SteamCmException 抛：保留 EResult，调用方（如一键查询）才能按「令牌被 Steam 拒绝」给出正确提示；
+            // 它继承自 InvalidOperationException，原有 catch(InvalidOperationException) 行为不变。
+            throw new SteamCmException(
+                response.Result,
                 Loc.Tf("Cm_Error_EnsureOk_Format", message, response.Result, response.ErrorMessage));
         }
     }
