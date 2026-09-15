@@ -17,7 +17,9 @@ param(
     [string]$Repository = 'NFJ1337/OpenSteamEYA',
     [string]$Tag = '正式exe',
     [string]$InstallerPath = '',
-    [switch]$DryRun
+    [switch]$DryRun,
+    # 发布前先把当前工作区改动本地提交（用户要求：裸回复 2 时版本号也要提交）。只提交，不推送。
+    [switch]$Commit
 )
 
 $ErrorActionPreference = 'Stop'
@@ -38,6 +40,18 @@ if (-not (Test-Path -LiteralPath $InstallerPath)) {
 
 Connect-GitHub
 
+if ($Commit) {
+    $pending = @(git status --porcelain).Count
+    if ($pending -gt 0) {
+        git add -A | Out-Host
+        git commit -m "SteamEYA $Version：版本号与本次改动（本地提交，未推送）" | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "git commit 失败（退出码 $LASTEXITCODE）。" }
+        Write-Host "已本地提交 $pending 处改动（未推送；推送归触发词 3）。"
+    }
+    else {
+        Write-Host '工作区没有需要提交的改动。'
+    }
+}
 $file = Get-Item -LiteralPath $InstallerPath
 $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $InstallerPath).Hash.ToLowerInvariant()
 $commit = "$(git rev-parse HEAD 2>$null)".Trim()
