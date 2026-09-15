@@ -605,6 +605,7 @@
     "History_Status_Querying_Format": "Quick-fetching the account status of {0}...",
     "History_Status_QueryDone_Format": "{0} fetch complete: Premier rank {1}, CS2 level {2}, cooldown {3}, GC VAC {4}.",
     "History_Status_QueryCanceled": "Quick fetch canceled.",
+  "History_Status_QueryTimeout_Format": "Quick fetch timed out after {0} s. Check your network or VPN and try again.",
     "Cached_Title": "Cached Accounts",
     "Cached_Search_Placeholder": "Search account / profile name / Steam64",
     "Cached_Clear_Tooltip": "Clear all cached accounts",

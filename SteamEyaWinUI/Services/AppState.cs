@@ -150,6 +150,34 @@ internal static class AppState
         HistoryChanged?.Invoke(selectSteamId);
     }
 
+    /// <summary>
+    /// 历史账号重载（后台读盘版）：磁盘读取 + 逐字段解密 + JSON 解析都放到线程池，
+    /// UI 线程只接收结果并派发事件。
+    /// 一键查询完成后的重载走这条路径——旧实现把整段读盘留在 UI 线程，
+    /// 后台资料刷新任务正持有账号文件锁时，界面会整段卡住（表现为「查询后卡死」）。
+    /// </summary>
+    public static async Task ReloadHistoryAsync(string? selectSteamId = null)
+    {
+        IReadOnlyList<SteamAccountHistoryItem> accounts;
+        try
+        {
+            accounts = await Task.Run(AccountHistoryService.Load);
+        }
+        catch (Exception ex)
+        {
+            accounts = [];
+            ShowStatus(Loc.Tf("AppState_HistoryLoadFailed_Format", ex.Message), InfoBarSeverity.Warning);
+        }
+
+        HistoryAccounts = accounts;
+        if (!string.IsNullOrWhiteSpace(selectSteamId))
+        {
+            PendingHistorySelection = selectSteamId;
+        }
+
+        HistoryChanged?.Invoke(selectSteamId);
+    }
+
     public static SteamAccountHistoryItem? FindHistoryAccount(string? steamId)
     {
         if (string.IsNullOrWhiteSpace(steamId))

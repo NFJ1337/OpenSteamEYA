@@ -1071,9 +1071,18 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
         }
     }
 
+    /// <summary>
+    /// 一键查询整体时限：Steam CM/GC 不通时底层会长时间重试（实测超过 10 分钟不返回），
+    /// 这里给一个明确上限，到点提示超时，不让界面无限等待。
+    /// </summary>
+    private static readonly TimeSpan OneClickQueryTimeout = TimeSpan.FromSeconds(180);
+
     private async Task QueryHistoryAccountAsync(SteamAccountHistoryItem account)
     {
         var cancellationToken = AppState.BeginBusyOperation();
+        // 与全局取消（取消按钮）联动：用户点取消照样能中断，没点取消时到点由超时兜底。
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(OneClickQueryTimeout);
         AppState.ShowStatus(Loc.Tf("History_Status_Querying_Format", account.AccountTitle), InfoBarSeverity.Informational);
 
         if (AppState.LoginPage is not { } loginPage)
@@ -1086,10 +1095,18 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
         try
         {
             var score = await loginPage.QueryAndSaveCsStatusAsync(
-                account.AccountName, account.EyaToken, cancellationToken);
+                account.AccountName, account.EyaToken, timeoutCts.Token);
             AppState.ShowStatus(
                 Loc.Tf("History_Status_QueryDone_Format", account.AccountTitle, score.DisplayText, score.PlayerLevelText, score.CooldownText, score.GcVacText),
                 InfoBarSeverity.Success);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // 不是用户点取消，就是整体超时：给出可操作提示并留痕。
+            AppLog.Warn($"一键查询超时：{account.AccountTitle}，等待 {OneClickQueryTimeout.TotalSeconds:0} 秒仍未返回。");
+            AppState.ShowStatus(
+                Loc.Tf("History_Status_QueryTimeout_Format", (int)OneClickQueryTimeout.TotalSeconds),
+                InfoBarSeverity.Error);
         }
         catch (OperationCanceledException)
         {

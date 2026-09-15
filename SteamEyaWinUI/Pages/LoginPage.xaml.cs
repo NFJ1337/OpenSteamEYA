@@ -1031,14 +1031,17 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 			ResetAvailabilityForeground();
 			throw;
 		}
-		historyStore.SaveCsAccountStatus(accountName, steamId, eyaToken, tokenInfo.ExpiresAt, csPremierScoreResult, jwtValidation, NullIfBlank(prefetchedProfile?.PersonaName), NullIfBlank(prefetchedProfile?.AvatarUrl), NullIfBlank(prefetchedProfile?.AvatarPath));
+		// 写盘要「读-改-写」整份账号文件（含逐字段 AES/DPAPI），留在 UI 线程会与后台资料刷新抢文件锁，
+		// 把界面整段卡住；挪到线程池执行，异常照旧向调用方抛出（如凭据库锁定）。
+		await Task.Run(() => historyStore.SaveCsAccountStatus(accountName, steamId, eyaToken, tokenInfo.ExpiresAt, csPremierScoreResult, jwtValidation, NullIfBlank(prefetchedProfile?.PersonaName), NullIfBlank(prefetchedProfile?.AvatarUrl), NullIfBlank(prefetchedProfile?.AvatarPath)), CancellationToken.None);
 		if (whiteStore)
 		{
 			AppState.ReloadWhiteAccounts(steamId);
 		}
 		else
 		{
-			AppState.ReloadHistory(steamId);
+			// 读盘同样离开 UI 线程（见 ReloadHistoryAsync）。
+			await AppState.ReloadHistoryAsync(steamId);
 		}
 		AccountInfoPremierScoreText.Text = csPremierScoreResult.DisplayText;
 		AccountInfoCsLevelText.Text = csPremierScoreResult.PlayerLevelText;
