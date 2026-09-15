@@ -16,7 +16,7 @@
     "Settings_Cs2Sync_Section": "CS2 settings sync",
     "Settings_Cs2Sync_Desc": "On login, force-push the source account's CS2 settings (crosshair, sensitivity, viewmodel, keybinds) to the account being logged in, via Steam Cloud.",
     "Settings_Cs2Sync_Source": "Source account",
-    "Settings_Cs2Sync_Source_Placeholder": "Search by persona, account name, or SteamID",
+    "Settings_Cs2Sync_Source_None": "Not selected",
     "Settings_Cs2Sync_PushNow": "Push now",
     "Settings_Cs2Sync_PushNow_Tooltip": "Force-push the source account's CS2 settings to the currently logged-in account's cloud now",
     "Settings_Cs2Sync_Note": "Uses the Steamworks Cloud API to force-push cfg. Requires: the current account owns CS2, Steam is running, steam_api64.dll sits next to the app, and Steam Cloud is enabled for the account (Steam Settings → Cloud). Steam then delivers the files.",

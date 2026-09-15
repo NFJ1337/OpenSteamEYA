@@ -563,18 +563,23 @@
                             VerticalAlignment="Center"
                             Text="{x:Bind Strings.Get('Settings_Cs2Sync_Source'), Mode=OneWay}"
                             Foreground="{ThemeResource AuroraTextMutedBrush}" />
-                        <AutoSuggestBox
-                            x:Name="Cs2SyncSourceBox"
+                        <!-- 与上方语言按钮同款：DropDownButton + MenuFlyout，候选在 code-behind 按「账号管理页 → 历史账号页」顺序生成 -->
+                        <DropDownButton
+                            x:Name="Cs2SyncSourceButton"
                             Grid.Column="1"
+                            MinWidth="220"
                             HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
                             VerticalAlignment="Center"
-                            QueryIcon="Find"
-                            UpdateTextOnSelect="False"
-                            PlaceholderText="{x:Bind Strings.Get('Settings_Cs2Sync_Source_Placeholder'), Mode=OneWay}"
-                            TextChanged="Cs2SyncSourceBox_TextChanged"
-                            QuerySubmitted="Cs2SyncSourceBox_QuerySubmitted"
-                            GotFocus="Cs2SyncSourceBox_GotFocus"
-                            LostFocus="Cs2SyncSourceBox_LostFocus" />
+                            Style="{StaticResource UiTintDropDownButtonStyle}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE77B;" FontSize="16" />
+                                <TextBlock x:Name="Cs2SyncSourceText" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                            <DropDownButton.Flyout>
+                                <MenuFlyout x:Name="Cs2SyncSourceFlyout" />
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
                         <Button
                             x:Name="Cs2SyncRefreshButton"
                             Grid.Column="2"

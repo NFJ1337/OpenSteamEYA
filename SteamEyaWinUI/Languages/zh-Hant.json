@@ -26,7 +26,7 @@
     "Settings_Cs2Sync_Section": "CS2 設定同步",
     "Settings_Cs2Sync_Desc": "上號時把來源帳號的準星、靈敏度、視角、按鍵等 CS2 設定透過 Steam 雲端強推到要登入的帳號。",
     "Settings_Cs2Sync_Source": "來源帳號",
-    "Settings_Cs2Sync_Source_Placeholder": "搜尋暱稱、帳號名稱或 SteamID",
+    "Settings_Cs2Sync_Source_None": "未選擇",
     "Settings_Cs2Sync_PushNow": "立即推送",
     "Settings_Cs2Sync_PushNow_Tooltip": "把來源帳號的 CS2 設定立即強推到目前登入帳號的雲端",
     "Settings_Cs2Sync_Note": "透過 Steamworks 雲端 API 強推 cfg，需目前帳號擁有 CS2、Steam 正在執行、程式目錄放有 steam_api64.dll，並在 Steam 設定→雲端同步裡為該帳號開啟雲端。開啟後由 Steam 負責下發落地。",
