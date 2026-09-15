@@ -26,11 +26,10 @@ internal sealed class SteamLicenseClient
 
     // 用 List 而不是集合表达式：[...] 生成的 <>z__ReadOnlyArray 无法跨 WinRT ABI
     // 传给 ComboBox.ItemsSource（CsWinRT 已知限制），运行时抛 ArgumentException。
+    // 只保留奶味：用户要求删掉「伊万/小岛」「路飞」两条上游的取卡逻辑，全部走奶味（111.170.18.37:9099）。
     public static IReadOnlyList<SteamUpstreamServer> Servers { get; } = new List<SteamUpstreamServer>
     {
-        new("奶味", "http://111.170.18.37:9099"),
-        new("伊万/小岛", "http://70.39.201.195:9099"),
-        new("路飞", "http://38.76.193.80:9099")
+        new("奶味", "http://111.170.18.37:9099")
     };
 
     public async Task<SteamAccountData> GetAccountDataAsync(
