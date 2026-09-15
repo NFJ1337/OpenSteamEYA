@@ -19,6 +19,9 @@
   然后用 `scripts\publish-release.ps1 -Version <新版本>` 把**新安装包与 latest.json 上传到 release（tag `正式exe`）**，
   并删掉 release 上旧的 `SteamEYA-*-win-x64-setup.exe`，等效于在发布页「重新保存文件」。
 - 凭据：脚本自动取 `GH_TOKEN`/`GITHUB_TOKEN`，否则读本机 Git 凭据管理器（与 git push 同一份凭据，实测登录用户 NFJ1337）。
+- **同时发布精简的改动说明**（用户明确要求「把改的内容精简同时发布」）：发布前把本轮改动浓缩成 3～6 条中文说明
+  （用户视角：新增/修复了什么，不写代码细节），用 `-Notes '新增：…','修复：…'`（或 `-NotesFile <文件>`）随发布一起传给脚本；
+  脚本会把它们写成 release 正文（程序「关于页 → 更新日志」卡片读的就是它），并填进 `latest.json` 的 `changelog`。
 - 该触发词的回复：安装包链接 + **一行**发布结果确认（如「已替换 release 正式exe 下的安装包」）；不罗列体积/哈希/清单。
 - **发布前先本地提交**（用户明确要求：「2 时版本号也提交」）：`publish-release.ps1` 加 `-Commit` 即会在上传前
   `git add -A` + `git commit -m "SteamEYA <版本>：版本号与本次改动（本地提交，未推送）"`；**只提交、不推送**，推送仍归 `3`。

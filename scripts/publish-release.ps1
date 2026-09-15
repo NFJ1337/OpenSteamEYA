@@ -5,10 +5,12 @@
 .DESCRIPTION
 凭据来源（按顺序）：环境变量 GH_TOKEN / GITHUB_TOKEN → 本机 Git 凭据管理器（与 git push 用的是同一份）。
 流程：算 sha256/大小 → 生成 artifacts\latest.json → 删掉 release 上旧的 SteamEYA-*-win-x64-setup.exe →
-      上传新安装包与 latest.json（同名 --clobber 覆盖）。
+      上传新安装包与 latest.json（同名 --clobber 覆盖）→ 把本次改动的精简说明写进 release 正文
+      （程序「关于页 → 更新日志」读的就是 release 正文，latest.json 的 changelog 字段也同步）。
 
 .EXAMPLE
 pwsh -File scripts\publish-release.ps1 -Version 1.2.6
+pwsh -File scripts\publish-release.ps1 -Version 1.2.6 -Notes '新增：XX','修复：YY'
 pwsh -File scripts\publish-release.ps1 -Version 1.2.6 -DryRun    # 只看要做什么，不改远端
 #>
 param(
@@ -19,7 +21,11 @@ param(
     [string]$InstallerPath = '',
     [switch]$DryRun,
     # 发布前先把当前工作区改动本地提交（用户要求：裸回复 2 时版本号也要提交）。只提交，不推送。
-    [switch]$Commit
+    [switch]$Commit,
+    # 本次改动的精简说明（一条一项，写成 release 正文与 latest.json 的 changelog）。留空则不动正文。
+    [string[]]$Notes = @(),
+    # 说明也可以放在文件里（每行一条），与 -Notes 二选一。
+    [string]$NotesFile = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -52,6 +58,16 @@ if ($Commit -and -not $DryRun) {
         Write-Host '工作区没有需要提交的改动。'
     }
 }
+# 本次更新的精简说明：-Notes 直接给，或 -NotesFile 从文件读（每行一条）；都没给就保持 release 正文不变。
+$notesLines = @()
+if (-not [string]::IsNullOrWhiteSpace($NotesFile)) {
+    if (-not (Test-Path -LiteralPath $NotesFile)) { throw "找不到说明文件：$NotesFile" }
+    $notesLines = @(Get-Content -LiteralPath $NotesFile | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+}
+elseif ($Notes.Count -gt 0) {
+    $notesLines = @($Notes | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+}
+
 $file = Get-Item -LiteralPath $InstallerPath
 $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $InstallerPath).Hash.ToLowerInvariant()
 $commitHash = "$(git rev-parse HEAD 2>$null)".Trim()
@@ -69,7 +85,7 @@ $metadata = [ordered]@{
     artifactSize   = $file.Length
     artifactSha256 = $hash
     artifactType   = 'exe-installer'
-    changelog      = @()
+    changelog      = @($notesLines)
 }
 
 $metadataPath = Join-Path $ProjectRoot 'artifacts\latest.json'
@@ -90,6 +106,10 @@ if ($DryRun) {
     foreach ($name in $stale) { Write-Host "  - 删除旧安装包资产：$name" }
     Write-Host "  - 上传（覆盖）：$($file.Name)"
     if ($Commit) { Write-Host '  - 本地提交当前改动（git add -A + commit，不推送）' }
+    if ($notesLines.Count -gt 0) {
+        Write-Host '  - 更新 release 正文（更新日志）：'
+        foreach ($line in $notesLines) { Write-Host "      $line" }
+    }
     Write-Host '  - 上传（覆盖）：latest.json，内容预览：'
     Write-Host ($metadata | ConvertTo-Json -Depth 4)
     return
@@ -103,6 +123,15 @@ foreach ($name in $stale) {
 }
 
 gh release upload $Tag $InstallerPath $metadataPath --repo $Repository --clobber
+
+# 更新日志：写进 release 正文（程序关于页的「更新日志」卡片直接读它）。
+if ($notesLines.Count -gt 0) {
+    $bodyPath = Join-Path $ProjectRoot 'artifacts\release-notes.md'
+    $body = ($notesLines | ForEach-Object { if ($_ -match '^[-*]') { $_ } else { "- $_" } }) -join "`n"
+    Set-Content -LiteralPath $bodyPath -Value $body -Encoding utf8NoBOM
+    gh release edit $Tag --repo $Repository --notes-file $bodyPath
+    Write-Host "已更新 release 正文（$($notesLines.Count) 条更新日志）。"
+}
 
 Write-Host '完成。release 现在的资产：'
 gh release view $Tag --repo $Repository --json assets --jq '.assets[] | "  - \(.name)  (\(.size) 字节)"'

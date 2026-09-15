@@ -27,7 +27,9 @@ internal sealed class SteamAccountValidationService
     {
         AutomaticDecompression = DecompressionMethods.All,
         UseCookies = false,
-        AllowAutoRedirect = false
+        AllowAutoRedirect = false,
+        UseProxy = true,
+        Proxy = new SteamProxyBypass()
     })
     {
         Timeout = TimeSpan.FromSeconds(30)

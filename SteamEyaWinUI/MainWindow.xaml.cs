@@ -68,6 +68,22 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// 打开软件就预热 Steam 侧连接（CM 列表 / DNS / TLS），让「一键查询 / 清空无效账号」
+    /// 的第一次点击也不用等冷启动。后台进行、失败只写日志，不占用窗口初始化。
+    /// </summary>
+    private static async Task PrewarmSteamConnectionsAsync()
+    {
+        try
+        {
+            await CsPremierScoreService.PrewarmAsync();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Info($"Steam 连接预热异常：{ex.Message}");
+        }
+    }
+
     public MainWindow()
     {
         Instance = this;
@@ -80,6 +96,9 @@ public sealed partial class MainWindow : Window
 
         // 上次退出时 VPN 是开启状态 → 启动后自动连回来。
         _ = RestoreVpnOnStartupAsync();
+
+        // 后台预热 Steam 侧连接：首次点「一键查询 / 清空无效账号」不用再等冷启动。
+        _ = PrewarmSteamConnectionsAsync();
         StatusInfoBar.RegisterPropertyChangedCallback(
             InfoBar.IsOpenProperty,
             (_, _) => StatusOverlay.Visibility = StatusInfoBar.IsOpen ? Visibility.Visible : Visibility.Collapsed);

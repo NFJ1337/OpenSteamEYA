@@ -1,7 +1,9 @@
 using System.Buffers.Binary;
+using System.Diagnostics;
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.IO.Compression;
+using System.Net;
 using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text;
@@ -76,7 +78,19 @@ internal sealed class SteamCmClient : IAsyncDisposable
     private const int ClientOsWindows10 = 16;
     private const int WebSocketBufferSize = 64 * 1024;
     private const int RequestTimeoutMs = 15_000;
-    private const int ConnectTimeoutMs = 10_000;
+
+    // 单台 CM 的连接超时。原来是 10 秒：CM 列表里总有连不上的节点，等满一次就白花 10 秒
+    // （「一键查询」要 20 秒的主因）。连不上通常在 1~2 秒内就失败，4 秒足够，失败立刻换下一台。
+    private const int ConnectTimeoutMs = 4_000;
+
+    // CM 服务器列表缓存 + 上次连通的服务器：省掉每次查询都去 ISteamDirectory 拉一次，
+    // 并且优先用验证过能连上的那台，通常第一台就成功、不再经历失败重试。
+    private static readonly object ServerListLock = new();
+    private static readonly TimeSpan ServerListTtl = TimeSpan.FromMinutes(10);
+
+    private static List<string>? _cachedServers;
+    private static DateTime _cachedServersAt = DateTime.MinValue;
+    private static string? _lastGoodServer;
 
     private const int EMsgMulti = 1;
     private const int EMsgServiceMethodCallFromClient = 151;
@@ -121,17 +135,29 @@ internal sealed class SteamCmClient : IAsyncDisposable
     {
         _steamId = ulong.Parse(steamId, CultureInfo.InvariantCulture);
 
+        var listWatch = Stopwatch.StartNew();
         var servers = await GetCmServersAsync(cancellationToken);
-        Exception? lastError = null;
+        AppLog.Info($"[cm] 拿到 {servers.Count} 台 CM（耗时 {listWatch.ElapsedMilliseconds} ms），首台 {servers[0]}");
 
-        foreach (var server in servers.Take(8))
+        Exception? lastError = null;
+        for (var index = 0; index < servers.Count && index < 8; index++)
         {
+            var server = servers[index];
             cancellationToken.ThrowIfCancellationRequested();
 
+            var attemptWatch = Stopwatch.StartNew();
             try
             {
                 await ConnectAsync(server, cancellationToken);
+                var connectMs = attemptWatch.ElapsedMilliseconds;
                 await LogOnAsync(refreshToken, cancellationToken);
+                AppLog.Info($"[cm] 第 {index + 1} 台 {server} 成功（连接 {connectMs} ms / 登录往返 {attemptWatch.ElapsedMilliseconds - connectMs} ms）");
+
+                lock (ServerListLock)
+                {
+                    _lastGoodServer = server;
+                }
+
                 return;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -141,6 +167,7 @@ internal sealed class SteamCmClient : IAsyncDisposable
                     throw;
                 }
 
+                AppLog.Warn($"[cm] 第 {index + 1} 台 {server} 失败（{attemptWatch.ElapsedMilliseconds} ms）：{ex.Message}");
                 lastError = ex;
                 await DisconnectSocketAsync();
             }
@@ -350,10 +377,51 @@ internal sealed class SteamCmClient : IAsyncDisposable
 
     private async Task<List<string>> GetCmServersAsync(CancellationToken cancellationToken)
     {
+        var servers = await GetCachedOrFetchServersAsync(cancellationToken);
+
+        // 上次连通的服务器排到最前：绝大多数情况第一台就成功，省掉一轮失败重试的等待。
+        lock (ServerListLock)
+        {
+            if (_lastGoodServer is { Length: > 0 } last && servers.Contains(last))
+            {
+                servers.Remove(last);
+                servers.Insert(0, last);
+            }
+
+            return servers;
+        }
+    }
+
+    private async Task<List<string>> GetCachedOrFetchServersAsync(CancellationToken cancellationToken) =>
+        await GetCachedOrFetchServersAsync(_httpClient, cancellationToken);
+
+    /// <summary>
+    /// 预热：提前把 CM 服务器列表拉下来填进缓存（顺带把 DNS / TLS 握手 / 连接池都建好）。
+    /// 「打开软件后第一次查询特别慢」基本都花在这上面，之后才走缓存。
+    /// </summary>
+    public static async Task PrewarmAsync(HttpClient httpClient, CancellationToken cancellationToken = default)
+    {
+        var watch = Stopwatch.StartNew();
+        var servers = await GetCachedOrFetchServersAsync(httpClient, cancellationToken);
+        AppLog.Info($"[cm] 预热完成：{servers.Count} 台 CM 已缓存（{watch.ElapsedMilliseconds} ms）。");
+    }
+
+    private static async Task<List<string>> GetCachedOrFetchServersAsync(
+        HttpClient httpClient,
+        CancellationToken cancellationToken)
+    {
+        lock (ServerListLock)
+        {
+            if (_cachedServers is { Count: > 0 } cached && DateTime.UtcNow - _cachedServersAt < ServerListTtl)
+            {
+                return [.. cached];
+            }
+        }
+
         const string url = "https://api.steampowered.com/ISteamDirectory/GetCMListForConnect/v0001/"
             + "?format=json&cellid=0&cmtype=websockets";
 
-        using var response = await _httpClient.GetAsync(url, cancellationToken);
+        using var response = await httpClient.GetAsync(url, cancellationToken);
         response.EnsureSuccessStatusCode();
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
@@ -374,15 +442,27 @@ internal sealed class SteamCmClient : IAsyncDisposable
             .Select(endpoint => endpoint!)
             .ToList();
 
-        return servers.Count > 0
-            ? servers
-            : throw new InvalidOperationException(Loc.T("Cm_Error_NoWebSocketServers"));
+        if (servers.Count == 0)
+        {
+            throw new InvalidOperationException(Loc.T("Cm_Error_NoWebSocketServers"));
+        }
+
+        lock (ServerListLock)
+        {
+            _cachedServers = servers;
+            _cachedServersAt = DateTime.UtcNow;
+        }
+
+        return servers;
     }
 
     private async Task ConnectAsync(string endpoint, CancellationToken cancellationToken)
     {
         _socket = new ClientWebSocket();
         _socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(30);
+
+        // CM 的 WebSocket 同样直连（我们自己接管系统代理时）：否则登录往返会被节点拖长。
+        _socket.Options.Proxy = SystemProxyService.IsApplied ? null : WebRequest.GetSystemWebProxy();
 
         // 不回包的 CM 会让 ConnectAsync 挂起数分钟，必须按单个 endpoint 限时；
         // 超时抛 TimeoutException（而非 OperationCanceledException），

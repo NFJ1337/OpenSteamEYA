@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Net;
 using SteamEyaWinUI.Localization;
@@ -16,12 +17,25 @@ internal sealed class CsPremierScoreService
     // 仍保留“断开 GC 再重连”循环触发（与 cooldown.js 一致：6 轮、每轮等 11 秒、
     // 断开后 2.5 秒再重连），另设总时限兜底防止单轮 GC welcome 重试拖长整体耗时。
     private const int MaxHelloCycles = 6;
-    private static readonly TimeSpan HelloWaitTimeout = TimeSpan.FromSeconds(11);
+
+    // 单轮等 9110 的上限。实测：9110 一旦会来，**在 GC 连上后 300ms 内就到**；不来则整轮都不会来
+    // （补发 9109 也没用，只有「断开重连」那条路有效）。连续多次实测首轮都没等到，
+    // 所以单轮只等 1 秒就转重连，省掉的都是纯等待。
+    private static readonly TimeSpan HelloWaitTimeout = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan CachedHelloPollTimeout = TimeSpan.FromMilliseconds(250);
-    private static readonly TimeSpan GcReconnectDelay = TimeSpan.FromSeconds(2.5);
+    private static readonly TimeSpan GcReconnectDelay = TimeSpan.FromSeconds(0.4);
+
+    // 国服判定只是附加信息，给它独立的短上限：授权页慢/被墙时按「未知」返回，
+    // 不能让它把整次查询拖住（「清空无效账号」批量跑时每个账号都要走这一趟）。
+    private static readonly TimeSpan Cs2IsChinaTimeout = TimeSpan.FromSeconds(4);
     private static readonly TimeSpan HelloTotalBudget = TimeSpan.FromSeconds(100);
 
-    private static readonly HttpClient HttpClient = new()
+    // 用 SteamProxyBypass：我们自己开着 VPN 时 Steam 请求直连（走节点会把登录往返拖到十几秒）。
+    private static readonly HttpClient HttpClient = new(new HttpClientHandler
+    {
+        UseProxy = true,
+        Proxy = new SteamProxyBypass()
+    })
     {
         Timeout = TimeSpan.FromSeconds(30)
     };
@@ -30,11 +44,36 @@ internal sealed class CsPremierScoreService
     {
         AutomaticDecompression = DecompressionMethods.All,
         UseCookies = false,
-        AllowAutoRedirect = false
+        AllowAutoRedirect = false,
+        UseProxy = true,
+        Proxy = new SteamProxyBypass()
     })
     {
         Timeout = TimeSpan.FromSeconds(30)
     };
+
+    /// <summary>
+    /// 预热 Steam 侧连接：CM 服务器列表 + 各相关域名（api / store）的 DNS 与 TLS。
+    /// 供软件启动后后台调用；失败只写日志，绝不影响正常查询。
+    /// </summary>
+    public static async Task PrewarmAsync(CancellationToken cancellationToken = default)
+    {
+        var watch = Stopwatch.StartNew();
+        try
+        {
+            await SteamCmClient.PrewarmAsync(HttpClient, cancellationToken);
+            using var request = new HttpRequestMessage(HttpMethod.Head, "https://store.steampowered.com/");
+            using var response = await LicensesHttpClient.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken);
+            AppLog.Info($"[query] 预热完成：CM 列表与 Steam 侧连接已就绪（{watch.ElapsedMilliseconds} ms）。");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Info($"[query] 预热未完成（不影响后续查询）：{ex.Message}");
+        }
+    }
 
     public async Task<CsPremierScoreResult> QueryAsync(
         string refreshToken,
@@ -47,8 +86,10 @@ internal sealed class CsPremierScoreService
         }
 
         var accountId = CsGcSession.GetAccountId(steamId64);
+        var queryWatch = Stopwatch.StartNew();
         await using var cmClient = new SteamCmClient(HttpClient);
         await cmClient.ConnectAndLogOnAsync(refreshToken, steamId, cancellationToken);
+        AppLog.Info($"[query] 总耗时里程碑：CM 连接+登录完成 {queryWatch.ElapsedMilliseconds} ms");
 
         try
         {
@@ -56,9 +97,16 @@ internal sealed class CsPremierScoreService
 
             var webSession = await SteamWebSession.BuildAsync(cmClient, refreshToken, steamId, cancellationToken);
             var cs2IsChinaTask = CheckCs2IsChinaAsync(webSession, cancellationToken);
+            AppLog.Info($"[query] 总耗时里程碑：Web 会话完成 {queryWatch.ElapsedMilliseconds} ms");
 
+            // 先明确「退出 730」再「进入 730」：GC 只有看到完整的状态变化才会跑完 matchmaking 初始化
+            // 并下发 9110。只发一次「进入」时，若 Steam 端认为该账号上一会话还挂着 730，
+            // 就不会重跑初始化 —— 日志里就是首轮 10 秒都等不到 9110，反而要等重连循环
+            // （那轮正是先退出再进入）才拿到，白白多花十几秒。
+            await cmClient.SetGamesPlayedAsync([], cancellationToken);
             await cmClient.SetGamesPlayedAsync([CsGcSession.Cs2AppId], cancellationToken);
             await CsGcSession.ConnectAsync(cmClient, cancellationToken);
+            AppLog.Info($"[query] 总耗时里程碑：进入 CS2 GC {queryWatch.ElapsedMilliseconds} ms");
 
             // 冷却/VAC 只能从 GC 的 MatchmakingGC2ClientHello(9110) 拿：PlayersProfile 对自己
             // 账号的 penalty 字段永远为空。9110 waiter 已在进 730 前挂好，避免 welcome 阶段
@@ -83,12 +131,22 @@ internal sealed class CsPremierScoreService
 
             var profileMessage = await profileTask;
             var profile = DecodePlayersProfile(accountId, profileMessage.Payload);
+            AppLog.Info($"[query] 总耗时里程碑：拿到 PlayersProfile {queryWatch.ElapsedMilliseconds} ms");
 
             var helloData = await helloTask;
+            if (helloData is null)
+            {
+                // 首轮没等到：实测（日志）补发 9109 完全无效 —— 能拿到 9110 的只有
+                // 「SetGamesPlayed([]) → [730] → 重连 GC → 发 9109」这条完整重来一遍的路径。
+                // 所以这里不再补发、也不干等，直接进下面的重连循环。
+                AppLog.Info($"[query] 首轮没等到 9110（{queryWatch.ElapsedMilliseconds} ms），转入重连重试");
+            }
+
             helloData ??= await WaitForMatchmakingHelloAsync(
                 cmClient,
                 CachedHelloPollTimeout,
                 cancellationToken);
+            AppLog.Info($"[query] 总耗时里程碑：拿到 9110（{(helloData is null ? "没拿到，将重连重试" : "成功")}）{queryWatch.ElapsedMilliseconds} ms");
             var helloDeadline = DateTimeOffset.UtcNow + HelloTotalBudget;
 
             for (var cycle = 2;
@@ -127,6 +185,7 @@ internal sealed class CsPremierScoreService
                 ranking.RankTypeId == PremierRankTypeId);
 
             var cs2IsChina = await cs2IsChinaTask;
+            AppLog.Info($"[query] 总耗时 {queryWatch.ElapsedMilliseconds} ms（国服判定：{cs2IsChina}）");
 
             return new CsPremierScoreResult(
                 steamId,
@@ -192,6 +251,9 @@ internal sealed class CsPremierScoreService
         SteamWebSession session,
         CancellationToken cancellationToken)
     {
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(Cs2IsChinaTimeout);
+
         try
         {
             using var request = new HttpRequestMessage(
@@ -200,7 +262,7 @@ internal sealed class CsPremierScoreService
             request.Headers.Add("Cookie", session.CookieHeader);
             request.Headers.Add("User-Agent", "Mozilla/5.0");
 
-            using var response = await LicensesHttpClient.SendAsync(request, cancellationToken);
+            using var response = await LicensesHttpClient.SendAsync(request, timeoutCts.Token);
 
             // 3xx：会话不被接受时会被导向登录页等；不跟随，按未知处理。
             if (response.StatusCode is >= HttpStatusCode.Ambiguous and < HttpStatusCode.BadRequest)
@@ -213,7 +275,7 @@ internal sealed class CsPremierScoreService
                 return null;
             }
 
-            var html = await response.Content.ReadAsStringAsync(cancellationToken);
+            var html = await response.Content.ReadAsStringAsync(timeoutCts.Token);
             if (string.IsNullOrWhiteSpace(html) ||
                 html.Contains("<TITLE>Access Denied</TITLE>", StringComparison.OrdinalIgnoreCase))
             {
@@ -224,7 +286,13 @@ internal sealed class CsPremierScoreService
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            // 用户取消：照旧往上抛。
             throw;
+        }
+        catch (OperationCanceledException)
+        {
+            // 只是国服判定自己超时：按「未知」处理，不影响本次查询结果。
+            return null;
         }
         catch
         {
