@@ -89,9 +89,11 @@
                                 </StackPanel>
                             </StackPanel>
 
+                            <!-- 宽度与合并前的作者卡一致：原卡片宽 300 − 左右内边距 18×2 = 264（合并后卡片变宽，这里固定回原宽度） -->
                             <Button
                                 x:Name="OpenBilibiliButton"
-                                HorizontalAlignment="Stretch"
+                                Width="264"
+                                HorizontalAlignment="Left"
                                 HorizontalContentAlignment="Center"
                                 Style="{StaticResource AccentButtonStyle}"
                                 Click="OpenBilibiliButton_Click">
