@@ -1,5 +1,5 @@
 ﻿param(
-    [string]$Version = "1.3.8",
+    [string]$Version = "1.3.9",
     [string]$Configuration = "Release",
     [string]$Runtime = "win-x64",
     # 先按「末位 +1，满 10 进位」自增版本号（同步写回 csproj / 本脚本 / iss），再打包。
