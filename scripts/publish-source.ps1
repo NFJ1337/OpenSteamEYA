@@ -61,7 +61,22 @@ function Invoke-GitPush([string[]]$pushArguments) {
     if ($LASTEXITCODE -eq 0) { return $true }
 
     Write-Host '直连推送失败，尝试本机代理…'
-    foreach ($port in 7897, 7890, 7899, 10809, 10808, 1080, 8889, 2080) {
+
+    # 候选端口：先是本程序自带 VPN 的内核端口（用户开着它时就在监听），
+    # 再是系统代理里写的那个（可能是 Clash/V2Ray 之类），最后是常见默认端口。
+    # 注意 git 不读 WinINET 系统代理，必须显式 -c http.proxy=… 指过去，否则挂着一堆代理也推不动。
+    $ports = [System.Collections.Generic.List[int]]::new()
+    $ports.Add(17897)
+    try {
+        $sysProxy = (Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings' -ErrorAction SilentlyContinue).ProxyServer
+        if ($sysProxy -match '^127\.0\.0\.1:(\d+)$') { $ports.Add([int]$Matches[1]) }
+    }
+    catch {
+        # 读系统代理失败无所谓，继续用默认端口列表
+    }
+    foreach ($extra in 7897, 7890, 7899, 10809, 10808, 1080, 8889, 2080) { $ports.Add($extra) }
+
+    foreach ($port in ($ports | Select-Object -Unique)) {
         if (-not (Test-LocalProxyPort $port)) { continue }
 
         Write-Host "  改用 127.0.0.1:$port 重试"
