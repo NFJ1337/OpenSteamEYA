@@ -1,0 +1,10 @@
+<Window
+    x:Class="SteamEyaWinUI.Pages.SteamBrowserWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- 小窗口：只放一个浏览器，打开就是已登录的 Steam「我的页面」 -->
+    <Grid>
+        <WebView2 x:Name="Browser" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+    </Grid>
+</Window>

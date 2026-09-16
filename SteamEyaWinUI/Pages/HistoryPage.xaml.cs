@@ -206,6 +206,8 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
         HistoryDetailColumn.Width = new GridLength(360);
         HistoryDetailScrollViewer.Visibility = Visibility.Visible;
         OneClickHistoryQueryButton.Visibility = Visibility.Visible;
+        // 「Steam中查看」两个页面都显示：账号管理页有账号+密码，历史账号页只有令牌，事件里分别处理。
+        OpenSteamBrowserButton.Visibility = Visibility.Visible;
         UseHistoryAccountButton.Visibility = whiteOnly ? Visibility.Collapsed : Visibility.Visible;
         WhiteBatchQueryButton.Visibility = whiteOnly ? Visibility.Visible : Visibility.Collapsed;
         // 「导入白号」只在账号管理页出现：历史账号页隐藏它（同一个工具栏，靠作用域切换）。
@@ -696,6 +698,52 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
         if (CardItem(sender) is { } account)
         {
             await DeleteAccountsWithConfirmAsync([account]);
+        }
+    }
+
+    /// <summary>
+    /// 「Steam中查看」：用当前账号的账号+密码登录 Steam 网页（走项目已有的 CM 登录换令牌链路），
+    /// 再弹出一个小窗口打开 https://steamcommunity.com/my/ ，打开即是已登录状态。
+    /// </summary>
+    private async void OpenSteamBrowserButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (ActiveAccountList.SelectedItem is not SteamAccountHistoryItem account)
+        {
+            AppState.ShowStatus(Loc.T("History_Status_SelectAccount"), InfoBarSeverity.Error);
+            return;
+        }
+
+        // 账号管理页的白号：有账号+密码；历史账号页：没有密码，只有 EYA 令牌（本身就是 refresh token）。
+        var hasPassword = !string.IsNullOrWhiteSpace(account.AccountName) && !string.IsNullOrWhiteSpace(account.Password);
+        var hasToken = !string.IsNullOrWhiteSpace(account.EyaToken);
+        if (!hasPassword && !hasToken)
+        {
+            AppState.ShowStatus(Loc.T("History_SteamBrowser_NoCredential"), InfoBarSeverity.Warning);
+            return;
+        }
+
+        var cancellationToken = AppState.BeginBusyOperation();
+        AppState.ShowStatus(Loc.T("History_SteamBrowser_Logging"), InfoBarSeverity.Informational);
+        try
+        {
+            var session = hasPassword
+                ? await SteamBrowserLoginService.CreateSessionAsync(account.AccountName, account.Password, null, cancellationToken)
+                : await SteamBrowserLoginService.CreateSessionFromTokenAsync(account.EyaToken!, cancellationToken);
+            new SteamBrowserWindow(session).Activate();
+            AppState.ShowStatus(Loc.T("History_SteamBrowser_Opened"), InfoBarSeverity.Success);
+        }
+        catch (OperationCanceledException)
+        {
+            AppState.ShowStatus(Loc.T("History_Status_QueryCanceled"), InfoBarSeverity.Informational);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"Steam 网页登录失败：{ex.Message}");
+            AppState.ShowStatus(Loc.Tf("History_SteamBrowser_Error_Format", ex.Message), InfoBarSeverity.Error);
+        }
+        finally
+        {
+            AppState.EndBusyOperation();
         }
     }
 
@@ -2185,6 +2233,8 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
         ClearHistoryButton.IsEnabled = !isBusy && _allItems.Count > 0;
         ClearInvalidAccountsButton.IsEnabled = !isBusy && _allItems.Count > 0;
         OneClickHistoryQueryButton.IsEnabled = !isBusy && hasActive;
+        // 「Steam中查看」与「一键查询」同一规则：没选中账号（或正忙）时不可点。
+        OpenSteamBrowserButton.IsEnabled = !isBusy && hasActive;
         UseHistoryAccountButton.IsEnabled = !isBusy && hasActive;
         BatchSelectAllButton.IsEnabled = !isBusy && _viewItems.Count > 0;
         BatchClearButton.IsEnabled = !isBusy && hasChecked;

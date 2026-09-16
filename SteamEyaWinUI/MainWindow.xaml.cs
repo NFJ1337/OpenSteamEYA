@@ -607,6 +607,7 @@ public sealed partial class MainWindow : Window
             "loadout" => typeof(LoadoutPage),
             "personalization" => typeof(PersonalizationPage),
             "music" => typeof(MusicPage),
+            "clash" => typeof(VpnPage),
             "treasureBox" => typeof(TreasureBoxPage),
             "settings" => typeof(SettingsPage),
             "about" => typeof(AboutPage),
@@ -787,6 +788,7 @@ public sealed partial class MainWindow : Window
         LoadoutNavItem.Content = Loc.T("Nav_Loadout");
         PersonalizationNavItem.Content = Loc.T("Nav_Personalization");
         MusicNavItem.Content = Loc.T("Nav_Music");
+        ClashNavItem.Content = Loc.T("Nav_Clash");
         TreasureBoxNavItem.Content = Loc.T("Nav_TreasureBox");
         SettingsNavItem.Content = Loc.T("Nav_Settings");
         AboutNavItem.Content = Loc.T("Nav_About");

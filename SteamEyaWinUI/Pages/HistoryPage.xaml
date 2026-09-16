@@ -596,15 +596,16 @@
 
             <ScrollViewer x:Name="HistoryDetailScrollViewer" Grid.Row="1" Grid.Column="1" VerticalScrollBarVisibility="Auto">
                 <Border Style="{StaticResource CardBorderStyle}">
-                    <StackPanel x:Name="HistoryDetailContentPanel" Spacing="16">
-                        <StackPanel Spacing="6" HorizontalAlignment="Center">
+                    <!-- 间距比原来紧一档：字段 + 备注 + 三个操作按钮要在一屏里放完，避免出纵向滚动条 -->
+                    <StackPanel x:Name="HistoryDetailContentPanel" Spacing="8">
+                        <StackPanel Spacing="4" HorizontalAlignment="Center">
                             <!-- 不绑 DisplayName：留空才显示默认人像剪影（PersonPicture 会按文案取首字母），
                                  且语言切换重估绑定会把代码里清空的值盖回去。 -->
                             <!-- 顶部头像块整体缩小一档（92→68 / 20→17 / 间距 10→6），给下方字段留出高度。 -->
                             <PersonPicture
                                 x:Name="HistoryDetailAvatar"
-                                Width="68"
-                                Height="68" />
+                                Width="56"
+                                Height="56" />
                             <TextBlock
                                 x:Name="HistoryDetailAccountNameText"
                                 Text="{x:Bind Strings.Get('History_Detail_NoAccountSelected'), Mode=OneWay}"
@@ -622,7 +623,7 @@
 
                         <MenuFlyoutSeparator />
 
-                        <Grid x:Name="HistoryDetailFieldsGrid" RowSpacing="10" ColumnSpacing="12">
+                        <Grid x:Name="HistoryDetailFieldsGrid" RowSpacing="6" ColumnSpacing="12">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
@@ -712,7 +713,7 @@
                                 PlaceholderText="{x:Bind Strings.Get('History_Note_Placeholder'), Mode=OneWay}"
                                 TextWrapping="Wrap"
                                 AcceptsReturn="True"
-                                MaxHeight="120"
+                                MaxHeight="72"
                                 IsSpellCheckEnabled="False"
                                 LostFocus="HistoryDetailNoteBox_LostFocus" />
                         </StackPanel>
@@ -724,6 +725,18 @@
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE9D9;" FontSize="16" />
                                 <TextBlock Text="{x:Bind Strings.Get('Common_OneClickQuery'), Mode=OneWay}" />
+                            </StackPanel>
+                        </Button>
+
+                        <!-- 「Steam中查看」：用该账号的账号+密码登录 Steam 网页，弹出小窗口打开「我的页面」 -->
+                        <Button
+                            x:Name="OpenSteamBrowserButton"
+                            HorizontalAlignment="Stretch"
+                            Click="OpenSteamBrowserButton_Click"
+                            ToolTipService.ToolTip="{x:Bind Strings.Get('History_Btn_SteamBrowser_Tip'), Mode=OneWay}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE774;" FontSize="16" />
+                                <TextBlock Text="{x:Bind Strings.Get('History_Btn_SteamBrowser'), Mode=OneWay}" />
                             </StackPanel>
                         </Button>
 
