@@ -124,6 +124,12 @@ public sealed partial class MainWindow : Window
         // 旧版本「轻松音乐」页遗留的网页缓存：清一次，别让它继续占盘、也别被打进备份包。
         LegacyCacheCleaner.CleanRemovedMusicCacheOnce();
 
+        // 首次使用新版时可能把旧目录的数据复制过来了：写一条日志，方便排查「数据在哪」。
+        if (AppPaths.ImportedFromLegacy is { } legacyRoot)
+        {
+            AppLog.Info($"已从旧数据目录导入：\"{legacyRoot}\" → \"{AppPaths.DataRoot}\"（原目录保持原样，旧版仍可用）");
+        }
+
         // 每天第一次打开：把数据目录整个压成 ZIP 放到数据根目录（后台跑，完成/失败只写日志）。
         DailyBackupService.RunForTodayIfNeeded();
         StatusInfoBar.RegisterPropertyChangedCallback(

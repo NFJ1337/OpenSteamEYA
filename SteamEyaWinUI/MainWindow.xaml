@@ -2,7 +2,7 @@
     x:Class="SteamEyaWinUI.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="SteamEYA">
+    Title="SteamEYANFJ">
 
     <Grid x:Name="RootLayoutGrid" Background="{ThemeResource AuroraPageBackgroundBrush}" SizeChanged="RootLayoutGrid_SizeChanged">
         <Grid.RowDefinitions>

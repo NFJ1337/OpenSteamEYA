@@ -1,5 +1,5 @@
 ﻿#ifndef AppVersion
-  #define AppVersion "1.6.4"
+  #define AppVersion "1.6.5"
 #endif
 
 #ifndef PublishDir
@@ -13,12 +13,12 @@
 [Setup]
 ; 单个闭括号：{{ 转义成字面 {，末尾单 } 收尾，得到 {GUID}。写成 }} 会多出一个字面 }，
 ; 让卸载注册键变成 {GUID}}_is1；AppId 一旦随首个安装包发布就不可再改，故务必保持规范形式。
-AppId={{A49BF24E-5D48-4CF6-9A6F-D205668123B5}
-AppName=SteamEYA
+AppId={{75CFF795-4DDC-4D1B-95D2-D1F906DAA1A3}
+AppName=SteamEYANFJ
 AppVersion={#AppVersion}
-AppPublisher=hvh-software
-DefaultDirName={userappdata}\SteamEYA
-DefaultGroupName=SteamEYA
+AppPublisher=NFJ1337
+DefaultDirName={localappdata}\Programs\SteamEYANFJ
+DefaultGroupName=SteamEYANFJ
 DisableDirPage=no
 DisableProgramGroupPage=yes
 OutputDir={#OutputDir}
@@ -50,8 +50,8 @@ Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
     Excludes: "settings.json,vpn\*,logs\*,history\*,personalization\*,avatars\*,cached-avatars\*,white-avatars\*,white-accounts.json*,cached-login.json*,*.bak,crash.log"
 
 [Icons]
-Name: "{autoprograms}\SteamEYA"; Filename: "{app}\SteamEyaWinUI.exe"
-Name: "{autodesktop}\SteamEYA"; Filename: "{app}\SteamEyaWinUI.exe"; Tasks: desktopicon
+Name: "{autoprograms}\SteamEYANFJ"; Filename: "{app}\SteamEyaWinUI.exe"
+Name: "{autodesktop}\SteamEYANFJ"; Filename: "{app}\SteamEyaWinUI.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\SteamEyaWinUI.exe"; Description: "{cm:LaunchProgram,SteamEYA}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\SteamEyaWinUI.exe"; Description: "{cm:LaunchProgram,SteamEYANFJ}"; Flags: nowait postinstall skipifsilent

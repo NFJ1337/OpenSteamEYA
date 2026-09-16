@@ -39,7 +39,7 @@ internal sealed class SteamCredentialsAuthService
     private const uint PlatformTypeSteamClient = 1; // EAuthTokenPlatformType_SteamClient
     private const uint PersistencePersistent = 1;   // ESessionPersistence_Persistent
     private const int OsTypeWindows10 = 16;         // EOSType
-    private const string DeviceName = "SteamEYA";
+    private const string DeviceName = "SteamEYANFJ";
     private const int PollIntervalMs = 2500;
     private const int PollTimeoutSeconds = 120;
 

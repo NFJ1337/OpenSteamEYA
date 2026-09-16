@@ -1156,6 +1156,118 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             AppState.ShowStatus(Loc.T("Settings_Data_OpenFail"), InfoBarSeverity.Error);
         }
     }
+    /// <summary>
+    /// 「切换数据目录（不迁移）」：只把程序的数据目录指向选中的文件夹，不复制、不删除任何文件。
+    /// 与「移动」的区别：移动是复制全部数据再删掉旧目录；这里新旧目录都原地不动，
+    /// 新位置已有的数据文件会被直接使用，缺的文件由程序自己新建。
+    /// </summary>
+    private async void SwitchDataFolderButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_movingDataFolder)
+        {
+            return;
+        }
+
+        string? destination;
+        try
+        {
+            var picker = new FolderPicker
+            {
+                SuggestedStartLocation = PickerLocationId.ComputerFolder
+            };
+            picker.FileTypeFilter.Add("*");
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, MainWindow.Hwnd);
+            destination = (await picker.PickSingleFolderAsync())?.Path;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("打开数据目录选择器失败。", ex);
+            AppState.ShowStatus(Loc.T("Settings_Data_MovePickFail"), InfoBarSeverity.Error);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(destination))
+        {
+            return; // 用户取消
+        }
+
+        if (string.Equals(
+                AppPaths.NormalizePath(destination),
+                AppPaths.NormalizePath(AppPaths.DataRoot),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            AppState.ShowStatus(Loc.T("Settings_Data_MoveSame"), InfoBarSeverity.Informational);
+            return;
+        }
+
+        var xamlRoot = XamlRoot;
+        if (xamlRoot is null)
+        {
+            return;
+        }
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = xamlRoot,
+            Title = Loc.T("Settings_Data_SwitchDialogTitle"),
+            Content = Loc.Tf("Settings_Data_SwitchConfirm_Format", destination),
+            PrimaryButtonText = Loc.T("Settings_Btn_SwitchDataFolder"),
+            CloseButtonText = Loc.T("Common_Cancel"),
+            DefaultButton = ContentDialogButton.Primary
+        };
+
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        await SwitchDataFolderToAsync(destination);
+    }
+
+    /// <summary>
+    /// 真正执行「切换数据目录」：只写注册表里的指向并刷新界面，不复制、不删除任何文件。
+    /// 与 MoveDataFolderToAsync 的区别就在这里：那边会先复制全部数据、再删旧目录。
+    /// </summary>
+    private async Task SwitchDataFolderToAsync(string destination)
+    {
+        // 复用「正在操作数据目录」开关：与移动/恢复默认互斥，避免并发切目录。
+        _movingDataFolder = true;
+        SwitchDataFolderButton.IsEnabled = false;
+        MoveDataFolderButton.IsEnabled = false;
+        MoveToDefaultDataFolderButton.IsEnabled = false;
+        OpenDataFolderButton.IsEnabled = false;
+
+        try
+        {
+            Directory.CreateDirectory(destination);
+            AppPaths.SetDataRoot(destination);   // 只改指向：不复制、不删除任何文件
+
+            DataFolderPathText.Text = AppState.SettingsService.AppFolderPath;
+            MainWindow.Instance?.ApplyCustomBackground(AppState.SettingsService.Load());
+            AppState.ReloadHistory();
+            AppState.ReloadWhiteAccounts();
+
+            AppLog.Info($"数据目录已切换（未迁移、未删除任何文件）：\"{AppState.SettingsService.AppFolderPath}\"");
+            AppState.ShowStatus(
+                Loc.Tf("Settings_Data_SwitchSuccess_Format", AppState.SettingsService.AppFolderPath),
+                InfoBarSeverity.Success);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("切换数据目录失败。", ex);
+            AppState.ShowStatus(Loc.Tf("Settings_Data_MoveFailed_Format", ex.Message), InfoBarSeverity.Error);
+        }
+        finally
+        {
+            _movingDataFolder = false;
+            SwitchDataFolderButton.IsEnabled = true;
+            MoveDataFolderButton.IsEnabled = true;
+            MoveToDefaultDataFolderButton.IsEnabled = true;
+            OpenDataFolderButton.IsEnabled = true;
+        }
+    }
+
+
     private async void MoveDataFolderButton_Click(object sender, RoutedEventArgs e)
     {
         if (_movingDataFolder)
