@@ -691,6 +691,7 @@
     "History_Status_SelectAccount": "请选择历史账号。",
     "History_Status_Querying_Format": "正在一键查询 {0} 的账号状态...",
     "History_Status_QueryDone_Format": "{0} 查询完成：优先分 {1}，CS2等级 {2}，冷却 {3}，GC VAC {4}。",
+    "History_Status_QueryDone_Password_Format": "{0} 查询完成（账号密码）：{1}。",
     "History_Status_QueryCanceled": "已取消一键查询。",
   "History_Status_QueryTimeout_Format": "一键查询超时：等待 {0} 秒仍未返回结果，请检查网络或挂上 VPN 后重试。",
     "Cached_Title": "缓存账号",

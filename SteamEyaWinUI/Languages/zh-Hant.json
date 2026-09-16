@@ -702,6 +702,7 @@
     "History_Status_SelectAccount": "請選擇歷史帳號。",
     "History_Status_Querying_Format": "正在一鍵查詢 {0} 的帳號狀態...",
     "History_Status_QueryDone_Format": "{0} 查詢完成：優先權分數 {1}，CS2 等級 {2}，冷卻 {3}，GC VAC {4}。",
+    "History_Status_QueryDone_Password_Format": "{0} 查詢完成（帳號密碼）：{1}。",
     "History_Status_QueryCanceled": "已取消一鍵查詢。",
   "History_Status_QueryTimeout_Format": "一鍵查詢逾時：等待 {0} 秒仍未回傳結果，請檢查網路或掛上 VPN 後重試。",
     "Cached_Title": "已快取帳號",

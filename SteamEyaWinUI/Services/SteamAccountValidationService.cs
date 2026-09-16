@@ -35,6 +35,14 @@ internal sealed class SteamAccountValidationService
         Timeout = TimeSpan.FromSeconds(30)
     };
 
+    // 批内复用同一条 CM 连接：每账号一次 WebSocket 握手实测 0.8~2.2 秒，换账号只重新登录即可。
+    // 空闲超过 IdleReleaseAfter，或调用方在批次结束时显式释放（ReleaseReusedCmAsync）。
+    private static readonly TimeSpan IdleReleaseAfter = TimeSpan.FromSeconds(60);
+
+    private readonly SemaphoreSlim _cmGate = new(1, 1);
+    private SteamCmClient? _reusedCmClient;
+    private DateTimeOffset _reusedCmUsedAt;
+
     public async Task<SteamAccountValidationResult> QueryAsync(
         string accountName,
         string password,
@@ -61,47 +69,123 @@ internal sealed class SteamAccountValidationService
             cancellationToken);
 
         progress?.Report(Loc.T("Login_Status_QueryingAccount"));
-        await using var cmClient = new SteamCmClient(HttpClient);
-        await cmClient.ConnectAndLogOnAsync(auth.RefreshToken, auth.SteamId, cancellationToken);
-        var session = await SteamWebSession.BuildAsync(
-            cmClient,
-            auth.RefreshToken,
-            auth.SteamId,
-            cancellationToken);
 
-        var cooldownHtml = await GetHtmlAsync(CooldownUrl, session, cancellationToken);
-        var cooldownText = ExtractCooldownExpiration(cooldownHtml);
-        uint? activeCooldownSeconds = null;
-        if (!string.IsNullOrWhiteSpace(cooldownText))
+        // 整段查询独占这条 CM 连接：同一个 socket 上并发换账号会把别的账号的请求搅乱。
+        // 查完不关连接，留给下一个账号复用；批次结束时由 ReleaseReusedCmAsync 统一释放。
+        await _cmGate.WaitAsync(cancellationToken);
+        try
         {
-            var endsAt = ParseCooldownEnd(cooldownHtml, cooldownText);
-            if (endsAt.HasValue)
+            var cmClient = await AcquireCmClientAsync(auth.RefreshToken, auth.SteamId, cancellationToken);
+            var session = await SteamWebSession.BuildAsync(
+                cmClient,
+                auth.RefreshToken,
+                auth.SteamId,
+                cancellationToken);
+
+            var cooldownHtml = await GetHtmlAsync(CooldownUrl, session, cancellationToken);
+            var cooldownText = ExtractCooldownExpiration(cooldownHtml);
+            uint? activeCooldownSeconds = null;
+            if (!string.IsNullOrWhiteSpace(cooldownText))
             {
-                var remainingSeconds = (endsAt.Value - DateTimeOffset.Now).TotalSeconds;
-                if (remainingSeconds > 0)
+                var endsAt = ParseCooldownEnd(cooldownHtml, cooldownText);
+                if (endsAt.HasValue)
                 {
-                    activeCooldownSeconds = (uint)Math.Ceiling(remainingSeconds);
+                    var remainingSeconds = (endsAt.Value - DateTimeOffset.Now).TotalSeconds;
+                    if (remainingSeconds > 0)
+                    {
+                        activeCooldownSeconds = (uint)Math.Ceiling(remainingSeconds);
+                    }
                 }
             }
-        }
 
-        // VAC 冷却就只记录为 CS2 冷却状态，绝不能写成永久 VAC 封禁。
-        if (activeCooldownSeconds is > 0)
-        {
+            // VAC 冷却就只记录为 CS2 冷却状态，绝不能写成永久 VAC 封禁。
+            if (activeCooldownSeconds is > 0)
+            {
+                return new SteamAccountValidationResult(
+                    auth.SteamId,
+                    activeCooldownSeconds,
+                    false,
+                    Loc.Tf("Account_Cooldown_Summary_Format", cooldownText));
+            }
+
+            var vacHtml = await GetHtmlAsync(VacUrl, session, cancellationToken);
+            var vacBanned = vacHtml.Contains("Counter-Strike 2", StringComparison.OrdinalIgnoreCase);
             return new SteamAccountValidationResult(
                 auth.SteamId,
-                activeCooldownSeconds,
-                false,
-                Loc.Tf("Account_Cooldown_Summary_Format", cooldownText));
+                0,
+                vacBanned,
+                vacBanned ? Loc.T("WhiteAccounts_Filter_Vac") : Loc.T("Cs_Premier_NoRestrictions"));
+        }
+        finally
+        {
+            _reusedCmUsedAt = DateTimeOffset.Now;
+            _cmGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// 取一条已登录的 CM 连接：优先复用上一条（只换账号登录），复用不了才重新握手。
+    /// 调用方必须已持有 <c>_cmGate</c>，并在整段查询结束后交还。
+    /// </summary>
+    private async Task<SteamCmClient> AcquireCmClientAsync(
+        string refreshToken,
+        string steamId,
+        CancellationToken cancellationToken)
+    {
+        if (_reusedCmClient is not null && DateTimeOffset.Now - _reusedCmUsedAt > IdleReleaseAfter)
+        {
+            await ReleaseReusedCmAsyncCore();
         }
 
-        var vacHtml = await GetHtmlAsync(VacUrl, session, cancellationToken);
-        var vacBanned = vacHtml.Contains("Counter-Strike 2", StringComparison.OrdinalIgnoreCase);
-        return new SteamAccountValidationResult(
-            auth.SteamId,
-            0,
-            vacBanned,
-            vacBanned ? Loc.T("WhiteAccounts_Filter_Vac") : Loc.T("Cs_Premier_NoRestrictions"));
+        if (_reusedCmClient is not null && await _reusedCmClient.TryRelogOnAsync(refreshToken, steamId, cancellationToken))
+        {
+            return _reusedCmClient;
+        }
+
+        if (_reusedCmClient is not null)
+        {
+            // 复用失败（连接已断/服务端拒绝）：丢掉旧的，重新握手。
+            await ReleaseReusedCmAsyncCore();
+        }
+
+        var created = new SteamCmClient(HttpClient);
+        await created.ConnectAndLogOnAsync(refreshToken, steamId, cancellationToken);
+        _reusedCmClient = created;
+        _reusedCmUsedAt = DateTimeOffset.Now;
+        return created;
+    }
+
+    /// <summary>
+    /// 放掉复用的 CM 连接（批次结束/取消时调用）。不调用也会在空闲超时后自行释放。
+    /// 等 30 秒拿不到独占权就放弃：说明还有查询占着它，让它自己闲着释放即可。
+    /// </summary>
+    public async ValueTask ReleaseReusedCmAsync()
+    {
+        if (!await _cmGate.WaitAsync(TimeSpan.FromSeconds(30)))
+        {
+            AppLog.Warn("释放复用 CM 连接超时：仍有查询占用，等它空闲后自行释放。");
+            return;
+        }
+
+        try
+        {
+            await ReleaseReusedCmAsyncCore();
+        }
+        finally
+        {
+            _cmGate.Release();
+        }
+    }
+
+    /// <summary>真正关掉复用连接。必须在持有 <c>_cmGate</c> 时调用。</summary>
+    private async ValueTask ReleaseReusedCmAsyncCore()
+    {
+        var client = _reusedCmClient;
+        _reusedCmClient = null;
+        if (client is not null)
+        {
+            await client.DisposeAsync();
+        }
     }
 
     private static string? ExtractCooldownExpiration(string html)

@@ -118,6 +118,7 @@ internal sealed class SteamCmClient : IAsyncDisposable
     private Task? _receiveTask;
     private Timer? _heartbeatTimer;
     private TaskCompletionSource<LogonResponse>? _logonResponse;
+    private TaskCompletionSource<bool>? _loggedOffResponse;
     private Action<SteamGcClientMessage>? _gcMessageTap;
     private int _sessionId;
     private ulong _steamId;
@@ -176,6 +177,86 @@ internal sealed class SteamCmClient : IAsyncDisposable
         throw new InvalidOperationException(
             Loc.Tf("Cm_Error_CannotConnect_Format", lastError?.Message),
             lastError);
+    }
+
+    /// <summary>连接是否还活着（批内复用前的判断）。</summary>
+    public bool IsConnected => _socket is { State: WebSocketState.Open };
+
+    /// <summary>
+    /// 复用已经握手好的 WebSocket 换账号登录：先登出旧账号，再用新 refresh token 登录。
+    /// 目的是省掉每账号一次 WebSocket 握手（日志实测「连接 xxx ms」0.8~2.2 秒）。
+    /// 连接已断、或换账号登录失败时返回 false，由调用方回退到 <see cref="ConnectAndLogOnAsync"/> 重新握手：
+    /// 复用不成时行为与改动前一致，不会更差。
+    /// </summary>
+    public async Task<bool> TryRelogOnAsync(
+        string refreshToken,
+        string steamId,
+        CancellationToken cancellationToken)
+    {
+        if (!IsConnected)
+        {
+            return false;
+        }
+
+        try
+        {
+            await LogOffAsync(cancellationToken);
+
+            // 换账号：登录消息头里的 steamId 要跟着换，会话 id 归零（服务端会在登录响应里重新下发）。
+            _steamId = ulong.Parse(steamId, CultureInfo.InvariantCulture);
+            _sessionId = 0;
+            _heartbeatTimer?.Dispose();
+            _heartbeatTimer = null;
+
+            await LogOnAsync(refreshToken, cancellationToken);
+            AppLog.Info("[cm] 复用已连的 CM 连接换账号登录成功（省掉一次 WebSocket 握手）");
+            return true;
+        }
+        catch (SteamCmException ex) when (ex.IsTokenFailure)
+        {
+            // 令牌/账号本身的问题：照旧抛给调用方判定，不在复用层吞掉。
+            throw;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            AppLog.Warn($"[cm] 复用连接换账号登录失败（{ex.Message}），改为重新握手。");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 发 ClientLogOff 并等 Steam 回 ClientLoggedOff。CM 偶尔不回也不影响后续登录
+    /// （协议允许同一连接上重新发 ClientLogon），所以只等 5 秒，超时就继续。
+    /// </summary>
+    private async Task LogOffAsync(CancellationToken cancellationToken)
+    {
+        if (!IsConnected)
+        {
+            return;
+        }
+
+        var loggedOff = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _loggedOffResponse = loggedOff;
+        try
+        {
+            await SendProtobufMessageAsync(
+                EMsgClientLogOff,
+                Array.Empty<byte>(),
+                targetJobName: null,
+                jobIdSource: null,
+                realm: null,
+                cancellationToken);
+
+            await loggedOff.Task.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+        }
+        catch (TimeoutException)
+        {
+            // 服务端没回 LoggedOff：直接继续，用登录响应判定结果。
+        }
+        finally
+        {
+            _loggedOffResponse = null;
+        }
     }
 
     public async Task<string> GenerateAccessTokenForAppAsync(
@@ -740,6 +821,7 @@ internal sealed class SteamCmClient : IAsyncDisposable
                 break;
 
             case EMsgClientLoggedOff:
+                _loggedOffResponse?.TrySetResult(true);
                 FailPendingRequests(CreateLoggedOffException(body));
                 break;
 

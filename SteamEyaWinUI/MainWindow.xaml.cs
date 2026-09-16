@@ -512,8 +512,14 @@ public sealed partial class MainWindow : Window
         StatusInfoBar.IsOpen = true;
 
         // 不分等级：任何提示都在 3 秒后自动收起（含警告/错误，避免常驻占位）。
+        // 例外：批量查询/清空无效账号这类长流程整段挂在忙碌状态上，单步（CM 连接、逐页抓取）常超过 3 秒，
+        // 期间让提示常驻，否则每查一个账号都会「消失一块」再重新弹出来；
+        // 流程结束由 OnBusyChanged(false) 再按原规则收起。
         _statusDismissTimer.Stop();
-        _statusDismissTimer.Start();
+        if (!AppState.IsBusy)
+        {
+            _statusDismissTimer.Start();
+        }
     }
 
     /// <summary>
@@ -630,6 +636,13 @@ public sealed partial class MainWindow : Window
     {
         BusyRing.IsActive = isBusy;
         BusyRing.Visibility = isBusy ? Visibility.Visible : Visibility.Collapsed;
+
+        // 长流程收尾：最后一条提示（如「批量查询完成」）按原规则再留 3 秒再收起。
+        if (!isBusy && StatusInfoBar.IsOpen)
+        {
+            _statusDismissTimer.Stop();
+            _statusDismissTimer.Start();
+        }
     }
 
     /// <summary>把主题套用到内容根（无打包下 Application.RequestedTheme 不可后置，故走根元素 RequestedTheme）。</summary>

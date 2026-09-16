@@ -212,6 +212,10 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
         WhiteBatchQueryButton.Visibility = whiteOnly ? Visibility.Visible : Visibility.Collapsed;
         // 「导入白号」只在账号管理页出现：历史账号页隐藏它（同一个工具栏，靠作用域切换）。
         BatchImportWhiteButton.Visibility = whiteOnly ? Visibility.Visible : Visibility.Collapsed;
+        // 「清空无效账号」反过来：只在历史账号页出现，账号管理页隐藏（同一个工具栏，靠作用域切换）。
+        ClearInvalidAccountsButton.Visibility = whiteOnly ? Visibility.Collapsed : Visibility.Visible;
+        // 它空出来的那一列交给「清空」：账号管理页把清空挪到第 1 列，紧贴左侧工具组，不留空档。
+        Grid.SetColumn(ClearHistoryButton, whiteOnly ? 1 : 2);
         RefreshHistoryButton.Visibility = whiteOnly ? Visibility.Collapsed : Visibility.Visible;
         WhiteRefreshHistoryButton.Visibility = whiteOnly ? Visibility.Visible : Visibility.Collapsed;
         HistorySearchBox.Visibility = whiteOnly ? Visibility.Collapsed : Visibility.Visible;
@@ -883,10 +887,13 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
                 {
                     // 走「一键查询」完全相同的逻辑（历史页详情面板那个按钮调用的同一个方法）：
                     // 查不动 = 这个账号一键查询也用不了；成功时顺带把最新状态落盘（优先分/等级/冷却/VAC）。
+                    // 结果要落回当前页面对应的账号库：白号页写 white-accounts.json，
+                    // 否则白号记录拿不到刚查到的冷却/VAC 状态（历史页仍是历史库，行为不变）。
                     await loginPage.QueryAndSaveCsStatusAsync(
                         account.AccountName,
                         account.EyaToken,
-                        cancellationToken);
+                        cancellationToken,
+                        whiteStore: _scope == HistoryPageScope.WhiteAccounts);
                 }
                 catch (OperationCanceledException)
                 {
@@ -1151,15 +1158,28 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
         timeoutCts.CancelAfter(OneClickQueryTimeout);
         AppState.ShowStatus(Loc.Tf("History_Status_Querying_Format", account.AccountTitle), InfoBarSeverity.Informational);
 
-        if (AppState.LoginPage is not { } loginPage)
-        {
-            AppState.ShowStatus(Loc.T("History_Status_LoginPageNotReady"), InfoBarSeverity.Error);
-            AppState.EndBusyOperation();
-            return;
-        }
-
         try
         {
+            // 两个页面各用各的凭据，不互相借用：
+            // · 账号管理页：账号+密码登录 Steam，读 help.steampowered.com 的冷却/VAC 页面（与「批量查询」同一条链路）。
+            // · 历史账号页：只有 EYA 令牌，走令牌的一键查询（CM + GC）。
+            if (_scope == HistoryPageScope.WhiteAccounts)
+            {
+                var validation = await ValidateHistoryAccountAsync(account, timeoutCts.Token);
+                AppState.ShowStatus(
+                    Loc.Tf("History_Status_QueryDone_Password_Format", account.AccountTitle, validation.SummaryText),
+                    InfoBarSeverity.Success);
+                await RefreshValidatedProfilesAsync(new[] { validation.SteamId }, timeoutCts.Token);
+                ReloadScopedAccounts(validation.SteamId);
+                return;
+            }
+
+            if (AppState.LoginPage is not { } loginPage)
+            {
+                AppState.ShowStatus(Loc.T("History_Status_LoginPageNotReady"), InfoBarSeverity.Error);
+                return;
+            }
+
             var score = await loginPage.QueryAndSaveCsStatusAsync(
                 account.AccountName, account.EyaToken, timeoutCts.Token);
             AppState.ShowStatus(
@@ -1754,6 +1774,8 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
         {
             _whiteBatchQueryInFlight = false;
             _whiteBatchQueryCancellationPending = false;
+            // 复用的 CM 连接只在同一次批量里有意义：整批跑完就放掉，不留登录态 socket。
+            await AppState.AccountValidationService.ReleaseReusedCmAsync();
             AppState.EndBusyOperation();
             UpdateWhiteBatchQueryButtonState();
         }
@@ -1822,6 +1844,7 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
         }
         finally
         {
+            await AppState.AccountValidationService.ReleaseReusedCmAsync();
             AppState.EndBusyOperation();
         }
     }
