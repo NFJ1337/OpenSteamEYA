@@ -120,6 +120,12 @@ public sealed partial class MainWindow : Window
 
         // 后台预热 Steam 侧连接：首次点「一键查询 / 清空无效账号」不用再等冷启动。
         _ = PrewarmSteamConnectionsAsync();
+
+        // 旧版本「轻松音乐」页遗留的网页缓存：清一次，别让它继续占盘、也别被打进备份包。
+        LegacyCacheCleaner.CleanRemovedMusicCacheOnce();
+
+        // 每天第一次打开：把数据目录整个压成 ZIP 放到数据根目录（后台跑，完成/失败只写日志）。
+        DailyBackupService.RunForTodayIfNeeded();
         StatusInfoBar.RegisterPropertyChangedCallback(
             InfoBar.IsOpenProperty,
             (_, _) => StatusOverlay.Visibility = StatusInfoBar.IsOpen ? Visibility.Visible : Visibility.Collapsed);
@@ -612,7 +618,6 @@ public sealed partial class MainWindow : Window
             "cachedAccounts" => typeof(CachedAccountsPage),
             "loadout" => typeof(LoadoutPage),
             "personalization" => typeof(PersonalizationPage),
-            "music" => typeof(MusicPage),
             "clash" => typeof(VpnPage),
             "treasureBox" => typeof(TreasureBoxPage),
             "settings" => typeof(SettingsPage),
@@ -800,7 +805,6 @@ public sealed partial class MainWindow : Window
         CachedAccountsNavItem.Content = Loc.T("Nav_CachedAccounts");
         LoadoutNavItem.Content = Loc.T("Nav_Loadout");
         PersonalizationNavItem.Content = Loc.T("Nav_Personalization");
-        MusicNavItem.Content = Loc.T("Nav_Music");
         ClashNavItem.Content = Loc.T("Nav_Clash");
         TreasureBoxNavItem.Content = Loc.T("Nav_TreasureBox");
         SettingsNavItem.Content = Loc.T("Nav_Settings");

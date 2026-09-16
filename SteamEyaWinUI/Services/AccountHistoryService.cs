@@ -983,6 +983,12 @@ internal sealed class AccountHistoryService
         try
         {
             var json = File.ReadAllText(HistoryFilePath);
+            // 自愈：历史版本「移动数据目录」会把根部 vault 头部写没（密文还在、密钥头部没了），
+            // 表现就是「账号全都不见了」。这里先从 .bak 把头部接回来，再按正常流程解析解密。
+            if (CredentialProtector.TryRestoreHeaderFromBackup(HistoryFilePath, json, out var healedJson))
+            {
+                json = healedJson;
+            }
             var document = JsonSerializer.Deserialize(json, AccountHistoryJsonContext.Default.AccountHistoryDocument)
                 ?? new AccountHistoryDocument();
             document.Accounts ??= [];

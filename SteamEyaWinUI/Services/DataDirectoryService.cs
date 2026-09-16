@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace SteamEyaWinUI.Services;
 
@@ -122,7 +123,7 @@ internal static class DataDirectoryService
         {
             if (Directory.Exists(source))
             {
-                Directory.Delete(source, recursive: true);
+                DeleteDirectoryWithRetry(source);
             }
         }
         catch (Exception ex)
@@ -174,7 +175,7 @@ internal static class DataDirectoryService
         {
             if (Directory.Exists(source))
             {
-                Directory.Delete(source, recursive: true);
+                DeleteDirectoryWithRetry(source);
             }
         }
         catch (Exception ex)
@@ -288,34 +289,44 @@ internal static class DataDirectoryService
             return;
         }
 
+        // 这里必须把整份 JSON 原样搬、只改 avatarPath：凭据库根部除 accounts 外还有 "vault"
+        // （包着数据密钥 DEK）、以及将来可能新增的字段。旧实现用强类型文档反序列化再回写，
+        // 会把它们整段丢掉 —— 头部一没，同一份密文就再也解不开，表现为「账号全都不见了」。
         var json = File.ReadAllText(filePath);
-        var document = JsonSerializer.Deserialize(json, AccountHistoryJsonContext.Default.AccountHistoryDocument);
-        if (document?.Accounts is null)
+        if (JsonNode.Parse(json) is not JsonObject root || root["accounts"] is not JsonArray accounts)
         {
             return;
         }
 
         var changed = false;
-        foreach (var account in document.Accounts)
+        foreach (var node in accounts.OfType<JsonObject>())
         {
-            var remapped = RemapStoredPath(
-                account.AvatarPath,
-                source,
-                target,
-                Path.Combine(target, avatarFolderName));
-            if (!string.Equals(account.AvatarPath, remapped, StringComparison.Ordinal))
+            if (node["avatarPath"] is not JsonValue value || !value.TryGetValue(out string? storedPath))
             {
-                account.AvatarPath = remapped;
+                continue;
+            }
+
+            var remapped = RemapStoredPath(storedPath, source, target, Path.Combine(target, avatarFolderName));
+            if (!string.Equals(storedPath, remapped, StringComparison.Ordinal))
+            {
+                node["avatarPath"] = remapped;
                 changed = true;
             }
         }
 
-        if (changed)
+        if (!changed)
         {
-            File.WriteAllText(
-                filePath,
-                JsonSerializer.Serialize(document, AccountHistoryJsonContext.Default.AccountHistoryDocument));
+            return;
         }
+
+        // 兜底：本来就带 vault 的文件，改完必须还在；不满足就宁可不写（避免再次把密钥头部写没）。
+        if (json.Contains("\"vault\"", StringComparison.Ordinal) && root["vault"] is null)
+        {
+            AppLog.Error($"跳过重写 {relativeFilePath}：本次写入会丢失凭据库密钥头部。");
+            return;
+        }
+
+        File.WriteAllText(filePath, root.ToJsonString(JsonWriteOptions));
     }
 
     private static void RewriteLoginCachePaths(string source, string target)
@@ -326,32 +337,57 @@ internal static class DataDirectoryService
             return;
         }
 
+        // 同 RewriteAccountHistoryPaths：只改 avatarPath，其余字段（含以后可能加的密钥头部）原样保留。
         var json = File.ReadAllText(filePath);
-        var document = JsonSerializer.Deserialize(json, SteamLoginCacheJsonContext.Default.CachedSteamLoginDocument);
-        if (document is null)
+        if (JsonNode.Parse(json) is not JsonObject root)
         {
             return;
         }
 
-        var changed = false;
         var avatarFolder = Path.Combine(target, "cached-avatars");
-        foreach (var account in (document.Accounts ?? []).Concat(document.EyaAccounts ?? []))
+        var changed = false;
+        foreach (var arrayName in LoginCacheAccountArrays)
         {
-            var remapped = RemapStoredPath(account.AvatarPath, source, target, avatarFolder);
-            if (!string.Equals(account.AvatarPath, remapped, StringComparison.Ordinal))
+            if (root[arrayName] is not JsonArray accounts)
             {
-                account.AvatarPath = remapped;
-                changed = true;
+                continue;
+            }
+
+            foreach (var node in accounts.OfType<JsonObject>())
+            {
+                if (node["avatarPath"] is not JsonValue value || !value.TryGetValue(out string? storedPath))
+                {
+                    continue;
+                }
+
+                var remapped = RemapStoredPath(storedPath, source, target, avatarFolder);
+                if (!string.Equals(storedPath, remapped, StringComparison.Ordinal))
+                {
+                    node["avatarPath"] = remapped;
+                    changed = true;
+                }
             }
         }
 
-        if (changed)
+        if (!changed)
         {
-            File.WriteAllText(
-                filePath,
-                JsonSerializer.Serialize(document, SteamLoginCacheJsonContext.Default.CachedSteamLoginDocument));
+            return;
         }
+
+        if (json.Contains("\"vault\"", StringComparison.Ordinal) && root["vault"] is null)
+        {
+            AppLog.Error("跳过重写 cached-login.json：本次写入会丢失密钥头部。");
+            return;
+        }
+
+        File.WriteAllText(filePath, root.ToJsonString(JsonWriteOptions));
     }
+
+    /// <summary>登录缓存里放账号的两个数组名（见 CachedSteamLoginDocument）。</summary>
+    private static readonly string[] LoginCacheAccountArrays = ["accounts", "eyaAccounts"];
+
+    /// <summary>回写 JSON 用：保持与原有存档一致的缩进风格。</summary>
+    private static readonly JsonSerializerOptions JsonWriteOptions = new() { WriteIndented = true };
 
     private static string? RemapStoredPath(
         string? storedPath,
@@ -410,7 +446,7 @@ internal static class DataDirectoryService
         foreach (var file in Directory.EnumerateFiles(source))
         {
             var name = Path.GetFileName(file);
-            File.Copy(file, Path.Combine(destination, name), overwrite: false);
+            CopyFileWithRetry(file, Path.Combine(destination, name));
         }
     }
 
@@ -441,5 +477,43 @@ internal static class DataDirectoryService
     {
         var prefix = parent + Path.DirectorySeparatorChar;
         return candidate.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+    }
+    /// <summary>
+    /// 单个文件的复制：被杀毒、索引或「刚退出的引擎」短暂占用时，File.Copy 会直接抛异常。
+    /// 重试几次足以扛过这类瞬时占用；仍失败就把异常抛给上层（移动流程据此回滚目标目录）。
+    /// </summary>
+    private static void CopyFileWithRetry(string source, string destination)
+    {
+        const int attempts = 4;
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                File.Copy(source, destination, overwrite: false);
+                return;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && attempt < attempts)
+            {
+                Thread.Sleep(attempt * 200);
+            }
+        }
+    }
+
+    /// <summary>删除旧目录同样会撞上瞬时占用（进程退出瞬间句柄还没关干净），重试几次再报错。</summary>
+    private static void DeleteDirectoryWithRetry(string path)
+    {
+        const int attempts = 4;
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                Directory.Delete(path, recursive: true);
+                return;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && attempt < attempts)
+            {
+                Thread.Sleep(attempt * 250);
+            }
+        }
     }
 }

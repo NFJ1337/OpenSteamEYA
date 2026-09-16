@@ -2,44 +2,35 @@
 
 > 本文件只记录用户明确要求的协作约定，不包含任何托管注入区块（握手/路由/完整性标记由用户级配置负责，勿在此重复）。
 
-## 触发词：裸回复「1」= 打包（用户明确要求）
-- 每轮调整结束后，**检查用户这条消息是否就是单个数字 `1`**（前后无其它文字、无标点）。
-- 是 `1` → **先把版本号 +1**（见下节），再执行打包（`scripts\build-installer.ps1 -Version <新版本>`），完成后按下面的交付方式只回一个链接。
-- **其它任何内容都不算打包指令**，包括 `1.`、「第1个」、「选1」、带任何附加文字的 `1`、以及我之前给出的编号选项里的 `1`——一律不触发打包。
-## 版本号自增规则（用户明确要求）
-- **只有**当用户那条消息就是单个 `1`（触发打包的那一条）时，才在打包前把版本号 **+1**；
-  其它任何说法的「打包 / 重新打包」（例如带文字的「打包」「重新打包」「打包 1.3.0」）都**不自动 +1**，除非用户明确给了版本号。
-- 自增规则：末位 0～9 递增，满 10 进位，依次类推。
-  - 例：`1.2.0 → 1.2.1`、`1.1.9 → 1.2.0`、`1.2.9 → 1.3.0`、`1.9.9 → 2.0.0`。
-- 执行`scripts\bump-version.ps1`：同步改三处版本（`SteamEyaWinUI.csproj` 的 Version/FileVersion/AssemblyVersion/InformationalVersion、`scripts\build-installer.ps1` 的默认 `$Version`、`build\installer\SteamEYA.iss` 的默认 AppVersion），输出 `NewVersion=x.y.z`。
-- 然后打包：`scripts\build-installer.ps1 -Version <新版本>`；一步到位也可用 `-Bump`。
-- 只算不写（不动文件）：`scripts\bump-version.ps1 -DryRun`。
-## 触发词：裸回复「2」= 打包 + 覆盖发布页附件（用户明确要求）
-- 用户消息就是单个数字 `2`（前后无其它文字）→ 与 `1` 一样先按版本号自增规则 **+1** 打包，
-  然后用 `scripts\publish-release.ps1 -Version <新版本>` 把**新安装包与 latest.json 上传到 release（tag `正式exe`）**，
-  并删掉 release 上旧的 `SteamEYA-*-win-x64-setup.exe`，等效于在发布页「重新保存文件」。
-- 凭据：脚本自动取 `GH_TOKEN`/`GITHUB_TOKEN`，否则读本机 Git 凭据管理器（与 git push 同一份凭据，实测登录用户 NFJ1337）。
-- **同时发布精简的改动说明，并带上版本号**（用户明确要求「2 时把改的内容精简同时发布，加上版本号」）：
-  发布前把本轮改动浓缩成 3～6 条中文说明（用户视角：新增/修复了什么，不写代码细节），
-  用 `-Notes '新增：…','修复：…'`（或 `-NotesFile <文件>`）随发布一起传给脚本；
-  脚本会在 release 正文首行固定写上 `SteamEYA v<版本>`（纯文本，客户端逐行显示，别用 Markdown 井号标题），
-  正文与 `latest.json` 的 `changelog` 都会同步这些说明。
-- 该触发词的回复：安装包链接 + **一行**发布结果确认（如「已替换 release 正式exe 下的安装包」）；不罗列体积/哈希/清单。
-- **发布前先本地提交**（用户明确要求：「2 时版本号也提交」）：`publish-release.ps1` 加 `-Commit` 即会在上传前
-  `git add -A` + `git commit -m "SteamEYA <版本>：版本号与本次改动（本地提交，未推送）"`；**只提交、不推送**，推送仍归 `3`。
-- **版本号自增规则与 `1` 完全相同**：每按一次 `2` 也先把版本号 +1（末位 0～9，满 10 进位），
-  例：`1.2.5 → 1.2.6 → 1.2.7 → 1.2.8 → 1.2.9 → 1.3.0`；不会因为「只是替换附件」而跳过自增。
-- 任何其它内容（包括 `2.`、带文字的 2）都不触发；`1` 只打包、不上传。
-## 触发词：裸回复「3」= 打包 + 覆盖发布页附件 + 源码同步到 GitHub（用户明确要求）
-- 用户消息就是单个数字 `3`（前后无其它文字）→ **先做 `2` 的全部动作**：版本号 +1 → 打包 →
-  `scripts\publish-release.ps1 -Version <新版本>`（替换 release 上的安装包 + latest.json）；
-- 再执行 `scripts\publish-source.ps1 -Version <新版本>`：
-  1) 把源码打包成 `artifacts\SteamEYA-<版本>-source.zip`（排除 .git/.vs/artifacts/bin/obj），
-  2) `git add -A` → 有改动就 commit → `git push origin main`（把源码改动同步到 GitHub），
-  3) 把源码 zip 上传到 release（同名覆盖）。
-- 版本号自增规则与 `1`/`2` 相同（末位 0～9，满 10 进位）。
-- 该触发词的回复：安装包链接 + **一行**确认（例：已替换 release 附件、已推送源码 n 条改动、源码包已上传）。
-- 凭据同 `2`：`GH_TOKEN`/`GITHUB_TOKEN` → 本机 Git 凭据管理器（git push 与 gh 用同一份）。
+## 触发词：裸回复「1」= 只给免安装版路径（2026-09-16 用户重新定义）
+- 用户消息就是单个数字 `1`（前后无其它文字）时：**不打包安装包、不动版本号**，
+  只把免安装版刷新到最新（跑 `scripts\run-portable.ps1`），然后回报它的绝对路径：
+  `artifacts\publish\win-x64\SteamEyaWinUI.exe`。
+- 只回报这一个可点击链接；不罗列体积/哈希/目录清单，也不自动打开或运行它。
+
+## 触发词：裸回复「2」= 打包 + 版本号 +1 + 累积更新日志 + 发布源码（2026-09-16 用户重新定义）
+- 用户消息就是单个数字 `2`（前后无其它文字）时，按顺序做完这四步：
+  1. **版本号 +1**：`scripts\bump-version.ps1`（末位 0~9 递增、满 10 进位：1.6.3 → 1.6.4），
+     新版本号会同时写进 csproj 与安装包信息，也作为发布正文的版本号。
+  2. **打包**：`scripts\build-installer.ps1 -Version <新版本>`。
+  3. **精简更新日志并发布到 GitHub release**：把最近一轮改动浓缩成 3~6 条中文说明（用户视角、不写代码细节），
+     交给 `scripts\publish-release.ps1 -Version <新版本> -Commit -NotesFile <说明文件>`。
+     正文格式照旧：首行 `SteamEYA v<新版本>`，说明逐条排在它下面；**新增块放在正文最上面，
+     绝不覆盖以前的版本日志**（脚本已按块累积；同版本重复发布只替换自己那一块）。
+  4. **发布源码到 GitHub**：`scripts\publish-source.ps1 -Version <新版本>`（打源码 zip → 提交 →
+     `git push origin main` → 移动 tag「正式exe」→ 上传源码包）。
+- 回报：安装包链接 + 一行确认（已替换 release 附件 / 更新日志已新增未覆盖 / 源码已推送）。
+  只有失败或需要用户决策时才多解释几句。
+
+## 版本号与打包脚本（用法备查；何时调用由用户当次明确说明）
+- `scripts\bump-version.ps1`：同步 `SteamEyaWinUI.csproj`（Version/FileVersion/AssemblyVersion/InformationalVersion）、
+  `scripts\build-installer.ps1` 的默认 `$Version`、`build\installer\SteamEYA.iss` 的默认 AppVersion，输出 `NewVersion=x.y.z`；`-DryRun` 只算不写。
+- `scripts\build-installer.ps1 -Version <x.y.z>`：Native AOT + Inno Setup，产物在 `artifacts\`。
+- `scripts\publish-release.ps1 -Version <x.y.z> [-Commit] [-Notes …|-NotesFile …]`：覆盖发布页安装包与 latest.json，
+  并更新发布日志（正文为**新增累积**，不再覆盖历史版本）；`-Commit` 会先本地提交（不推送）。
+- `scripts\publish-source.ps1 -Version <x.y.z>`：打源码 zip → 提交 → `git push origin main` → 移动 tag「正式exe」→ 上传源码包。
+- 以上都只在用户明确要求时执行；版本号要不要 +1 也由用户当次说明决定。
+
 ## 符号留档（用户明确要求）
 - 每次打包 `build-installer.ps1` 会自动调用 `scripts\archive-symbols.ps1`，把本次 Native AOT 构建的
   `SteamEyaWinUI.exe` + `SteamEyaWinUI.pdb` 归档到 `artifacts\symbols\<版本>\`（含 manifest.json：PE 时间戳与 sha256）。

@@ -265,6 +265,58 @@ internal static class CredentialProtector
         return HasPassphraseLayer(mainJson) != HasPassphraseLayer(backupJson);
     }
 
+    /// <summary>
+    /// 自愈：主文件里有密文却丢了根部 vault 头部时（历史版本「移动数据目录」用强类型文档回写造成的），
+    /// 从同目录 .bak 把头部接回来。密文本身是好的，头部一回来就能照常解密；
+    /// 万一接回来的头部与密文不匹配，解密仍会失败（不会比现在更糟），所以可以放心尝试。
+    /// 返回 true 表示已接回并写盘，healedJson 是接好后的内容（本次读取直接用它，不必再读一次盘）。
+    /// </summary>
+    internal static bool TryRestoreHeaderFromBackup(string vaultPath, string json, out string healedJson)
+    {
+        healedJson = json;
+        try
+        {
+            // 只有「有密文 + 没头部」才需要自愈：全新文件、明文文件、头部健在的文件都不碰。
+            if (!json.Contains(Prefix, StringComparison.Ordinal) || TryParseVaultHeader(json, out _))
+            {
+                return false;
+            }
+
+            var backupPath = vaultPath + ".bak";
+            if (!File.Exists(backupPath))
+            {
+                return false;
+            }
+
+            var backupJson = File.ReadAllText(backupPath);
+            if (!TryParseVaultHeader(backupJson, out var header) ||
+                JsonNode.Parse(json) is not JsonObject root ||
+                root["accounts"] is not JsonArray)
+            {
+                return false;
+            }
+
+            root["vault"] = header.DeepClone();
+            healedJson = root.ToJsonString(HeaderWriteOptions);
+
+            // 原子替换：自愈本身绝不能把文件写坏。
+            var tempPath = vaultPath + ".heal.tmp";
+            File.WriteAllText(tempPath, healedJson);
+            File.Move(tempPath, vaultPath, overwrite: true);
+
+            AppLog.Warn($"凭据库密钥头部缺失，已从备份接回：{Path.GetFileName(vaultPath)}");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"恢复凭据库密钥头部失败（不影响其它功能）：{ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>自愈回写用：与存档一致的缩进风格。</summary>
+    private static readonly JsonSerializerOptions HeaderWriteOptions = new() { WriteIndented = true };
+
     /// <summary>该文件头部是否启用了口令层（"pw" 块存在且可解析）。</summary>
     private static bool HasPassphraseLayer(string json) =>
         TryParseVaultHeader(json, out var header) && TryReadPassphraseParameters(header, out _, out _);

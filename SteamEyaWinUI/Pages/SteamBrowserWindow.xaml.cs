@@ -11,7 +11,7 @@ namespace SteamEyaWinUI.Pages;
 /// <summary>
 /// 「Steam中查看」弹出的小窗口：内嵌 WebView2，先把会话 cookie 注入进去，
 /// 再打开 <c>https://steamcommunity.com/my/</c>，所以一打开就是已登录状态。
-/// 登录态单独存在数据目录的 webview2-steam 下（与「轻松音乐」页互不干扰）。
+/// 登录态单独存在数据目录的 webview2-steam 下（不写进别的网页 profile）。
 /// </summary>
 public sealed partial class SteamBrowserWindow : Window
 {
@@ -39,6 +39,8 @@ public sealed partial class SteamBrowserWindow : Window
 
         // 关窗时还原显示语言：挂在 Closing（界面树还在、WebView2 还能用），不用 Closed。
         AppWindow.Closing += (_, _) => RestoreLanguageCookie();
+        // 迁移数据目录时这扇窗会被直接关掉：它同样占着数据目录里的 webview2-steam。
+        WebViewDataHost.TrackWindow(Close);
 
         _ = LoadSessionAsync();
     }
@@ -80,6 +82,7 @@ public sealed partial class SteamBrowserWindow : Window
                 // Language 只作用于这扇窗口的 WebView：让页面语言协商（Accept-Language）也偏中文。
                 new CoreWebView2EnvironmentOptions { Language = "zh-CN" });
             await Browser.EnsureCoreWebView2Async(environment);
+            WebViewDataHost.Track(Browser.CoreWebView2);
 
             var cookieManager = Browser.CoreWebView2.CookieManager;
             foreach (var (name, value) in _session.Cookies)

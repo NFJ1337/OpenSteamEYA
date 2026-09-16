@@ -1242,6 +1242,10 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             return;
         }
 
+        // 迁移前先把 WebView2（「Steam 中查看」小窗）放掉：Chromium 独占打开 Cookies，
+        // 不停掉它，复制一定报「being used by another process」，迁移就会失败。
+        var webViewReleased = await WebViewDataHost.ReleaseForDataMoveAsync();
+
         _movingDataFolder = true;
         MoveDataFolderButton.IsEnabled = false;
         MoveToDefaultDataFolderButton.IsEnabled = false;
@@ -1258,6 +1262,11 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
                 var reason = string.IsNullOrWhiteSpace(result.Error)
                     ? Loc.T("Settings_Data_MoveFailed")
                     : result.Error;
+                // 还占着（多见于另一个客户端窗口也开着网页窗口）：给一条能照着做的提示，不要糊一屏英文报错。
+                if (!webViewReleased && reason.Contains("webview2", StringComparison.OrdinalIgnoreCase))
+                {
+                    reason = Loc.T("Settings_Data_MoveFailed_WebView2");
+                }
                 AppLog.Error($"移动数据目录失败：{reason}");
                 AppState.ShowStatus(Loc.Tf("Settings_Data_MoveFailed_Format", reason), InfoBarSeverity.Error);
                 return;
@@ -1288,6 +1297,8 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         finally
         {
             _movingDataFolder = false;
+            // 不论成功失败都要通知：页面里的 WebView2 已经被放掉，需要重建。
+            WebViewDataHost.NotifyDataMoveFinished();
             MoveDataFolderButton.IsEnabled = true;
             MoveToDefaultDataFolderButton.IsEnabled = true;
             OpenDataFolderButton.IsEnabled = true;
