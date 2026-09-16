@@ -37,15 +37,27 @@ internal sealed partial class SteamWorkshopService
     {
         progress?.Report(Loc.T("Workshop_Progress_ValidatingToken"));
         var token = _jwtTokenService.Validate(eyaToken);
+        return await ClearSubscriptionsWithRefreshTokenAsync(eyaToken, token.SteamId, progress, cancellationToken);
+    }
 
+    /// <summary>
+    /// 用 refresh token 清订阅。不要求是 EYA 的 JWT——账号+密码登录换到的 refresh token 同样可用
+    /// （账号管理页「登录」之后顺手清创意工坊走这条，不必依赖账号里存的令牌是否还有效）。
+    /// </summary>
+    public async Task<int> ClearSubscriptionsWithRefreshTokenAsync(
+        string refreshToken,
+        string steamId,
+        IProgress<string>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
         await using var cmClient = new SteamCmClient(HttpClient);
 
         progress?.Report(Loc.T("Workshop_Progress_Connecting"));
-        await cmClient.ConnectAndLogOnAsync(eyaToken, token.SteamId, cancellationToken);
+        await cmClient.ConnectAndLogOnAsync(refreshToken, steamId, cancellationToken);
 
-        progress?.Report(Loc.Tf("Workshop_Progress_LoggedIn_Format", token.SteamId));
+        progress?.Report(Loc.Tf("Workshop_Progress_LoggedIn_Format", steamId));
         progress?.Report(Loc.T("Workshop_Progress_GettingWebSession"));
-        var session = await SteamWebSession.BuildAsync(cmClient, eyaToken, token.SteamId, cancellationToken);
+        var session = await SteamWebSession.BuildAsync(cmClient, refreshToken, steamId, cancellationToken);
 
         progress?.Report(Loc.T("Workshop_Progress_GettingSubscriptions"));
         var items = new List<(uint AppId, string Id, string Title)>();
@@ -53,7 +65,7 @@ internal sealed partial class SteamWorkshopService
         {
             cancellationToken.ThrowIfCancellationRequested();
             var (ids, titles) = await EnumerateSubscriptionsAsync(
-                appId, token.SteamId, session.CookieHeader, cancellationToken);
+                appId, steamId, session.CookieHeader, cancellationToken);
             foreach (var id in ids)
             {
                 items.Add((appId, id, titles.GetValueOrDefault(id, "")));

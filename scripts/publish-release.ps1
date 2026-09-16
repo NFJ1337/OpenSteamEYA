@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 把打包好的安装包与 latest.json 上传到 GitHub Release，并替换掉 release 上的旧安装包（用户说的「重新保存文件」）。
 
@@ -101,14 +101,66 @@ if ($assetNames.Count -gt 0) {
     Write-Host "release 现有资产：$($assetNames -join ', ')"
 }
 
+# ---- release 正文的历史累积：新版本的说明「新增」在正文最上面，老版本原样保留 ----
+
+# 读 release 现有正文（读不到就当没有，不影响发布）。
+function Get-ReleaseBody([string]$Tag, [string]$Repository) {
+    try {
+        $body = gh release view $Tag --repo $Repository --json body --jq '.body'
+        if ($null -eq $body) { return '' }
+        return ($body -join "`n")
+    }
+    catch { return '' }
+}
+
+# 把正文字符串切成「每个版本一块」：以 SteamEYA v… 开头的行为块首。
+function Split-ReleaseBody([string]$Body) {
+    $blocks = [System.Collections.Generic.List[string]]::new()
+    if ([string]::IsNullOrWhiteSpace($Body)) { return $blocks }
+
+    $current = [System.Collections.Generic.List[string]]::new()
+    foreach ($line in ($Body -split "`n")) {
+        $trimmed = $line.TrimEnd()
+        if ($current.Count -gt 0 -and $trimmed -match '^SteamEYA\s+v') {
+            $blocks.Add((($current -join "`n").Trim()))
+            $current = [System.Collections.Generic.List[string]]::new()
+        }
+
+        $current.Add($trimmed)
+    }
+
+    if ($current.Count -gt 0) { $blocks.Add((($current -join "`n").Trim())) }
+    return $blocks
+}
+
+# 新块放最上面 + 历史块接在后面；同版本的旧块替换掉（重复发布不会叠加）；超过上限丢最老的。
+function Merge-ReleaseBody([string]$NewBlock, [string]$ExistingBody, [string]$Version, [int]$MaxBlocks = 60) {
+    $kept = @(Split-ReleaseBody $ExistingBody | Where-Object {
+        $_ -notmatch ('^SteamEYA\s+v' + [regex]::Escape($Version) + '(\s|$)')
+    })
+
+    $all = @($NewBlock) + $kept
+    if ($all.Count -gt $MaxBlocks) { $all = $all[0..($MaxBlocks - 1)] }
+    return ((($all -join "`n`n").TrimEnd()) + "`n")
+}
+
+# 本次说明的正文块（首行固定是版本号）。
+function New-ReleaseBodyBlock([string]$Version, [string[]]$Notes) {
+    $lines = @("SteamEYA v$Version", '') + @($Notes | ForEach-Object { if ($_ -match '^[-*]') { $_ } else { "- $_" } })
+    return (($lines -join "`n").TrimEnd())
+}
+
 if ($DryRun) {
     Write-Host '[DryRun] 将要执行：'
     foreach ($name in $stale) { Write-Host "  - 删除旧安装包资产：$name" }
     Write-Host "  - 上传（覆盖）：$($file.Name)"
     if ($Commit) { Write-Host '  - 本地提交当前改动（git add -A + commit，不推送）' }
     if ($notesLines.Count -gt 0) {
-        Write-Host "  - 更新 release 正文（更新日志，首行 SteamEYA v$Version）："
-        foreach ($line in $notesLines) { Write-Host "      $line" }
+        $preview = Merge-ReleaseBody -NewBlock (New-ReleaseBodyBlock -Version $Version -Notes $notesLines) `
+            -ExistingBody (Get-ReleaseBody -Tag $Tag -Repository $Repository) -Version $Version
+        Write-Host "  - 更新 release 正文（新增本版本说明，保留历史；首行 SteamEYA v$Version）："
+        Write-Host '      ---- 新正文预览（前 40 行）----'
+        ($preview -split "`n" | Select-Object -First 40) | ForEach-Object { Write-Host "      $_" }
     }
     Write-Host '  - 上传（覆盖）：latest.json，内容预览：'
     Write-Host ($metadata | ConvertTo-Json -Depth 4)
@@ -127,12 +179,16 @@ gh release upload $Tag $InstallerPath $metadataPath --repo $Repository --clobber
 # 更新日志：写进 release 正文（程序关于页的「更新日志」卡片直接读它）。
 # 首行固定带上版本号（用户要求：发布到 release 的说明要能一眼看出是哪个版本）。
 # 用纯文本而不是 Markdown 标题：客户端是逐行原样显示的，写 "## xxx" 会把井号也显示出来。
+# 累积而不是替换（用户要求）：新版本块插在正文最上面，老版本块原样接在后面，历史一直留着。
 if ($notesLines.Count -gt 0) {
     $bodyPath = Join-Path $ProjectRoot 'artifacts\release-notes.md'
-    $bodyLines = @("SteamEYA v$Version", '') + @($notesLines | ForEach-Object { if ($_ -match '^[-*]') { $_ } else { "- $_" } })
-    Set-Content -LiteralPath $bodyPath -Value ($bodyLines -join "`n") -Encoding utf8NoBOM
+    $existingBody = Get-ReleaseBody -Tag $Tag -Repository $Repository
+    $historyCount = @(Split-ReleaseBody $existingBody).Count
+    $bodyText = Merge-ReleaseBody -NewBlock (New-ReleaseBodyBlock -Version $Version -Notes $notesLines) `
+        -ExistingBody $existingBody -Version $Version
+    Set-Content -LiteralPath $bodyPath -Value $bodyText -Encoding utf8NoBOM
     gh release edit $Tag --repo $Repository --notes-file $bodyPath
-    Write-Host "已更新 release 正文（SteamEYA v$Version，$($notesLines.Count) 条更新日志）。"
+    Write-Host "已更新 release 正文（SteamEYA v$Version 新增 $($notesLines.Count) 条，保留历史 $historyCount 块）。"
 }
 
 Write-Host '完成。release 现在的资产：'

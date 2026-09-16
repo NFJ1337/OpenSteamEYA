@@ -1042,6 +1042,12 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
             AppState.ShowStatus(
                 Loc.Tf("History_Status_LoginStarted_Format", account.AccountTitle, account.SteamId),
                 InfoBarSeverity.Success);
+
+            // 账号管理页：登录成功后再顺手清掉这个账号的创意工坊订阅（历史账号页不走这里，保持原样）。
+            if (_scope == HistoryPageScope.WhiteAccounts)
+            {
+                await ClearWorkshopAfterLoginAsync(account, progress, cancellationToken);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -1057,6 +1063,76 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
         finally
         {
             AppState.EndBusyOperation();
+        }
+    }
+
+    /// <summary>
+    /// 账号管理页「登录」之后的附加动作：清掉该账号在 CS2 / Wallpaper Engine 的创意工坊订阅。
+    /// 优先用账号里存的、还有效的 EYA 令牌（省一次登录）；令牌不可用就现场用账号+密码换一个 refresh token。
+    /// 失败只提示、不影响「登录」本身的结果。
+    /// </summary>
+    private async Task ClearWorkshopAfterLoginAsync(
+        SteamAccountHistoryItem account,
+        IProgress<string> progress,
+        CancellationToken cancellationToken)
+    {
+        // 账号自带的手机令牌能自动算码就自动算，否则弹框让用户输（与「一键查询」同一套逻辑）。
+        async Task<string?> GuardProvider(SteamGuardPrompt prompt, CancellationToken token)
+        {
+            if (prompt.Type == SteamGuardType.DeviceCode &&
+                !string.IsNullOrWhiteSpace(account.SharedSecret))
+            {
+                var code = SteamTotp.GenerateAuthCode(account.SharedSecret);
+                if (!string.IsNullOrEmpty(code))
+                {
+                    return code;
+                }
+            }
+
+            var emailHint = prompt.Type == SteamGuardType.EmailCode ? account.Email : null;
+            return await PromptGuardCodeAsync(prompt, token, emailHint);
+        }
+
+        try
+        {
+            AppState.ShowStatus(Loc.T("Login_Status_ClearingWorkshop"), InfoBarSeverity.Informational);
+
+            var tokenInfo = AppState.JwtTokenService.Inspect(FormatHelper.NormalizeToken(account.EyaToken));
+            int cleared;
+            if (tokenInfo.IsValid && !string.IsNullOrWhiteSpace(tokenInfo.SteamId))
+            {
+                cleared = await AppState.WorkshopService.ClearSubscriptionsAsync(
+                    account.EyaToken,
+                    progress,
+                    cancellationToken);
+            }
+            else
+            {
+                var auth = await AppState.CredentialsAuthService.GetRefreshTokenAsync(
+                    account.AccountName,
+                    account.Password,
+                    GuardProvider,
+                    progress,
+                    cancellationToken);
+                cleared = await AppState.WorkshopService.ClearSubscriptionsWithRefreshTokenAsync(
+                    auth.RefreshToken,
+                    auth.SteamId,
+                    progress,
+                    cancellationToken);
+            }
+
+            AppLog.Info($"账号管理页登录后清除创意工坊：{account.AccountTitle}，取消订阅 {cleared} 项。");
+            AppState.ShowStatus(Loc.Tf("Login_Status_WorkshopCleared_Format", cleared), InfoBarSeverity.Success);
+        }
+        catch (OperationCanceledException)
+        {
+            AppState.ShowStatus(Loc.T("Login_Status_ClearWorkshopCancelled"), InfoBarSeverity.Informational);
+        }
+        catch (Exception ex)
+        {
+            // 清订阅失败不影响「登录」已经成功的事实：只报警告并留痕，方便回查。
+            AppLog.Warn($"账号管理页登录后清除创意工坊失败：{account.AccountTitle}，{ex.Message}");
+            AppState.ShowStatus(ex.Message + Loc.T("Login_Error_CannotClearWorkshopSuffix"), InfoBarSeverity.Warning);
         }
     }
 
