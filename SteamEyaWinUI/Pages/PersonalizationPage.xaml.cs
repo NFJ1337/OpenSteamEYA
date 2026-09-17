@@ -91,9 +91,17 @@ public sealed partial class PersonalizationPage : Page, INotifyPropertyChanged
     /// <summary>XAML 绑定入口：{x:Bind Strings.Get('Key'), Mode=OneWay}。</summary>
     internal LocalizedStrings Strings => Loc.Strings;
 
+    /// <summary>离开本页时把光标还原：本页会把 ProtectedCursor 设成拖动/缩放档，不还原会带到别的页面。</summary>
+    protected override void OnNavigatedFrom(NavigationEventArgs e)
+    {
+        base.OnNavigatedFrom(e);
+        ResetHoverCursor();
+    }
+
     protected override void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
+        ResetHoverCursor();
 
         _loadingSettings = true;
         var settings = AppState.SettingsService.Load();
@@ -490,6 +498,22 @@ public sealed partial class PersonalizationPage : Page, INotifyPropertyChanged
         _dragMode = DragMode.None;
         CropOverlay.ReleasePointerCapture(e.Pointer);
     }
+
+    /// <summary>
+    /// 指针离开裁剪台：把光标还原成箭头。
+    /// 不还原的话，光标会一直停在「十字/横向/纵向调整」那一档上（ProtectedCursor 设在整页上，
+    /// 而移动事件只有指针在裁剪台上时才会触发），表现为「移开甚至切了页面，指针还是那个样子」。
+    /// </summary>
+    private void CropOverlay_PointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        if (_dragMode == DragMode.None)
+        {
+            ResetHoverCursor();
+        }
+    }
+
+    /// <summary>把页面光标还原成普通箭头。</summary>
+    private void ResetHoverCursor() => ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
 
     // 滚轮缩放背景图（选框大小、位置不变）：上滚放大、下滚缩小，以光标处为锚点。
     private void CropOverlay_PointerWheelChanged(object sender, PointerRoutedEventArgs e)

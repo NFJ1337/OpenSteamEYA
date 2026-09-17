@@ -37,8 +37,15 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             UIElement.PointerPressedEvent,
             new PointerEventHandler(LegacyAccountList_PointerPressed),
             handledEventsToo: true);
+
+        // 右键菜单在「松开」这一刻弹：框架的 RightTapped 还要等手势判定，实测慢约 110 ms。
+        LegacyAccountList.AddHandler(
+            UIElement.PointerReleasedEvent,
+            new PointerEventHandler(LegacyAccountList_PointerReleased),
+            handledEventsToo: true);
         Loc.LanguageChanged += OnLanguageChanged;
     }
+
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -179,26 +186,232 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         _highlightBrush.Color = Color.FromArgb(0x66, accent.R, accent.G, accent.B);
     }
 
-    /// <summary>左键点列表任意位置：找到被点中那行并切高亮（不滚动列表）。</summary>
+    /// <summary>鼠标右键也在 PointerReleased 里立刻弹过菜单，RightTapped 只留给触屏/手写笔兜底；
+    /// 这是压掉「同一次右键又走一遍 RightTapped」的时间窗（毫秒）。</summary>
+    private const long ContextMenuSuppressMs = 600;
+
+    /// <summary>上一次由指针事件直接弹出右键菜单的时间（TickCount64）。</summary>
+    private long _contextMenuShownAt;
+
+    /// <summary>
+    /// 列表上的指针按下：左键、右键一视同仁，都把那行切成高亮（不滚动列表），
+    /// 这样右键也能「选中」行，和左键行为一致。
+    /// </summary>
     private void LegacyAccountList_PointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        if (!e.GetCurrentPoint(LegacyAccountList).Properties.IsLeftButtonPressed)
+        var point = e.GetCurrentPoint(LegacyAccountList);
+        var props = point.Properties;
+        if (!props.IsLeftButtonPressed && !props.IsRightButtonPressed)
         {
             return;
         }
+
+        var source = e.OriginalSource as DependencyObject;
 
         // 勾选复选框时只做勾选，不切高亮（用户要求）。
-        if (IsCheckBoxClick(e.OriginalSource as DependencyObject))
+        if (IsCheckBoxClick(source))
         {
             return;
         }
 
-        var row = FindRowFromSource(e.OriginalSource as DependencyObject);
+        var row = ResolveRowAt(e.GetCurrentPoint(null).Position, source);
         if (row is not null)
         {
             HighlightRow(row, scrollToTop: false);
         }
     }
+
+    /// <summary>
+    /// 右键松开：立刻弹出该列对应的菜单。
+    /// 不用等 RightTapped —— 框架要等手势判定，实测比松开晚约 110 ms，右键就「慢半拍」。
+    /// </summary>
+    private void LegacyAccountList_PointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        var point = e.GetCurrentPoint(LegacyAccountList);
+        if (point.Properties.PointerUpdateKind != Microsoft.UI.Input.PointerUpdateKind.RightButtonReleased)
+        {
+            return;
+        }
+
+        var source = e.OriginalSource as DependencyObject;
+        if (source is not FrameworkElement element)
+        {
+            return;
+        }
+
+        // 命中测试的坐标是根元素坐标系（窗口内坐标），不是列表自己的坐标。
+        var rootPosition = e.GetCurrentPoint(null).Position;
+        var row = ResolveRowAt(rootPosition, source);
+        if (row is null)
+        {
+            return;
+        }
+
+        var column = ResolveColumnAt(rootPosition, source, row);
+        if (column is null)
+        {
+            return;   // 这一列没有菜单：既不弹，也不吃掉事件，交给后面的 RightTapped 兜底逻辑
+        }
+
+        // 先把时间戳打上：框架的 RightTapped 有时会跟这次「松开」挤在同一毫秒里到，
+        // 不压掉就会连开两个菜单（前一个被后一个挤掉，白闪一下）。
+        _contextMenuShownAt = Environment.TickCount64;
+
+        // 关键：不要在这次「松开」的事件里直接 ShowAt —— 弹层会在同一次按键抬起里被当成外部点击，
+        // 刚开就关。排到本轮输入处理之后（同一帧，实测十几毫秒）再弹，既跟手又稳。
+        // 位置是相对锚点元素的：ShowAt 的 Position 参数用的是锚点坐标系。
+        var position = e.GetCurrentPoint(element).Position;
+        _dispatcherQueue.TryEnqueue(() => ShowColumnMenu(column, row, element, position));
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// 定位点的是哪一行：先顺着事件源往上找；行与行之间的空隙、行内上下留白这些地方，
+    /// 事件源是行的容器而不是行里的控件，就再按坐标做一次命中测试。
+    /// </summary>
+    private LegacyAccountRow? ResolveRowAt(Windows.Foundation.Point rootPosition, DependencyObject? source)
+    {
+        if (FindRowFromSource(source) is { } fromSource)
+        {
+            return fromSource;
+        }
+
+        foreach (var hit in VisualTreeHelper.FindElementsInHostCoordinates(rootPosition, LegacyAccountList))
+        {
+            if (hit is FrameworkElement { DataContext: LegacyAccountRow row })
+            {
+                return row;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 定位点的是哪一列：先顺着事件源往上找（点中的就是单元格文本时最准）。
+    /// 行与行之间的空隙、行内上下留白命中的是行容器、拿不到列，这时改到「这一行的中间高度」
+    /// 那条线上按 x 命中 —— 行的中间一定有单元格，列就定得下来，于是空隙处点右键也能弹出对应列的菜单。
+    /// </summary>
+    private string? ResolveColumnAt(Windows.Foundation.Point rootPosition, DependencyObject? source, LegacyAccountRow row)
+    {
+        if (FindColumnTag(source) is { } fromSource)
+        {
+            return fromSource;
+        }
+
+        if (FindRowElement(row) is { } rowElement)
+        {
+            var top = rowElement.TransformToVisual(null).TransformPoint(new Windows.Foundation.Point(0, 0));
+            var midLine = new Windows.Foundation.Point(rootPosition.X, top.Y + rowElement.ActualHeight / 2);
+            if (FindColumnTagAt(midLine) is { } fromMidLine)
+            {
+                return fromMidLine;
+            }
+        }
+
+        return FindColumnTagAt(rootPosition);
+    }
+
+    /// <summary>
+    /// 按坐标在列表里命中一次，找出该点下面带列标记的单元格。
+    /// 注意：坐标是根元素坐标系（窗口内坐标）——实测传列表自己的坐标会命中不到任何元素。
+    /// </summary>
+    private string? FindColumnTagAt(Windows.Foundation.Point rootPosition)
+    {
+        foreach (var hit in VisualTreeHelper.FindElementsInHostCoordinates(rootPosition, LegacyAccountList))
+        {
+            if (FindColumnTag(hit) is { } fromHit)
+            {
+                return fromHit;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>取这一行在列表里的容器（列表虚拟化，没滚到的行没有容器）。</summary>
+    private FrameworkElement? FindRowElement(LegacyAccountRow row)
+    {
+        var index = Rows.IndexOf(row);
+        return index >= 0 ? LegacyAccountList.ContainerFromIndex(index) as FrameworkElement : null;
+    }
+
+    /// <summary>从被点元素往上找最近的列标记（XAML 里给各列 TextBlock 的 Tag 标了列名）。</summary>
+    private static string? FindColumnTag(DependencyObject? source)
+    {
+        var current = source;
+        while (current is not null)
+        {
+            if (current is FrameworkElement { Tag: string tag })
+            {
+                return tag;
+            }
+
+            try
+            {
+                current = VisualTreeHelper.GetParent(current);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 按列弹右键菜单：账号列 = 登录 / 查询VAC；备注列 = 清空备注 / 自定义备注；冷却时间列 = 预设时长 / 自定义。
+    /// 返回 true 表示这一列有菜单（调用方据此决定要不要吃掉这次右键事件）。
+    /// </summary>
+    private bool ShowColumnMenu(string? column, LegacyAccountRow row, FrameworkElement element, Windows.Foundation.Point position)
+    {
+        var flyout = new MenuFlyout();
+
+        switch (column)
+        {
+            case "account":
+                _contextAccount = row.Item;
+
+                // 与备注列右键完全同一套菜单样式：MenuFlyout + 带图标的菜单项。
+                var login = new MenuFlyoutItem
+                {
+                    Text = Loc.T("WhiteAccounts_Btn_Login"),
+                    Icon = new FontIcon { Glyph = "\uE8D4" }
+                };
+                login.Click += LegacyRowLogin_Click;
+                flyout.Items.Add(login);
+
+                var queryVac = new MenuFlyoutItem
+                {
+                    Text = Loc.T("Legacy_Btn_QueryVac"),
+                    Icon = new FontIcon { Glyph = "\uE9D9" }
+                };
+                queryVac.Click += LegacyRowQueryVac_Click;
+                flyout.Items.Add(queryVac);
+                break;
+
+            case "note":
+                AddNoteMenuItems(flyout, row);
+                break;
+
+            case "cooldownEnd":
+                AddCooldownMenuItems(flyout, row);
+                break;
+
+            default:
+                return false;
+        }
+
+        if (flyout.Items.Count == 0)
+        {
+            return false;
+        }
+
+        flyout.ShowAt(element, new FlyoutShowOptions { Position = position });
+        return true;
+    }
+
 
     /// <summary>被点中的是不是行前面那个勾选框。</summary>
     private static bool IsCheckBoxClick(DependencyObject? source)
@@ -570,6 +783,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
     /// <summary>右键点中的那一行（菜单项点击时用它取账号）。</summary>
     private SteamAccountHistoryItem? _contextAccount;
 
+    /// <summary>触屏/手写笔的右键手势兜底（鼠标右键已经在 PointerReleased 里弹过了）。</summary>
     private void LegacyAccountRow_RightTapped(object sender, RightTappedRoutedEventArgs e)
     {
         if (sender is not FrameworkElement element || element.DataContext is not LegacyAccountRow row)
@@ -577,29 +791,19 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             return;
         }
 
-        _contextAccount = row.Item;
-
-        // 与备注列右键完全同一套菜单样式：MenuFlyout + 带图标的菜单项。
-        var login = new MenuFlyoutItem
+        if (Environment.TickCount64 - _contextMenuShownAt < ContextMenuSuppressMs)
         {
-            Text = Loc.T("WhiteAccounts_Btn_Login"),
-            Icon = new FontIcon { Glyph = "\uE8D4" }
-        };
-        login.Click += LegacyRowLogin_Click;
+            e.Handled = true;
+            return;
+        }
 
-        var queryVac = new MenuFlyoutItem
+        if (ShowColumnMenu("account", row, element, e.GetPosition(element)))
         {
-            Text = Loc.T("Legacy_Btn_QueryVac"),
-            Icon = new FontIcon { Glyph = "\uE9D9" }
-        };
-        queryVac.Click += LegacyRowQueryVac_Click;
-
-        var flyout = new MenuFlyout();
-        flyout.Items.Add(login);
-        flyout.Items.Add(queryVac);
-        flyout.ShowAt(element, new FlyoutShowOptions { Position = e.GetPosition(element) });
-        e.Handled = true;
+            _contextMenuShownAt = Environment.TickCount64;
+            e.Handled = true;
+        }
     }
+
 
     // ---------- 右键：备注列 / 冷却（可用时间）列 / 其他列 —— 照旧版 Qt 版的右键菜单 ----------
 
@@ -616,30 +820,19 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             return;
         }
 
-        var flyout = new MenuFlyout();
-
-        switch (column)
+        if (Environment.TickCount64 - _contextMenuShownAt < ContextMenuSuppressMs)
         {
-            case "note":
-                AddNoteMenuItems(flyout, row);
-                break;
-
-            case "cooldownEnd":
-                AddCooldownMenuItems(flyout, row);
-                break;
-
-            default:
-                return;
-        }
-
-        if (flyout.Items.Count == 0)
-        {
+            e.Handled = true;
             return;
         }
 
-        flyout.ShowAt(element, new FlyoutShowOptions { Position = e.GetPosition(element) });
-        e.Handled = true;
+        if (ShowColumnMenu(column, row, element, e.GetPosition(element)))
+        {
+            _contextMenuShownAt = Environment.TickCount64;
+            e.Handled = true;
+        }
     }
+
 
     private void AddNoteMenuItems(MenuFlyout flyout, LegacyAccountRow row)
     {
@@ -1218,6 +1411,14 @@ public sealed partial class LegacyAccountRow : INotifyPropertyChanged
             ? Loc.T("Legacy_Status_Vac")
             : (item.CooldownSeconds ?? 0) > 0 ? Loc.T("Legacy_Status_Cooldown") : Loc.T("Legacy_Status_Available");
 
+        // 状态列按状态上色：可用=绿、冷却中=橙、VAC 封禁=红。
+        // 画刷走 FormatHelper 的主题感知取法，深浅色模式下都取得到对应变体。
+        StatusBrush = item.GcVacBanned == true
+            ? FormatHelper.GetStatusBrush(InfoBarSeverity.Error)
+            : (item.CooldownSeconds ?? 0) > 0
+                ? FormatHelper.GetWarningBrush()
+                : FormatHelper.GetStatusBrush(InfoBarSeverity.Success);
+
         // 老版「可用时间」：VAC 封禁直接显示 VAC，冷却中显示剩余时间，否则留空。
         // 冷却时间列：冷却结束的绝对时间（本地时间）；VAC 直接写 VAC。
         CooldownEndText = item.GcVacBanned == true
@@ -1268,6 +1469,9 @@ public sealed partial class LegacyAccountRow : INotifyPropertyChanged
     public string PasswordText { get; }
 
     public string StatusText { get; }
+
+    /// <summary>状态列的文字颜色：可用=绿、冷却中=橙、VAC 封禁=红。</summary>
+    public Brush StatusBrush { get; }
 
     public string Note { get; }
 

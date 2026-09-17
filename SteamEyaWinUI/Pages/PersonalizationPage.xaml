@@ -50,6 +50,7 @@
                                             PointerPressed="CropOverlay_PointerPressed"
                                             PointerMoved="CropOverlay_PointerMoved"
                                             PointerReleased="CropOverlay_PointerReleased"
+                                            PointerExited="CropOverlay_PointerExited"
                                             PointerCanceled="CropOverlay_PointerReleased"
                                             PointerWheelChanged="CropOverlay_PointerWheelChanged" />
                                 </Grid>

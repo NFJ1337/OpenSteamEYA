@@ -201,7 +201,7 @@
                                         DoubleTapped="LegacyAccountCell_DoubleTapped" HorizontalAlignment="Stretch"
                                         MinHeight="20"
                                         />
-                                    <TextBlock Grid.Column="4" Text="{x:Bind StatusText}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="4" Text="{x:Bind StatusText}" Foreground="{x:Bind StatusBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                                     <TextBlock
                                         Grid.Column="5"
                                         Text="{x:Bind Note}"
