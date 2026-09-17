@@ -137,6 +137,11 @@
                                 <FontIcon Glyph="&#xE73E;" />
                             </SelectorBarItem.Icon>
                         </SelectorBarItem>
+                        <SelectorBarItem x:Name="IvanLuffyModeItem" Text="{x:Bind Strings.Get('Login_IvanLuffy_Section'), Mode=OneWay}">
+                            <SelectorBarItem.Icon>
+                                <FontIcon Glyph="&#xE719;" />
+                            </SelectorBarItem.Icon>
+                        </SelectorBarItem>
                         <SelectorBarItem x:Name="LegacyEyaModeItem" Text="{x:Bind Strings.Get('Login_Mode_LegacyEya'), Mode=OneWay}" Visibility="Collapsed">
                             <SelectorBarItem.Icon>
                                 <FontIcon Glyph="&#xE8D4;" />
@@ -715,7 +720,136 @@
                             </Expander>
                         </StackPanel>
                     </StackPanel>
-                </Border>                <Border x:Name="AutoPanel" Style="{StaticResource CardBorderStyle}" Visibility="Collapsed">
+                </Border>
+
+                <!-- 「伊万/路飞」：把之前删掉的两条上游取卡恢复成为与「Token 登录」「账号核验」平级的模式面板。 -->
+                <Border x:Name="IvanLuffyPanel" Style="{StaticResource CardBorderStyle}" Visibility="Collapsed">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="{x:Bind Strings.Get('Login_IvanLuffy_Section'), Mode=OneWay}" Style="{StaticResource SectionTitleTextStyle}" />
+                        <TextBlock
+                            Text="{x:Bind Strings.Get('Login_IvanLuffy_Desc'), Mode=OneWay}"
+                            Foreground="{ThemeResource AuroraTextMutedBrush}"
+                            TextWrapping="Wrap" />
+
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="{x:Bind Strings.Get('Login_Field_UpstreamServer'), Mode=OneWay}" Style="{StaticResource FieldLabelTextStyle}" />
+                            <DropDownButton
+                                x:Name="IvanLuffyServerButton"
+                                MinWidth="166"
+                                HorizontalAlignment="Left"
+                                Style="{StaticResource UiTintDropDownButtonStyle}">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE8EC;" FontSize="14" />
+                                    <TextBlock x:Name="IvanLuffyServerText" />
+                                </StackPanel>
+                                <DropDownButton.Flyout>
+                                    <MenuFlyout x:Name="IvanLuffyServerFlyout" MenuFlyoutPresenterStyle="{StaticResource AuroraOpaqueMenuFlyoutPresenterStyle}" />
+                                </DropDownButton.Flyout>
+                            </DropDownButton>
+                        </StackPanel>
+
+                        <TextBox
+                            x:Name="IvanLuffyKeyBox"
+                            Header="{x:Bind Strings.Get('Login_Field_LicenseKey'), Mode=OneWay}"
+                            PlaceholderText="{x:Bind Strings.Get('Login_Field_LicenseKey_Placeholder'), Mode=OneWay}"
+                            IsSpellCheckEnabled="False"
+                            TextChanged="IvanLuffyKeyBox_TextChanged"
+                            KeyDown="IvanLuffyKeyBox_KeyDown" />
+
+                        <Grid ColumnSpacing="20">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBox
+                                x:Name="IvanLuffyResolvedBox"
+                                Header="{x:Bind Strings.Get('Login_Field_ResolvedAccount'), Mode=OneWay}"
+                                IsReadOnly="True"
+                                PlaceholderText="{x:Bind Strings.Get('Login_Value_NotResolved'), Mode=OneWay}" />
+
+                            <Button
+                                x:Name="IvanLuffyClearButton"
+                                Grid.Column="1"
+                                MinWidth="80"
+                                VerticalAlignment="Bottom"
+                                Click="IvanLuffyClearButton_Click">
+                                <TextBlock Text="{x:Bind Strings.Get('Common_Clear'), Mode=OneWay}" />
+                            </Button>
+
+                            <Button
+                                x:Name="IvanLuffyResolveButton"
+                                Grid.Column="2"
+                                MinWidth="112"
+                                VerticalAlignment="Bottom"
+                                Click="IvanLuffyResolveButton_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE721;" FontSize="16" />
+                                    <TextBlock Text="{x:Bind Strings.Get('Login_Btn_ResolveLicense'), Mode=OneWay}" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+
+                        <Button
+                            x:Name="IvanLuffyLoginButton"
+                            HorizontalAlignment="Stretch"
+                            Padding="0,12"
+                            Style="{StaticResource AccentButtonStyle}"
+                            Click="IvanLuffyLoginButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE8D4;" FontSize="16" />
+                                <TextBlock Text="{x:Bind Strings.Get('Login_Btn_Login'), Mode=OneWay}" />
+                            </StackPanel>
+                        </Button>
+
+                        <!-- 与 Token登录 / 账号核验 页完全一致的三项登录前操作。 -->
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Button
+                                x:Name="IvanLuffyClearWorkshopButton"
+                                HorizontalAlignment="Stretch"
+                                Padding="0,10"
+                                Click="IvanLuffyClearWorkshopButton_Click"
+                                ToolTipService.ToolTip="{x:Bind Strings.Get('Login_Btn_ClearWorkshop_Tip'), Mode=OneWay}">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE74D;" FontSize="16" />
+                                    <TextBlock Text="{x:Bind Strings.Get('Login_Btn_ClearWorkshop'), Mode=OneWay}" />
+                                </StackPanel>
+                            </Button>
+                            <Button
+                                x:Name="IvanLuffyApplyLoadoutButton"
+                                Grid.Column="1"
+                                HorizontalAlignment="Stretch"
+                                Padding="0,10"
+                                Click="IvanLuffyApplyLoadoutButton_Click"
+                                ToolTipService.ToolTip="{x:Bind Strings.Get('Login_Btn_ApplyLoadout_Tip'), Mode=OneWay}">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE7C1;" FontSize="16" />
+                                    <TextBlock Text="{x:Bind Strings.Get('Login_Btn_ApplyLoadout'), Mode=OneWay}" />
+                                </StackPanel>
+                            </Button>
+                            <Button
+                                x:Name="IvanLuffyPersonalizeButton"
+                                Grid.Column="2"
+                                HorizontalAlignment="Stretch"
+                                Padding="0,10"
+                                Click="IvanLuffyPersonalizeButton_Click"
+                                ToolTipService.ToolTip="{x:Bind Strings.Get('Login_Btn_Personalize_Tip'), Mode=OneWay}">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE779;" FontSize="16" />
+                                    <TextBlock Text="{x:Bind Strings.Get('Login_Btn_Personalize'), Mode=OneWay}" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border x:Name="AutoPanel" Style="{StaticResource CardBorderStyle}" Visibility="Collapsed">
                     <StackPanel Spacing="14">
                         <TextBlock Text="{x:Bind Strings.Get('Login_Auto_Section'), Mode=OneWay}" Style="{StaticResource SectionTitleTextStyle}" />
 

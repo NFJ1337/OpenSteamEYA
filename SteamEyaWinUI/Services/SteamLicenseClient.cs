@@ -24,6 +24,14 @@ internal sealed class SteamLicenseClient
         Timeout = TimeSpan.FromSeconds(30)
     };
 
+    // 「伊万/路飞」模块用的两条上游（2026-09-17 用户要求把之前删掉的恢复回来，
+    // 作为登录页上的独立模块，不影响下面奶味那条链路）。
+    public static IReadOnlyList<SteamUpstreamServer> IvanLuffyServers { get; } = new List<SteamUpstreamServer>
+    {
+        new("伊万/小岛", "http://70.39.201.195:9099"),
+        new("路飞", "http://38.76.193.80:9099")
+    };
+
     // 唯一上游：奶味（111.170.18.37:9099）。
     // 用户要求删掉「伊万/小岛」「路飞」两条上游的取卡逻辑；只剩一家，登录页也不再显示上游选择。
     public static SteamUpstreamServer Upstream { get; } = new("奶味", "http://111.170.18.37:9099");
