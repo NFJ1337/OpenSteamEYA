@@ -77,6 +77,14 @@
             </NavigationView.Resources>
             <!-- 导航项文字由 MainWindow.RefreshNavText() 按当前语言在代码里设置（构造时即设、语言切换时刷新）。 -->
             <NavigationView.MenuItems>
+                <!-- 旧版（Qt 账号管理系统）风格的账号页：放在导航最上面 -->
+                <NavigationViewItem
+                    x:Name="LegacyAccountsNavItem"
+                    Tag="legacyAccounts">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8EF;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
                 <NavigationViewItem
                     x:Name="ManagedAccountsNavItem"
                     Tag="whiteAccounts">

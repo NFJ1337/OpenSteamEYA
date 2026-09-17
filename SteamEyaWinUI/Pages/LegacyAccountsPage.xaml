@@ -1,0 +1,249 @@
+<Page
+    x:Class="SteamEyaWinUI.Pages.LegacyAccountsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:SteamEyaWinUI.Pages"
+    NavigationCacheMode="Required">
+
+
+    <!-- 旧版（Qt 账号管理系统）布局 + 主程序外观：外卡片、玻璃按钮、主题化表头与分隔线。
+         控件名与事件处理保持不变，只是把样式统一到主程序这一套。 -->
+    <Grid Padding="32,24,32,16" RowSpacing="12">
+        <Border Style="{StaticResource CardBorderStyle}">
+            <Grid RowSpacing="10">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Spacing="8">
+
+                    <!-- 账号管理：工具栏（添加 / 导出 / 刷新 + 5 个 ID 生成） -->
+                    <StackPanel x:Name="AccountsToolbar" Spacing="8">
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <!-- 左：新增 / 导出 / 刷新 / 生成ID -->
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                                <Button x:Name="LegacyAddButton" Style="{StaticResource AccentButtonStyle}" Click="LegacyAddButton_Click">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE710;" FontSize="14" />
+                                        <TextBlock Text="{x:Bind Strings.Get('Legacy_Btn_Add'), Mode=OneWay}" />
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="LegacyExportButton" Style="{StaticResource AuroraGlassButtonStyle}" Click="LegacyExportButton_Click">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE8C8;" FontSize="14" />
+                                        <TextBlock Text="{x:Bind Strings.Get('Legacy_Btn_Export'), Mode=OneWay}" />
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="LegacyRefreshButton" Style="{StaticResource AuroraGlassButtonStyle}" Click="LegacyRefreshButton_Click">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                                        <TextBlock Text="{x:Bind Strings.Get('Legacy_Btn_Refresh'), Mode=OneWay}" />
+                                    </StackPanel>
+                                </Button>
+                                <DropDownButton
+                                    x:Name="LegacyGenIdButton"
+                                    Style="{StaticResource UiTintDropDownButtonStyle}"
+                                    ToolTipService.ToolTip="{x:Bind Strings.Get('Legacy_Btn_GenId_Tip'), Mode=OneWay}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE8C8;" FontSize="14" />
+                                        <TextBlock Text="{x:Bind Strings.Get('Legacy_Btn_GenId'), Mode=OneWay}" />
+                                    </StackPanel>
+                                    <DropDownButton.Flyout>
+                                        <MenuFlyout x:Name="LegacyGenIdFlyout" />
+                                    </DropDownButton.Flyout>
+                                </DropDownButton>
+                            </StackPanel>
+                            <!-- 右：搜索 + 一键查询 / 批量备注 / 删除 / 全选（右对齐） -->
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <TextBlock
+                                                                    Text="{x:Bind Strings.Get('Legacy_Search'), Mode=OneWay}"
+                                                                    VerticalAlignment="Center"
+                                                                    Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                                <TextBox
+                                    x:Name="LegacySearchBox"
+                                    Width="200"
+                                    IsSpellCheckEnabled="False"
+                                    TextChanged="LegacySearchBox_TextChanged" />
+                                <Button x:Name="LegacyBatchQueryButton" Style="{StaticResource AuroraGlassButtonStyle}" Click="LegacyBatchQueryButton_Click">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE9D9;" FontSize="14" />
+                                        <TextBlock Text="{x:Bind Strings.Get('Common_OneClickQuery'), Mode=OneWay}" />
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="LegacyBatchNoteButton" Style="{StaticResource AuroraGlassButtonStyle}" Click="LegacyBatchNoteButton_Click">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE70F;" FontSize="14" />
+                                        <TextBlock Text="{x:Bind Strings.Get('Legacy_Btn_BatchNote'), Mode=OneWay}" />
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="LegacyDeleteButton" Style="{StaticResource AuroraGlassButtonStyle}" Click="LegacyDeleteButton_Click">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE74D;" FontSize="14" />
+                                        <TextBlock Text="{x:Bind Strings.Get('Legacy_Btn_Delete'), Mode=OneWay}" />
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="LegacySelectAllButton" Style="{StaticResource AuroraGlassButtonStyle}" Click="LegacySelectAllButton_Click">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE73A;" FontSize="14" />
+                                        <TextBlock Text="{x:Bind Strings.Get('Legacy_Btn_SelectAll'), Mode=OneWay}" />
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <CheckBox
+                                x:Name="LegacyShowAvailableCheck"
+                                Content="{x:Bind Strings.Get('Legacy_Filter_Available'), Mode=OneWay}"
+                                Checked="LegacyFilter_Changed"
+                                Unchecked="LegacyFilter_Changed" />
+                            <CheckBox
+                                x:Name="LegacyShowRemarkedCheck"
+                                Content="{x:Bind Strings.Get('Legacy_Filter_Remarked'), Mode=OneWay}"
+                                Checked="LegacyFilter_Changed"
+                                Unchecked="LegacyFilter_Changed" />
+                            <CheckBox
+                                x:Name="LegacyShowHiddenCheck"
+                                Content="{x:Bind Strings.Get('Legacy_Filter_Hidden'), Mode=OneWay}"
+                                ToolTipService.ToolTip="{x:Bind Strings.Get('Legacy_Filter_Hidden_Tip'), Mode=OneWay}"
+                                Checked="LegacyShowHiddenCheck_Changed"
+                                Unchecked="LegacyShowHiddenCheck_Changed" />
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- 表头 + 表格本体 -->
+                <Grid Grid.Row="1">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Grid
+                        x:Name="LegacyHeaderGrid"
+                        ColumnSpacing="14"
+                        Padding="12,8,12,8"
+                        Background="{ThemeResource AuroraTableHeaderBrush}"
+                        BorderThickness="0,0,0,1"
+                        BorderBrush="{ThemeResource AuroraGlassBorderBrush}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="40" />
+                            <ColumnDefinition Width="40" />
+                            <ColumnDefinition Width="150" />
+                            <ColumnDefinition Width="150" />
+                            <ColumnDefinition Width="110" />
+                            <ColumnDefinition Width="150" />
+                            <ColumnDefinition Width="180" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="1" Text="{x:Bind Strings.Get('Legacy_Col_Index'), Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                        <TextBlock Grid.Column="2" Text="{x:Bind Strings.Get('Legacy_Col_Account'), Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                        <TextBlock Grid.Column="3" Text="{x:Bind Strings.Get('Legacy_Col_Password'), Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                        <TextBlock Grid.Column="4" Text="{x:Bind Strings.Get('Legacy_Col_Status'), Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                        <TextBlock Grid.Column="5" Text="{x:Bind Strings.Get('Legacy_Col_Note'), Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                        <TextBlock Grid.Column="6" Text="{x:Bind Strings.Get('Legacy_Col_Cooldown'), Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                        <TextBlock Grid.Column="7" Text="{x:Bind Strings.Get('Legacy_Col_Others'), Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                    </Grid>
+
+                    <ListView
+                        x:Name="LegacyAccountList"
+                        Grid.Row="1"
+                        SelectionMode="None"
+                        ItemsSource="{x:Bind Rows, Mode=OneWay}">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="Padding" Value="12,4,12,4" />
+                                <Setter Property="MinHeight" Value="0" />
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="local:LegacyAccountRow">
+                                <Grid ColumnSpacing="14" Background="{x:Bind HighlightBrush, Mode=OneWay}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="40" />
+                                        <ColumnDefinition Width="40" />
+                                        <ColumnDefinition Width="150" />
+                                        <ColumnDefinition Width="150" />
+                                        <ColumnDefinition Width="110" />
+                                        <ColumnDefinition Width="150" />
+                                        <ColumnDefinition Width="180" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox
+                                        Grid.Column="0"
+                                        MinWidth="0"
+                                        IsChecked="{x:Bind IsChecked, Mode=TwoWay}" />
+                                    <TextBlock Grid.Column="1" Text="{x:Bind IndexText}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                    <!-- 只有右键「账号」这一列才弹登录菜单 -->
+                                    <TextBlock
+                                        Grid.Column="2"
+                                        Text="{x:Bind AccountName}"
+                                        TextTrimming="CharacterEllipsis"
+                                        VerticalAlignment="Center"
+                                        Tag="account"
+                                        IsDoubleTapEnabled="True"
+                                        DoubleTapped="LegacyAccountCell_DoubleTapped"
+                                        RightTapped="LegacyAccountRow_RightTapped" HorizontalAlignment="Stretch"
+                                        MinHeight="20"
+                                        />
+                                    <TextBlock
+                                        Grid.Column="3"
+                                        Text="{x:Bind PasswordText}"
+                                        TextTrimming="CharacterEllipsis"
+                                        VerticalAlignment="Center"
+                                        Tag="password"
+                                        IsDoubleTapEnabled="True"
+                                        DoubleTapped="LegacyAccountCell_DoubleTapped" HorizontalAlignment="Stretch"
+                                        MinHeight="20"
+                                        />
+                                    <TextBlock Grid.Column="4" Text="{x:Bind StatusText}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                    <TextBlock
+                                        Grid.Column="5"
+                                        Text="{x:Bind Note}"
+                                        TextTrimming="CharacterEllipsis"
+                                        VerticalAlignment="Center"
+                                        Tag="note"
+                                        RightTapped="LegacyAccountCell_RightTapped" HorizontalAlignment="Stretch"
+                                        MinHeight="20"
+                                        />
+                                    <TextBlock
+                                        Grid.Column="7"
+                                        Text="{x:Bind OthersText}"
+                                        TextTrimming="CharacterEllipsis"
+                                        VerticalAlignment="Center"
+                                        Tag="others"
+                                        IsDoubleTapEnabled="True"
+                                        DoubleTapped="LegacyAccountCell_DoubleTapped"
+                                        HorizontalAlignment="Stretch"
+                                        MinHeight="20"
+                                        />
+                                    <!-- 冷却时间（冷却结束的绝对时间）：右键可改冷却 -->
+                                    <TextBlock
+                                        Grid.Column="6"
+                                        Text="{x:Bind CooldownEndText}"
+                                        TextTrimming="CharacterEllipsis"
+                                        VerticalAlignment="Center"
+                                        Tag="cooldownEnd"
+                                        RightTapped="LegacyAccountCell_RightTapped"
+                                        HorizontalAlignment="Stretch"
+                                        MinHeight="20"
+                                        />
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </Grid>
+
+            </Grid>
+
+        </Border>
+
+    </Grid>
+
+</Page>
+

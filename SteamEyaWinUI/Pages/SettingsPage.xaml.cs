@@ -1161,14 +1161,13 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     /// 与「移动」的区别：移动是复制全部数据再删掉旧目录；这里新旧目录都原地不动，
     /// 新位置已有的数据文件会被直接使用，缺的文件由程序自己新建。
     /// </summary>
-    private async void SwitchDataFolderButton_Click(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// 取一个数据目录：优先用系统文件夹选择器；个别机器上选择器会直接抛异常（例如组件没注册），
+    /// 这时退化成「手动输入路径」对话框 —— 否则用户连「切到旧数据目录」这条自救路都走不了。
+    /// 返回 null 表示用户取消。
+    /// </summary>
+    private async Task<string?> PickDataFolderAsync()
     {
-        if (_movingDataFolder)
-        {
-            return;
-        }
-
-        string? destination;
         try
         {
             var picker = new FolderPicker
@@ -1177,15 +1176,89 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             };
             picker.FileTypeFilter.Add("*");
             WinRT.Interop.InitializeWithWindow.Initialize(picker, MainWindow.Hwnd);
-            destination = (await picker.PickSingleFolderAsync())?.Path;
+            var picked = (await picker.PickSingleFolderAsync())?.Path;
+            if (!string.IsNullOrWhiteSpace(picked))
+            {
+                return picked;
+            }
+
+            // 用户在选择器里点了取消：不要再弹手输框追问。
+            return null;
         }
         catch (Exception ex)
         {
-            AppLog.Error("打开数据目录选择器失败。", ex);
-            AppState.ShowStatus(Loc.T("Settings_Data_MovePickFail"), InfoBarSeverity.Error);
+            AppLog.Error("打开数据目录选择器失败，改为手动输入路径。", ex);
+            AppState.ShowStatus(Loc.T("Settings_Data_PickFallback_Hint"), InfoBarSeverity.Warning);
+        }
+
+        return await PromptForDataFolderPathAsync();
+    }
+
+    /// <summary>选择器不可用时的兜底：直接让用户粘贴数据目录路径（校验存在且可用）。</summary>
+    private async Task<string?> PromptForDataFolderPathAsync()
+    {
+        var xamlRoot = XamlRoot;
+        if (xamlRoot is null)
+        {
+            return null;
+        }
+
+        var box = new TextBox
+        {
+            Text = AppPaths.DataRoot,
+            PlaceholderText = @"D:\SteamEYA",
+            IsSpellCheckEnabled = false
+        };
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = xamlRoot,
+            Title = Loc.T("Settings_Data_PickFallback_Title"),
+            Content = box,
+            PrimaryButtonText = Loc.T("Common_Confirm"),
+            CloseButtonText = Loc.T("Common_Cancel"),
+            DefaultButton = ContentDialogButton.Primary
+        };
+
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        {
+            return null;
+        }
+
+        var raw = box.Text?.Trim().Trim('"');
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        string path;
+        try
+        {
+            path = AppPaths.NormalizePath(raw);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"手动输入的数据目录路径无效：{ex.Message}");
+            AppState.ShowStatus(Loc.T("Settings_Data_PickFallback_Invalid"), InfoBarSeverity.Error);
+            return null;
+        }
+
+        if (!Directory.Exists(path))
+        {
+            AppState.ShowStatus(Loc.Tf("Settings_Data_PickFallback_Missing_Format", path), InfoBarSeverity.Error);
+            return null;
+        }
+
+        return path;
+    }
+    private async void SwitchDataFolderButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_movingDataFolder)
+        {
             return;
         }
 
+        var destination = await PickDataFolderAsync();
         if (string.IsNullOrWhiteSpace(destination))
         {
             return; // 用户取消
@@ -1275,24 +1348,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             return;
         }
 
-        string? destination;
-        try
-        {
-            var picker = new FolderPicker
-            {
-                SuggestedStartLocation = PickerLocationId.ComputerFolder
-            };
-            picker.FileTypeFilter.Add("*");
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, MainWindow.Hwnd);
-            destination = (await picker.PickSingleFolderAsync())?.Path;
-        }
-        catch (Exception ex)
-        {
-            AppLog.Error("打开数据目录选择器失败。", ex);
-            AppState.ShowStatus(Loc.T("Settings_Data_MovePickFail"), InfoBarSeverity.Error);
-            return;
-        }
-
+        var destination = await PickDataFolderAsync();
         if (string.IsNullOrWhiteSpace(destination))
         {
             return; // 用户取消

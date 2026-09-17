@@ -180,8 +180,8 @@ public sealed partial class MainWindow : Window
 
         // 启动时预构造登录页并保留在 Frame 缓存中，供历史页快速登录和查询复用。
         EnsureLoginPageInitialized();
-        // 启动后默认进入账号管理页，登录页仍可从导航或历史账号快捷进入。
-        RootNavigationView.SelectedItem = ManagedAccountsNavItem;
+        // 启动后默认进入「账号管理」页（旧版布局那页）；登录页仍会预构造，导航或历史账号也能快捷进入。
+        RootNavigationView.SelectedItem = LegacyAccountsNavItem;
 
         // 首次启动即解析并持久化 Steam 安装路径（之后上号直接复用，不再每次探测）。
         // 等内容进入可视树（XamlRoot 就绪）后再跑，检测失败才需要弹框。
@@ -619,6 +619,7 @@ public sealed partial class MainWindow : Window
     {
         var pageType = pageName switch
         {
+            "legacyAccounts" => typeof(LegacyAccountsPage),
             "history" => typeof(HistoryPage),
             "whiteAccounts" => typeof(HistoryPage),
             "cachedAccounts" => typeof(CachedAccountsPage),
@@ -807,6 +808,7 @@ public sealed partial class MainWindow : Window
     {
         LoginNavItem.Content = Loc.T("Nav_Login");
         HistoryNavItem.Content = Loc.T("Nav_History");
+        LegacyAccountsNavItem.Content = Loc.T("Nav_LegacyAccounts");
         ManagedAccountsNavItem.Content = Loc.T("Nav_ManagedAccounts");
         CachedAccountsNavItem.Content = Loc.T("Nav_CachedAccounts");
         LoadoutNavItem.Content = Loc.T("Nav_Loadout");
