@@ -48,6 +48,8 @@ internal sealed class SettingsService
                     {
                         // JSON 里显式的 "groups": null 会覆盖属性初始值，消费方（LoadGroups 等）直接 .Groups 会 NRE。
                         settings.Groups ??= [];
+                        // 同理防护导航页隐藏列表：显式 "hiddenNavPages": null 会让导航栏直接 NRE。
+                        settings.HiddenNavPages ??= [];
                         // 首次从旧版本升级时，为账号管理复制一份独立分组定义；之后两边互不影响。
                         settings.WhiteAccountGroups ??= CloneGroups(settings.Groups);
                         // 同理防护配装预设：显式 null 会让配装页导航、一键配装直接 NRE。
@@ -380,6 +382,12 @@ internal sealed class AppSettings
     public int? WindowHeight { get; set; }
     /// <summary>是否记住主窗口上次关闭时的屏幕位置。</summary>
     public bool RememberWindowPosition { get; set; }
+
+    /// <summary>
+    /// 不在左侧导航栏里显示的页面标签（对应 MainWindow 各导航项的 Tag，如 legacyAccounts）。
+    /// 在设置页勾选后立即生效并写盘，下次启动同样不显示这些页面，启动页也跳过它们。空列表 = 全部显示。
+    /// </summary>
+    public List<string>? HiddenNavPages { get; set; }
     /// <summary>记住的主窗口屏幕 X 坐标（物理像素）。</summary>
     public int? WindowX { get; set; }
     /// <summary>记住的主窗口屏幕 Y 坐标（物理像素）。</summary>

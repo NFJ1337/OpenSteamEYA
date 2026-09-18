@@ -1,0 +1,329 @@
+<Page
+    x:Class="SteamEyaWinUI.Pages.AutoReportPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:SteamEyaWinUI.Pages"
+    NavigationCacheMode="Required">
+
+
+
+    <!-- 自动举报：输入 1~5 个 SteamID64 → 选举报人账号与游戏（默认 CS2）→ 逐个送到 Steam 官方举报向导。
+         样式沿用主程序那套：外卡片 + 玻璃按钮 + 主题色下拉，跟着设置里的主题色/深浅色走。 -->
+    <ScrollViewer
+        HorizontalScrollBarVisibility="Disabled"
+        VerticalScrollBarVisibility="Auto"
+        Padding="32,24,32,16">
+        <StackPanel MaxWidth="1080" Spacing="12" HorizontalAlignment="Left">
+
+            <!-- 说明 -->
+            <Border Style="{StaticResource CardBorderStyle}">
+                <StackPanel Spacing="6">
+                    <TextBlock
+                        Text="{x:Bind Strings.Get('AutoReport_Title'), Mode=OneWay}"
+                        Style="{StaticResource SectionTitleTextStyle}" />
+                    <TextBlock
+                        Text="{x:Bind Strings.Get('AutoReport_Desc'), Mode=OneWay}"
+                        Foreground="{ThemeResource AuroraTextMutedBrush}"
+                        TextWrapping="Wrap" />
+                    <TextBlock
+                        Text="{x:Bind Strings.Get('AutoReport_Manual_Note'), Mode=OneWay}"
+                        Foreground="{ThemeResource AuroraTextMutedBrush}"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <!-- 举报参数 + 目标 ID -->
+            <Border Style="{StaticResource CardBorderStyle}">
+                <StackPanel Spacing="14">
+
+                    <Grid ColumnSpacing="16" RowSpacing="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <!-- 举报人账号（用它的登录态进官方页面） -->
+                        <TextBlock
+                            Grid.Row="0" Grid.Column="0"
+                            Text="{x:Bind Strings.Get('AutoReport_Account'), Mode=OneWay}"
+                            Foreground="{ThemeResource AuroraTextMutedBrush}"
+                            VerticalAlignment="Center" />
+                        <DropDownButton
+                            x:Name="ReporterAccountButton"
+                            Grid.Row="0" Grid.Column="1"
+                            MinWidth="260"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            VerticalAlignment="Center"
+                            Style="{StaticResource UiTintDropDownButtonStyle}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE77B;" FontSize="16" />
+                                <TextBlock x:Name="ReporterAccountText" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                            <DropDownButton.Flyout>
+                                <MenuFlyout x:Name="ReporterAccountFlyout" />
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
+
+                        <!-- 游戏：默认 CS2，可用 Steam 商店搜索换其它游戏 -->
+                        <TextBlock
+                            Grid.Row="1" Grid.Column="0"
+                            Text="{x:Bind Strings.Get('AutoReport_Game'), Mode=OneWay}"
+                            Foreground="{ThemeResource AuroraTextMutedBrush}"
+                            VerticalAlignment="Center" />
+                        <Grid Grid.Row="1" Grid.Column="1" ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <DropDownButton
+                                x:Name="GameButton"
+                                Grid.Column="0"
+                                MinWidth="220"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Style="{StaticResource UiTintDropDownButtonStyle}">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE7FC;" FontSize="16" />
+                                    <TextBlock x:Name="GameButtonText" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <DropDownButton.Flyout>
+                                    <MenuFlyout x:Name="GameFlyout" />
+                                </DropDownButton.Flyout>
+                            </DropDownButton>
+                            <TextBox
+                                x:Name="GameSearchBox"
+                                Grid.Column="1"
+                                Width="200"
+                                IsSpellCheckEnabled="False"
+                                PlaceholderText="{x:Bind Strings.Get('AutoReport_Game_Search_Placeholder'), Mode=OneWay}" />
+                            <Button
+                                x:Name="GameSearchButton"
+                                Grid.Column="2"
+                                Click="GameSearchButton_Click"
+                                Style="{StaticResource AuroraGlassButtonStyle}">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE721;" FontSize="14" />
+                                    <TextBlock Text="{x:Bind Strings.Get('AutoReport_Game_Search_Btn'), Mode=OneWay}" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                    </Grid>
+
+                    <!-- 1~5 个 SteamID64 -->
+                    <StackPanel Spacing="8">
+                        <TextBlock
+                            Text="{x:Bind Strings.Get('AutoReport_Ids'), Mode=OneWay}"
+                            Style="{StaticResource SectionTitleTextStyle}" />
+                        <TextBlock
+                            Text="{x:Bind Strings.Get('AutoReport_Ids_Tip'), Mode=OneWay}"
+                            Foreground="{ThemeResource AuroraTextMutedBrush}"
+                            TextWrapping="Wrap" />
+
+                        <Grid ColumnSpacing="12" RowSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="1" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                            <TextBox Grid.Row="0" Grid.Column="1" x:Name="IdBox1" MinWidth="320"
+                                     IsSpellCheckEnabled="False"
+                                     TextChanged="IdBox_TextChanged" />
+                            <TextBlock Grid.Row="0" Grid.Column="2" x:Name="IdHint1" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource AuroraTextMutedBrush}" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="2" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                            <TextBox Grid.Row="1" Grid.Column="1" x:Name="IdBox2" MinWidth="320"
+                                     IsSpellCheckEnabled="False"
+                                     TextChanged="IdBox_TextChanged" />
+                            <TextBlock Grid.Row="1" Grid.Column="2" x:Name="IdHint2" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource AuroraTextMutedBrush}" />
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="3" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                            <TextBox Grid.Row="2" Grid.Column="1" x:Name="IdBox3" MinWidth="320"
+                                     IsSpellCheckEnabled="False"
+                                     TextChanged="IdBox_TextChanged" />
+                            <TextBlock Grid.Row="2" Grid.Column="2" x:Name="IdHint3" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource AuroraTextMutedBrush}" />
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="4" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                            <TextBox Grid.Row="3" Grid.Column="1" x:Name="IdBox4" MinWidth="320"
+                                     IsSpellCheckEnabled="False"
+                                     TextChanged="IdBox_TextChanged" />
+                            <TextBlock Grid.Row="3" Grid.Column="2" x:Name="IdHint4" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource AuroraTextMutedBrush}" />
+
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="5" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                            <TextBox Grid.Row="4" Grid.Column="1" x:Name="IdBox5" MinWidth="320"
+                                     IsSpellCheckEnabled="False"
+                                     TextChanged="IdBox_TextChanged" />
+                            <TextBlock Grid.Row="4" Grid.Column="2" x:Name="IdHint5" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- 操作 -->
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <!-- 等待计时器：限流冷却 / 轮间隔期间，在「开始举报」左侧按秒倒数。
+                             刻意做成页内元素而不是底部提示条 —— 长时间任务里弹提示条太打扰。 -->
+                        <Border
+                            x:Name="WaitTimerBadge"
+                            Padding="10,4"
+                            VerticalAlignment="Center"
+                            CornerRadius="{ThemeResource ControlCornerRadius}"
+                            Background="{ThemeResource CustomUiDialogBrush}"
+                            BorderBrush="{ThemeResource AuroraGlassBorderBrush}"
+                            BorderThickness="1"
+                            Visibility="Collapsed">
+                            <TextBlock
+                                x:Name="WaitTimerText"
+                                VerticalAlignment="Center"
+                                Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                        </Border>
+                        <Button x:Name="StartButton" Click="StartButton_Click"
+                                Style="{StaticResource AccentButtonStyle}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE7BA;" FontSize="14" />
+                                <TextBlock Text="{x:Bind Strings.Get('AutoReport_Btn_Start'), Mode=OneWay}" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="LoopButton" Click="LoopButton_Click"
+                                Style="{StaticResource AuroraGlassButtonStyle}"
+                                ToolTipService.ToolTip="{x:Bind Strings.Get('AutoReport_Loop_Tip'), Mode=OneWay}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE895;" FontSize="14" />
+                                <TextBlock Text="{x:Bind Strings.Get('AutoReport_Btn_Loop'), Mode=OneWay}" />
+                            </StackPanel>
+                        </Button>
+                        <TextBlock
+                            Text="{x:Bind Strings.Get('AutoReport_Loop_Count'), Mode=OneWay}"
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                        <Grid ColumnSpacing="4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox
+                                x:Name="LoopCountBox"
+                                Width="72"
+                                Text="2"
+                                VerticalAlignment="Center"
+                                IsSpellCheckEnabled="False" />
+                            <StackPanel Grid.Column="1" Spacing="2">
+                                <RepeatButton
+                                    Width="32"
+                                    Height="16"
+                                    Click="IncreaseLoopCountButton_Click"
+                                    Content="&#xE70E;"
+                                    Style="{StaticResource ThemedNumberBoxSpinButtonStyle}"
+                                    ToolTipService.ToolTip="{x:Bind Strings.Get('Settings_WindowSize_Increase'), Mode=OneWay}" />
+                                <RepeatButton
+                                    Width="32"
+                                    Height="16"
+                                    Click="DecreaseLoopCountButton_Click"
+                                    Content="&#xE70D;"
+                                    Style="{StaticResource ThemedNumberBoxSpinButtonStyle}"
+                                    ToolTipService.ToolTip="{x:Bind Strings.Get('Settings_WindowSize_Decrease'), Mode=OneWay}" />
+                            </StackPanel>
+                        </Grid>
+                        <Button x:Name="StopButton" Click="StopButton_Click" IsEnabled="False"
+                                Style="{StaticResource AuroraGlassButtonStyle}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE71A;" FontSize="14" />
+                                <TextBlock Text="{x:Bind Strings.Get('AutoReport_Btn_Stop'), Mode=OneWay}" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="ClearButton" Click="ClearButton_Click"
+                                Style="{StaticResource AuroraGlassButtonStyle}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE74D;" FontSize="14" />
+                                <TextBlock Text="{x:Bind Strings.Get('AutoReport_Btn_Clear'), Mode=OneWay}" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- 队列与进度 -->
+            <Border Style="{StaticResource CardBorderStyle}">
+                <StackPanel Spacing="10">
+                    <TextBlock
+                        Text="{x:Bind Strings.Get('AutoReport_Queue'), Mode=OneWay}"
+                        Style="{StaticResource SectionTitleTextStyle}" />
+
+                    <Grid ColumnSpacing="14" Padding="12,8,12,8"
+                          Background="{ThemeResource AuroraTableHeaderBrush}"
+                          BorderThickness="0,0,0,1"
+                          BorderBrush="{ThemeResource AuroraGlassBorderBrush}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="60" />
+                            <ColumnDefinition Width="260" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{x:Bind Strings.Get('AutoReport_Col_Index'), Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                        <TextBlock Grid.Column="1" Text="{x:Bind Strings.Get('AutoReport_Col_Id'), Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                        <TextBlock Grid.Column="2" Text="{x:Bind Strings.Get('AutoReport_Col_Status'), Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                    </Grid>
+
+                    <ListView
+                        x:Name="TargetList"
+                        SelectionMode="None"
+                        MaxHeight="260"
+                        ItemsSource="{x:Bind Targets, Mode=OneWay}">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="Padding" Value="12,4,12,4" />
+                                <Setter Property="MinHeight" Value="0" />
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="local:AutoReportTarget">
+                                <Grid ColumnSpacing="14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="60" />
+                                        <ColumnDefinition Width="260" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{x:Bind IndexText}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="{x:Bind SteamId64}" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Grid.Column="2" Text="{x:Bind Status, Mode=OneWay}"
+                                               VerticalAlignment="Center" TextWrapping="Wrap"
+                                               Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</Page>

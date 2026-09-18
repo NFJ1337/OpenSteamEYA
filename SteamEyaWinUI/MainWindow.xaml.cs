@@ -1,4 +1,4 @@
-﻿using System.Runtime.CompilerServices;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Dispatching;
@@ -180,8 +180,10 @@ public sealed partial class MainWindow : Window
 
         // 启动时预构造登录页并保留在 Frame 缓存中，供历史页快速登录和查询复用。
         EnsureLoginPageInitialized();
-        // 启动后默认进入「账号管理」页（旧版布局那页）；登录页仍会预构造，导航或历史账号也能快捷进入。
-        RootNavigationView.SelectedItem = LegacyAccountsNavItem;
+        // 启动后进入第一个可见的导航页：默认仍是「账号管理」（旧版布局那页），
+        // 用户在设置里把它隐藏了就不再进这一页。登录页仍会预构造，导航或历史账号也能快捷进入。
+        ApplyNavPageVisibility();
+        SelectFirstVisibleNavItem();
 
         // 首次启动即解析并持久化 Steam 安装路径（之后上号直接复用，不再每次探测）。
         // 等内容进入可视树（XamlRoot 就绪）后再跑，检测失败才需要弹框。
@@ -625,6 +627,7 @@ public sealed partial class MainWindow : Window
             "cachedAccounts" => typeof(CachedAccountsPage),
             "loadout" => typeof(LoadoutPage),
             "personalization" => typeof(PersonalizationPage),
+            "autoReport" => typeof(AutoReportPage),
             "clash" => typeof(VpnPage),
             "treasureBox" => typeof(TreasureBoxPage),
             "settings" => typeof(SettingsPage),
@@ -813,6 +816,7 @@ public sealed partial class MainWindow : Window
         CachedAccountsNavItem.Content = Loc.T("Nav_CachedAccounts");
         LoadoutNavItem.Content = Loc.T("Nav_Loadout");
         PersonalizationNavItem.Content = Loc.T("Nav_Personalization");
+        AutoReportNavItem.Content = Loc.T("Nav_AutoReport");
         ClashNavItem.Content = Loc.T("Nav_Clash");
         TreasureBoxNavItem.Content = Loc.T("Nav_TreasureBox");
         SettingsNavItem.Content = Loc.T("Nav_Settings");
@@ -832,6 +836,7 @@ public sealed partial class MainWindow : Window
     {
         s_hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
         var settings = AppState.SettingsService.Load();
+
         ApplyWindowSizeCore(
             settings.WindowWidth ?? DefaultWindowWidth,
             settings.WindowHeight ?? DefaultWindowHeight);
@@ -879,6 +884,93 @@ public sealed partial class MainWindow : Window
         var actualWidth = Math.Max(MinimumWindowWidth, (int)Math.Round(physicalWidth / scale));
         var actualHeight = Math.Max(MinimumWindowHeight, (int)Math.Round(physicalHeight / scale));
         return (actualWidth, actualHeight);
+    }
+
+    /// <summary>导航栏里的一个页面条目（供设置页「选择显示的页面」列出，顺序与导航栏一致）。</summary>
+    public sealed record NavPageEntry(string Tag, string Title, bool AlwaysVisible);
+
+    /// <summary>不允许隐藏的页面标签：设置页一旦被藏掉就再也改不回来。</summary>
+    private const string LockedNavTag = "settings";
+
+    /// <summary>按导航栏顺序列出所有页面（菜单项 + 底部项），标题用导航项当前的语言文案。</summary>
+    public IReadOnlyList<NavPageEntry> GetNavPageEntries()
+    {
+        var entries = new List<NavPageEntry>();
+        foreach (var item in EnumerateNavItems())
+        {
+            if (item.Tag is not string tag)
+            {
+                continue;
+            }
+
+            entries.Add(new NavPageEntry(tag, item.Content as string ?? tag, IsNavTagLocked(tag)));
+        }
+
+        return entries;
+    }
+
+    private static bool IsNavTagLocked(string tag) =>
+        string.Equals(tag, LockedNavTag, StringComparison.Ordinal);
+
+    private IEnumerable<NavigationViewItem> EnumerateNavItems()
+    {
+        foreach (var entry in RootNavigationView.MenuItems)
+        {
+            if (entry is NavigationViewItem item)
+            {
+                yield return item;
+            }
+        }
+
+        foreach (var entry in RootNavigationView.FooterMenuItems)
+        {
+            if (entry is NavigationViewItem item)
+            {
+                yield return item;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 按设置显示 / 隐藏导航项（启动时与设置页改动后调用）。
+    /// 当前所在页被隐藏时就切到第一个可见页，免得停在一个导航栏里已经点不到的页面上。
+    /// </summary>
+    public void ApplyNavPageVisibility()
+    {
+        if (RootNavigationView is null)
+        {
+            return;
+        }
+
+        var hiddenTags = new HashSet<string>(AppState.SettingsService.Load().HiddenNavPages ?? [], StringComparer.Ordinal);
+        foreach (var item in EnumerateNavItems())
+        {
+            if (item.Tag is not string tag)
+            {
+                continue;
+            }
+
+            var show = !hiddenTags.Contains(tag) || IsNavTagLocked(tag);
+            item.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        if (_currentPageName is { } current && !IsNavTagLocked(current) && hiddenTags.Contains(current))
+        {
+            SelectFirstVisibleNavItem();
+        }
+    }
+
+    /// <summary>选中第一个可见的导航项（启动默认页，以及当前页被隐藏后的落点）。</summary>
+    private void SelectFirstVisibleNavItem()
+    {
+        foreach (var item in EnumerateNavItems())
+        {
+            if (item.Visibility == Visibility.Visible)
+            {
+                RootNavigationView.SelectedItem = item;
+                return;
+            }
+        }
     }
 
     public (int X, int Y) GetCurrentWindowPosition()

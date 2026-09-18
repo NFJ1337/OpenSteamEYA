@@ -817,6 +817,24 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
         }
     }
 
+    /// <summary>
+    /// 异常链里是不是「CM 会话被顶替」。判定用语言中立的标记 Data["CmConflict"]（与 SteamCmClient 里
+    /// 抛出时写的一致），不去匹配本地化文案——多语言下文案会变，标记不会。
+    /// </summary>
+    private static bool IsCmSessionReplaced(Exception? exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            if (current.Data["CmConflict"] is string conflict &&
+                string.Equals(conflict, "SessionReplaced", StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private async void ClearInvalidAccountsButton_Click(object sender, RoutedEventArgs e)
     {
         if (_isDialogFlowActive)
@@ -906,6 +924,15 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
                     tested++;
                     invalid.Add(account);
                     AppLog.Warn($"清空无效账号：{account.AccountTitle} 被判定无效（{ex.Message}）。");
+                    continue;
+                }
+                catch (Exception ex) when (IsCmSessionReplaced(ex))
+                {
+                    // Steam 明确回了「会话被顶替」（账号正在别处跑，例如本机 Steam 客户端 / CS2 里）。
+                    // 按用户要求：这种直接当无效账号删掉，并且继续测后面的账号，不再整批停在这一条上。
+                    tested++;
+                    invalid.Add(account);
+                    AppLog.Warn($"清空无效账号：{account.AccountTitle} 的 CM 会话被顶替，按无效账号删除（{ex.Message}）。");
                     continue;
                 }
                 catch (Exception ex)
@@ -1246,6 +1273,14 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
                     Loc.Tf("History_Status_QueryDone_Password_Format", account.AccountTitle, validation.SummaryText),
                     InfoBarSeverity.Success);
                 await RefreshValidatedProfilesAsync(new[] { validation.SteamId }, timeoutCts.Token);
+
+                // 白号还要把 CS2 侧那几项补上（优先分 / CS2 等级 / 冷却 / VAC / 国服）。
+                // 这一段失败不影响上面的账号校验结论，所以单独兜住异常、只把原因拼到状态栏。
+                var csExtra = await QueryCsStatusForWhiteAccountAsync(account, timeoutCts.Token);
+                AppState.ShowStatus(
+                    Loc.Tf("History_Status_QueryDone_Password_Format", account.AccountTitle, validation.SummaryText + csExtra),
+                    InfoBarSeverity.Success);
+
                 ReloadScopedAccounts(validation.SteamId);
                 return;
             }
@@ -1281,6 +1316,135 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
         finally
         {
             AppState.EndBusyOperation();
+        }
+    }
+
+    /// <summary>
+    /// 白号的 CS2 侧补查：优先分 / CS2 等级 / 冷却 / VAC / 国服（顺带把 Steam64 与「上次登录」写回）。
+    ///
+    /// 两条链路，看账号手里有什么凭据：
+    ///  · 带 EYA 令牌 → 走令牌链路（与历史账号页、登录页一键查询同一条），连 JWT 过期 / JWT 可用状态一起算；
+    ///  · 只有账号密码 → 先用账号密码换一条 Steam 会话（有手机令牌密钥就自动过码），再问 CS2 GC。
+    /// 返回值是可直接拼到状态栏的补充文案；查不到不抛，只把原因写进日志与文案。
+    /// </summary>
+    /// <summary>
+    /// 白号的 CS2 侧补查：优先分 / CS2 等级 / 冷却 / VAC / 国服，以及 JWT 过期 / JWT 可用状态。
+    ///
+    /// 白号是从「账号+密码」导入的，手里通常没有令牌。这里先用账号密码换一条 Steam 会话：
+    /// Steam 返回的 refresh_token 本身就是一枚 JWT（iss=steam、aud=client、sub=steamid、exp=过期时间），
+    /// 与「EYA 令牌」是同一种东西，所以能直接当令牌用——JWT 过期 / JWT 可用状态 因此也有值了。
+    /// 换到后写回账号（保留「上次登录」不动），后续查询与其它功能都能直接复用这枚令牌。
+    ///
+    /// 已经有令牌的账号（老版本导入的白号）直接走令牌链路，不重复登录。
+    /// 返回可直接拼到状态栏的补充文案；查不到不抛，只把原因写进日志与文案。
+    /// </summary>
+    /// <summary>
+    /// 白号的补查：JWT 过期 / JWT 可用状态 / Steam64 / 优先分 / CS2 等级 / 冷却 / VAC / CS2 国服。
+    ///
+    /// 步骤：① 没有令牌就先用账号密码换一条（Steam 返回的 refresh_token 本身就是 JWT：iss=steam、aud=client、
+    /// sub=steamid、exp=过期时间，与「EYA 令牌」是同一种东西）；② 在线校验这枚令牌 → 得出「JWT 可用状态」；
+    /// ③ 再问 CS2 GC 拿优先分/等级/冷却/国服；④ 一次落盘。
+    ///
+    /// 关键点：③ 失败（例如 GC 超时）**不影响** ①②④ 的结果 —— JWT 两项照样写进去，CS2 那几个字段保持旧值不动。
+    /// 返回可直接拼到状态栏的补充文案。
+    /// </summary>
+    private async Task<string> QueryCsStatusForWhiteAccountAsync(SteamAccountHistoryItem account, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var token = account.EyaToken;
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                if (string.IsNullOrWhiteSpace(account.Password))
+                {
+                    return string.Empty;
+                }
+
+                async Task<string?> GuardProvider(SteamGuardPrompt prompt, CancellationToken guardToken)
+                {
+                    if (prompt.Type == SteamGuardType.DeviceCode &&
+                        !string.IsNullOrWhiteSpace(account.SharedSecret))
+                    {
+                        var code = SteamTotp.GenerateAuthCode(account.SharedSecret);
+                        if (!string.IsNullOrEmpty(code))
+                        {
+                            return code;
+                        }
+                    }
+
+                    var emailHint = prompt.Type == SteamGuardType.EmailCode ? account.Email : null;
+                    return await PromptGuardCodeAsync(prompt, guardToken, emailHint);
+                }
+
+                var auth = await AppState.CredentialsAuthService.GetRefreshTokenAsync(
+                    account.AccountName,
+                    account.Password,
+                    GuardProvider,
+                    null,
+                    cancellationToken);
+                token = auth.RefreshToken;
+            }
+
+            token = FormatHelper.NormalizeToken(token);
+            var tokenInfo = AppState.JwtTokenService.Inspect(token);
+            var steamId = tokenInfo.SteamId;
+            if (string.IsNullOrWhiteSpace(steamId))
+            {
+                throw new InvalidOperationException(Loc.T("Login_Error_TokenMissingSteamIdQuery"));
+            }
+
+            // ② 在线校验：这是「JWT 可用状态」最实在的判定（本地只看签名/声明/过期，这一条是拿令牌真去 Steam 换一次 App 令牌）。
+            var validation = await AppState.TokenOnlineValidationService.ValidateForLoginAsync(token, cancellationToken);
+            var jwtStatus = validation.IsValid ? Loc.T("Account_Jwt_Valid") : Loc.T("Account_Jwt_Invalid");
+            AppLog.Info(
+                $"白号补查：{account.AccountTitle} 令牌校验={jwtStatus}（Steam64={steamId}，过期={tokenInfo.ExpiresAt?.ToLocalTime():yyyy-MM-dd HH:mm}）");
+
+            // ③ CS2 侧：尽力而为，失败只影响这几项。
+            CsPremierScoreResult? score = null;
+            string csText;
+            if (!validation.IsValid)
+            {
+                csText = Loc.T("Login_Availability_Invalid");
+            }
+            else
+            {
+                try
+                {
+                    score = await AppState.PremierScoreService.QueryAsync(token, steamId, cancellationToken);
+                    csText = Loc.Tf(
+                        "History_Status_QueryCsExtra_Format",
+                        score.DisplayText,
+                        score.PlayerLevelText,
+                        score.CooldownText,
+                        score.Cs2IsChinaText);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Warn($"补查 CS2 状态失败（{account.AccountTitle}）：{ex.Message}");
+                    csText = Loc.Tf("History_Status_QueryCsExtra_Fail_Format", ex.Message);
+                }
+            }
+
+            // ④ 一次落盘：令牌 / JWT 两项 一律写；CS2 字段只在拿到结果时写。
+            await Task.Run(
+                () => AccountStore.SaveWhiteQueryResult(
+                    account.AccountName, steamId, token, tokenInfo.ExpiresAt, validation.IsValid, jwtStatus, score),
+                cancellationToken);
+
+            return csText;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"补查 CS2 状态失败（{account.AccountTitle}）：{ex.Message}");
+            return Loc.Tf("History_Status_QueryCsExtra_Fail_Format", ex.Message);
         }
     }
 

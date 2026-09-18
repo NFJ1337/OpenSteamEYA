@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <!-- net10.0：net8.0 的 Native AOT 有 WinUI GC 挂死缺陷（dotnet/runtime#104582，.NET 9+ 才修复）。 -->
@@ -9,10 +9,10 @@
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
-    <Version>1.6.8</Version>
-    <FileVersion>1.6.8.0</FileVersion>
-    <AssemblyVersion>1.6.8.0</AssemblyVersion>
-    <InformationalVersion>v1.6.8-dev</InformationalVersion>
+    <Version>1.6.9</Version>
+    <FileVersion>1.6.9.0</FileVersion>
+    <AssemblyVersion>1.6.9.0</AssemblyVersion>
+    <InformationalVersion>v1.6.9-dev</InformationalVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <!-- 自定义 Program.Main：先拦截 CS2 云推送辅助进程模式（cs2-cloud-push 开关）再走 XAML 启动（见 Program.cs）。 -->
@@ -56,6 +56,14 @@
          即 Clash/mihomo 这类内核；运行期由 VpnCoreService 从程序目录复制到内核工作目录。 -->
     <Content Include="wintun.dll" Condition="Exists('wintun.dll')" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="wintun-LICENSE.txt" Condition="Exists('wintun-LICENSE.txt')" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 举报描述词库：与语言包同样处理 —— 随发布拷到 Assets\ReportPhrases\ 方便改词，并内嵌一份保底（见 ReportPhraseBank）。 -->
+    <Content Include="Assets\ReportPhrases\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <EmbeddedResource Include="Assets\ReportPhrases\*.json">
+      <LogicalName>SteamEyaWinUI.ReportPhrases.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup>

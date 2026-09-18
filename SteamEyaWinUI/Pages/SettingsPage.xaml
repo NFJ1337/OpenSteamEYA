@@ -1,4 +1,4 @@
-﻿<Page
+<Page
     x:Class="SteamEyaWinUI.Pages.SettingsPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -123,6 +123,52 @@
                 </Grid>
             </Border>
 
+            <!-- 导航栏显示的页面：按钮弹出勾选列表，勾掉的页不出现在导航栏、启动也不进 -->
+            <Border Style="{StaticResource CardBorderStyle}">
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                        <TextBlock
+                            Text="{x:Bind Strings.Get('Settings_NavPages_Section'), Mode=OneWay}"
+                            Style="{StaticResource SectionTitleTextStyle}" />
+                        <TextBlock
+                            Text="{x:Bind Strings.Get('Settings_NavPages_Desc'), Mode=OneWay}"
+                            Foreground="{ThemeResource AuroraTextMutedBrush}"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                    <Button
+                        x:Name="NavPagesButton"
+                        Grid.Column="1"
+                        MinWidth="180"
+                        VerticalAlignment="Center"
+                        Style="{StaticResource AuroraGlassButtonStyle}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE700;" FontSize="16" />
+                            <TextBlock Text="{x:Bind Strings.Get('Settings_NavPages_Button'), Mode=OneWay}" />
+                        </StackPanel>
+                        <Button.Flyout>
+                            <!-- 勾选项在 NavPagesFlyout_Opened 里按当前导航项现场生成，语言/导航顺序不会走样 -->
+                            <Flyout x:Name="NavPagesFlyout" Opened="NavPagesFlyout_Opened">
+                                <StackPanel Spacing="8" MinWidth="248">
+                                    <TextBlock
+                                        Text="{x:Bind Strings.Get('Settings_NavPages_FlyoutTitle'), Mode=OneWay}"
+                                        Style="{StaticResource SectionTitleTextStyle}" />
+                                    <StackPanel x:Name="NavPagesList" Spacing="2" />
+                                    <TextBlock
+                                        Text="{x:Bind Strings.Get('Settings_NavPages_Hint'), Mode=OneWay}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                        TextWrapping="Wrap"
+                                        MaxWidth="268" />
+                                </StackPanel>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+                </Grid>
+            </Border>
             <!-- 自定义图片背景 -->
             <Border Style="{StaticResource CardBorderStyle}">
                 <StackPanel Spacing="10">

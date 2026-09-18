@@ -67,6 +67,9 @@ internal static class Loc
         }
     }
 
+    /// <summary>已经报过缺失的键（避免同一个键每次取值都刷日志）。</summary>
+    private static readonly HashSet<string> WarnedMissingKeys = new(StringComparer.Ordinal);
+
     public static string T(string key)
     {
         if (_current.Strings.TryGetValue(key, out var value))
@@ -74,7 +77,19 @@ internal static class Loc
             return value;
         }
 
-        return _fallback.Strings.TryGetValue(key, out var fallback) ? fallback : key;
+        if (_fallback.Strings.TryGetValue(key, out var fallback))
+        {
+            return fallback;
+        }
+
+        // 三份语言包都查不到 = 界面会把键名直接显示出来（历史上这类问题只能靠肉眼发现）。
+        // 这里打一条警告，日志里能直接看到是哪个键、当前语言是什么。
+        if (WarnedMissingKeys.Add($"{_current.Code}|{key}"))
+        {
+            AppLog.Warn($"[loc] 语言包缺键：{key}（当前语言 {_current.Code}，回退包 {_fallback.Code}）——界面会显示成键名。");
+        }
+
+        return key;
     }
 
     public static string Tf(string key, params object?[] args) => string.Format(T(key), args);

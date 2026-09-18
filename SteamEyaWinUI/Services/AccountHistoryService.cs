@@ -479,21 +479,11 @@ internal sealed class AccountHistoryService
             item.SteamId = steamId;
             item.EyaToken = eyaToken;
             item.TokenExpiresAt = tokenExpiresAt;
-            item.CompetitiveScore = score.DisplayText;
-            item.AccountStatus = score.StatusText;
             item.JwtAvailable = jwtValidation.IsValid;
             item.JwtStatus = jwtValidation.IsValid ? "有效" : "无效";
             item.JwtValidatedAt = DateTimeOffset.Now;
-            item.PremierScore = score.PremierRanking is null ? null : checked((int)score.PremierRanking.RankId);
-            item.PremierWins = score.PremierRanking is null ? null : checked((int)score.PremierRanking.Wins);
-            item.PremierScoreUpdatedAt = DateTimeOffset.Now;
-            item.CooldownSeconds = score.PenaltySeconds;
-            item.CooldownReason = score.PenaltyReason;
-            item.GcVacBanned = score.GcVacBannedOrUnknown;
-            item.CsPlayerLevel = score.PlayerLevel;
-            item.InCsMatch = score.InMatch;
-            item.Cs2IsChina = score.Cs2IsChina;
-            item.CsStatusUpdatedAt = DateTimeOffset.Now;
+            ApplyCsStatus(item, score);
+            ApplySteamLastLogin(item, ReadSteamLastLoginMap(), steamId);
 
             if (!string.IsNullOrWhiteSpace(personaName))
             {
@@ -565,6 +555,116 @@ internal sealed class AccountHistoryService
         {
             _fileGate.Release();
         }
+    }
+
+    /// <summary>
+    /// 读 Steam 自己记的「最近一次登录时间」（config\loginusers.vdf 的 Timestamp）。
+    /// 读不到（没装 Steam / 文件不存在 / 路径没解析出来）就返回空表，调用方按「不知道」处理。
+    /// </summary>
+    private static Dictionary<string, DateTimeOffset> ReadSteamLastLoginMap()
+    {
+        try
+        {
+            var paths = SteamPathCoordinator.ResolvePathsOrThrow();
+            return new SteamConfigService().GetLoginUsersLastLogin(paths);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"读取 Steam 的 loginusers.vdf（最近登录时间）失败，本次不更新「上次登录」：{ex.Message}");
+            return new Dictionary<string, DateTimeOffset>(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>把 Steam 侧的最近登录时间写进记录；这台机器没登录过该账号就保持原值。</summary>
+    private static void ApplySteamLastLogin(
+        SteamAccountHistoryItem item,
+        IReadOnlyDictionary<string, DateTimeOffset> steamLastLogin,
+        string steamId)
+    {
+        if (steamLastLogin.TryGetValue(steamId, out var lastLoginAt))
+        {
+            item.LastSteamLoginAt = lastLoginAt;
+        }
+    }
+
+    /// <summary>
+    /// 白号查询结果的一次性落盘：
+    /// · 令牌相关的永远写——令牌、过期时间（「JWT 过期」）、可用状态（「JWT 可用状态」）、Steam64；
+    /// · CS2 那几个字段只在 <paramref name="score"/> 非空时写——CS2 查询失败（例如 GC 超时）时不要把手里的旧值抹掉。
+    /// · 「上次登录」取 Steam 自己记的时间（loginusers.vdf 的 Timestamp），不是本程序的查询时间。
+    /// </summary>
+    public void SaveWhiteQueryResult(
+        string accountName,
+        string steamId,
+        string eyaToken,
+        DateTimeOffset? tokenExpiresAt,
+        bool jwtAvailable,
+        string jwtStatus,
+        CsPremierScoreResult? score)
+    {
+        accountName = accountName.Trim();
+        steamId = steamId.Trim();
+        if (string.IsNullOrWhiteSpace(accountName) || string.IsNullOrWhiteSpace(steamId))
+        {
+            return;
+        }
+
+        _fileGate.Wait();
+        try
+        {
+            var document = ReadDocumentForWrite();
+            var item = FindExisting(document.Accounts, steamId, accountName);
+            if (item is null)
+            {
+                item = new SteamAccountHistoryItem
+                {
+                    AccountName = accountName,
+                    SteamId = steamId
+                };
+                document.Accounts.Add(item);
+            }
+
+            item.AccountName = accountName;
+            item.SteamId = steamId;
+            item.EyaToken = eyaToken.Trim();
+            item.TokenExpiresAt = tokenExpiresAt;
+            item.JwtAvailable = jwtAvailable;
+            item.JwtStatus = jwtStatus;
+            item.JwtValidatedAt = DateTimeOffset.Now;
+            ApplySteamLastLogin(item, ReadSteamLastLoginMap(), steamId);
+
+            if (score is not null)
+            {
+                ApplyCsStatus(item, score);
+            }
+
+            document.Accounts = NormalizeAccounts(document.Accounts).ToList();
+            WriteDocument(document);
+        }
+        finally
+        {
+            _fileGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// CS2 那几个字段的统一写入（优先分/胜场、等级、冷却、VAC、国服、是否在匹配、更新时间）。
+    /// 「令牌链路」与「账号密码链路」共用同一份写入，避免两边口径不一致。
+    /// </summary>
+    private static void ApplyCsStatus(SteamAccountHistoryItem item, CsPremierScoreResult score)
+    {
+        item.CompetitiveScore = score.DisplayText;
+        item.AccountStatus = score.StatusText;
+        item.PremierScore = score.PremierRanking is null ? null : checked((int)score.PremierRanking.RankId);
+        item.PremierWins = score.PremierRanking is null ? null : checked((int)score.PremierRanking.Wins);
+        item.PremierScoreUpdatedAt = DateTimeOffset.Now;
+        item.CooldownSeconds = score.PenaltySeconds;
+        item.CooldownReason = score.PenaltyReason;
+        item.GcVacBanned = score.GcVacBannedOrUnknown;
+        item.CsPlayerLevel = score.PlayerLevel;
+        item.InCsMatch = score.InMatch;
+        item.Cs2IsChina = score.Cs2IsChina;
+        item.CsStatusUpdatedAt = DateTimeOffset.Now;
     }
 
     /// <summary>

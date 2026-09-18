@@ -578,7 +578,11 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         }
 
         var entries = new List<SteamAccountHistoryItem>();
-        foreach (var raw in (box.Text ?? string.Empty).Split('\n'))
+
+        // 换行按 \r / \n 都拆：WinUI 的 TextBox 内部用 \r 表示换行（回车输入、或粘贴后被规范化），
+        // 只按 \n 拆会把整段当成一行 —— 结果只加进第一个账号、后面几行被当成它的密码。
+        // 与历史页导入白号那里的写法保持一致（Split(['\r', '\n'], RemoveEmptyEntries)）。
+        foreach (var raw in (box.Text ?? string.Empty).Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
         {
             var line = raw.Trim();
             if (line.Length == 0)

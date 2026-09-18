@@ -187,6 +187,11 @@ internal sealed class CsPremierScoreService
             var cs2IsChina = await cs2IsChinaTask;
             AppLog.Info($"[query] 总耗时 {queryWatch.ElapsedMilliseconds} ms（国服判定：{cs2IsChina}）");
 
+            // CS2 等级：优先取 PlayersProfile 的 player_level；这一路没给就退回 9110 hello 里的同名字段
+            // （两者是同一个 proto 消息类型，实测有时只有其中一路带这个字段）。
+            var playerLevel = profile.PlayerLevel ?? helloData?.PlayerLevel;
+            AppLog.Info($"[query] CS2 等级：PlayersProfile={profile.PlayerLevel?.ToString() ?? "<无>"}，9110={helloData?.PlayerLevel?.ToString() ?? "<无>"}，采用={playerLevel?.ToString() ?? "<无>"}");
+
             return new CsPremierScoreResult(
                 steamId,
                 accountId,
@@ -195,7 +200,7 @@ internal sealed class CsPremierScoreService
                 helloData?.PenaltySeconds,
                 helloData?.PenaltyReason,
                 helloData?.VacBanned,
-                profile.PlayerLevel,
+                playerLevel,
                 profile.InMatch,
                 cs2IsChina);
         }

@@ -26,6 +26,36 @@ internal sealed class SteamConfigService
         return normalized;
     }
 
+    /// <summary>
+    /// 取 Steam 自己记的「每个账号最近一次登录时间」：loginusers.vdf 里每个 Steam64 下的 Timestamp（unix 秒）。
+    /// 这是 Steam 客户端写的时间，不是本程序的查询时间；没在本机登录过的账号不会出现在里面。
+    /// </summary>
+    public Dictionary<string, DateTimeOffset> GetLoginUsersLastLogin(SteamPaths paths)
+    {
+        var result = new Dictionary<string, DateTimeOffset>(StringComparer.OrdinalIgnoreCase);
+        var loginUsers = VdfDocument.LoadOrEmpty(Path.Combine(paths.ConfigPath, "loginusers.vdf"));
+        if (!TryGetUsers(loginUsers, out var users))
+        {
+            return result;
+        }
+
+        foreach (var (steamId, value) in users)
+        {
+            if (value is not Dictionary<string, object> user)
+            {
+                continue;
+            }
+
+            var raw = GetString(user, "Timestamp");
+            if (long.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var seconds) && seconds > 0)
+            {
+                result[steamId] = DateTimeOffset.FromUnixTimeSeconds(seconds).ToLocalTime();
+            }
+        }
+
+        return result;
+    }
+
     public void SetAutoLoginUser(string accountName)
     {
         try

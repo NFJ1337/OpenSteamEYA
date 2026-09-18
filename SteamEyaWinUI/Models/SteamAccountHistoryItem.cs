@@ -63,6 +63,13 @@ public sealed partial class SteamAccountHistoryItem : INotifyPropertyChanged
 
     public DateTimeOffset LastLoginAt { get; set; }
 
+    /// <summary>
+    /// Steam 侧记录的最近一次登录时间（来自本机 Steam 的 config\loginusers.vdf 里的 Timestamp）。
+    /// 与 <see cref="LastLoginAt"/>（本程序自己的登录/使用记录）区分开：卡片上的「上次登录」优先显示这个，
+    /// 拿不到（这台机器没登录过该账号）才退回本程序的记录。
+    /// </summary>
+    public DateTimeOffset? LastSteamLoginAt { get; set; }
+
     public DateTimeOffset? TokenExpiresAt { get; set; }
 
     public string? CompetitiveScore { get; set; }
@@ -129,12 +136,12 @@ public sealed partial class SteamAccountHistoryItem : INotifyPropertyChanged
     public string SteamIdDisplay => string.IsNullOrWhiteSpace(SteamId) ? Loc.T("Account_Steam64_Unresolved") : SteamId;
 
     [JsonIgnore]
-    public string LastLoginText => FormatHelper.FormatDateTime(LastLoginAt);
+    public string LastLoginText => FormatHelper.FormatDateTime(LastSteamLoginAt ?? LastLoginAt);
 
     [JsonIgnore]
-    public string LastLoginShortText => LastLoginAt == default
+    public string LastLoginShortText => (LastSteamLoginAt ?? LastLoginAt) == default
         ? Loc.T("Account_LastLogin_Unknown")
-        : LastLoginAt.LocalDateTime.ToString("MM-dd HH:mm");
+        : (LastSteamLoginAt ?? LastLoginAt).LocalDateTime.ToString("MM-dd HH:mm");
 
     [JsonIgnore]
     public string LastLoginCaptionText => Loc.Tf("Account_LastLogin_Caption_Format", LastLoginShortText);
@@ -234,7 +241,13 @@ public sealed partial class SteamAccountHistoryItem : INotifyPropertyChanged
     public Visibility NoteIndicatorVisibility => HasNote ? Visibility.Visible : Visibility.Collapsed;
 
     [JsonIgnore]
-    public string CsPlayerLevelText => FormatHelper.FormatPlayerLevelText(CsPlayerLevel, Loc.T("Account_Pending"));
+    /// <summary>
+    /// CS2 等级文案：有值就是等级；查过一次但 Steam 没给（9110 / PlayersProfile 都没带 player_level）
+    /// 就显示「未读取」——不要一直挂「待查询」，那会让人以为没点过查询。
+    /// </summary>
+    public string CsPlayerLevelText => FormatHelper.FormatPlayerLevelText(
+        CsPlayerLevel,
+        CsStatusUpdatedAt.HasValue ? Loc.T("Cs_PlayerLevel_NotRead") : Loc.T("Account_Pending"));
 
     [JsonIgnore]
     public string InCsMatchText => InCsMatch.HasValue

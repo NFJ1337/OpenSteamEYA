@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Globalization;
 using System.Diagnostics;
 using System.IO;
@@ -208,6 +208,45 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             ? Visibility.Visible
             : Visibility.Collapsed;
         ThemeColorSwatch.Background = new SolidColorBrush(color);
+    }
+
+    /// <summary>
+    /// 打开「选择显示的页面」浮出层时按当前导航项现搭勾选列表：
+    /// 标题直接取导航项文案（跟随语言），「设置」页固定勾选且不可取消（否则改不回来）。
+    /// </summary>
+    private void NavPagesFlyout_Opened(object sender, object e)
+    {
+        NavPagesList.Children.Clear();
+        var hidden = AppState.SettingsService.Load().HiddenNavPages ?? [];
+
+        foreach (var entry in MainWindow.Instance?.GetNavPageEntries() ?? [])
+        {
+            var box = new CheckBox
+            {
+                Content = entry.Title,
+                Tag = entry.Tag,
+                IsChecked = entry.AlwaysVisible || !hidden.Contains(entry.Tag),
+                IsEnabled = !entry.AlwaysVisible,
+            };
+            box.Checked += NavPageCheckBox_Changed;
+            box.Unchecked += NavPageCheckBox_Changed;
+            NavPagesList.Children.Add(box);
+        }
+    }
+
+    /// <summary>勾选变化：写盘并让主窗口立刻按新选择显示 / 隐藏导航项（启动页也按它挑）。</summary>
+    private void NavPageCheckBox_Changed(object sender, RoutedEventArgs e)
+    {
+        var hidden = NavPagesList.Children
+            .OfType<CheckBox>()
+            .Where(box => box.Tag is string && box.IsChecked == false)
+            .Select(box => (string)box.Tag!)
+            .ToList();
+
+        var settings = AppState.SettingsService.Load();
+        settings.HiddenNavPages = hidden;
+        AppState.SettingsService.Save(settings);
+        MainWindow.Instance?.ApplyNavPageVisibility();
     }
 
     /// <summary>按当前语言与已保存设置同步各选择控件。</summary>
