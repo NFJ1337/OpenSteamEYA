@@ -25,10 +25,10 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
     private SteamAccountData? _cachedLegacyAccountData;
     private string? _cachedLegacyLicenseKey;
 
-    // ---------- 「伊万/路飞」模块状态（两条上游取卡 → 解析 → 一键登录） ----------
-    private SteamUpstreamServer? _ivanLuffyServer;
-    private SteamAccountData? _ivanLuffyCachedAccount;
-    private string? _ivanLuffyCachedKey;
+    // ---------- Token 登录的「上游服务器」状态（奶味默认；伊万/路飞已并入本页） ----------
+    private SteamUpstreamServer? _tokenUpstream;
+    private SteamAccountData? _tokenUpstreamCachedAccount;
+    private string? _tokenUpstreamCachedKey;
 
     // 历史账号保存是否失败：SaveLoginHistoryAsync 置位，登录消息据此决定 Warning/Success 严重度
     // （本地化后历史后缀文案不再含固定中文前缀，故改用此标志替代原先的字符串前缀判断）。
@@ -63,7 +63,7 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
         ModeSelector.SelectedItem = TokenLoginModeItem;
         ApplyLanguageModeAvailability();
         InitializeVerifyModule();
-        InitializeIvanLuffyModule();
+        InitializeTokenUpstreamModule();
         InitializeCardStoreModule();
 
         UpdateAccountInfoFromCurrentInputs();
@@ -83,7 +83,6 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 
     private bool IsVerifyMode => ModeSelector.SelectedItem == VerifyModeItem;
 
-    private bool IsIvanLuffyMode => ModeSelector.SelectedItem == IvanLuffyModeItem;
 
     private void OnLanguageChanged()
     {
@@ -121,14 +120,8 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
         LicenseKeyBox.IsEnabled = enabled;
         ClearLicenseButton.IsEnabled = enabled;
         ResolveLicenseButton.IsEnabled = enabled;
-        IvanLuffyServerButton.IsEnabled = enabled;
-        IvanLuffyKeyBox.IsEnabled = enabled;
-        IvanLuffyResolveButton.IsEnabled = enabled;
-        IvanLuffyClearButton.IsEnabled = enabled;
-        IvanLuffyLoginButton.IsEnabled = enabled;
-        IvanLuffyClearWorkshopButton.IsEnabled = enabled;
-        IvanLuffyApplyLoadoutButton.IsEnabled = enabled;
-        IvanLuffyPersonalizeButton.IsEnabled = enabled;
+        TokenUpstreamButton.IsEnabled = enabled;
+        ResolveAndLoginButton.IsEnabled = enabled;
         LegacyEyaLicenseKeyBox.IsEnabled = enabled;
         ClearLegacyLicenseButton.IsEnabled = enabled;
         ResolveLegacyLicenseButton.IsEnabled = enabled;
@@ -173,11 +166,8 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
         ResolvedAccountBox.Text = string.Empty;
         VerifyKeyBox.Text = string.Empty;
         ResetVerifyResult();
-        IvanLuffyKeyBox.Text = string.Empty;
-        IvanLuffyResolvedBox.Text = string.Empty;
         CardStoreImportBox.Text = string.Empty;
-        _ivanLuffyCachedAccount = null;
-        _ivanLuffyCachedKey = null;
+        ResetTokenUpstreamResolution();
 
         _cachedAccountData = null;
         _cachedLicenseKey = null;
@@ -679,16 +669,14 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		bool isTokenLoginMode = IsTokenLoginMode;
 		bool isCredsMode = IsCredsMode;
 		bool isVerifyMode = IsVerifyMode;
-		bool isIvanLuffyMode = IsIvanLuffyMode;
 		bool isCardStoreMode = IsCardStoreMode;
-		ManualPanel.Visibility = ((isAutoMode | isLegacyEyaMode | isTokenLoginMode | isCredsMode | isVerifyMode | isIvanLuffyMode | isCardStoreMode) ? Visibility.Collapsed : Visibility.Visible);
+		ManualPanel.Visibility = ((isAutoMode | isLegacyEyaMode | isTokenLoginMode | isCredsMode | isVerifyMode | isCardStoreMode) ? Visibility.Collapsed : Visibility.Visible);
 		LegacyEyaPanel.Visibility = ((!isLegacyEyaMode) ? Visibility.Collapsed : Visibility.Visible);
 		TokenLoginPanel.Visibility = ((!isTokenLoginMode) ? Visibility.Collapsed : Visibility.Visible);
 		AutoPanel.Visibility = ((!isAutoMode) ? Visibility.Collapsed : Visibility.Visible);
 		CredsPanel.Visibility = ((!isCredsMode) ? Visibility.Collapsed : Visibility.Visible);
 		VerifyPanel.Visibility = ((!isVerifyMode) ? Visibility.Collapsed : Visibility.Visible);
-		// 「伊万/路飞」与「Token 登录」「账号核验」平级：选了那个页签才显示。
-		IvanLuffyPanel.Visibility = ((!isIvanLuffyMode) ? Visibility.Collapsed : Visibility.Visible);
+
 		// 「黑号存储」同样是独立页签：只在选中它时显示，并按当前内容刷一遍列表。
 		CardStorePanel.Visibility = ((!isCardStoreMode) ? Visibility.Collapsed : Visibility.Visible);
 		if (isCardStoreMode)
@@ -696,7 +684,7 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 			RefreshCardStoreList();
 		}
 		// 核验模式只查账号状态，不改 Steam 配置也不落盘，故与账密模式一样收起登录/装配操作区。
-		ActionButtonGrid.Visibility = ((isCredsMode || isVerifyMode || isIvanLuffyMode || isCardStoreMode) ? Visibility.Collapsed : Visibility.Visible);
+		ActionButtonGrid.Visibility = ((isCredsMode || isVerifyMode || isCardStoreMode) ? Visibility.Collapsed : Visibility.Visible);
 
 		// 右侧账号信息卡描述的是本机 EYA 会话，与核验（远端账号）无关：核验模式下暂时隐藏，
 		// 并把右列宽度归零，让核验面板用满宽度；切回其它模式即恢复。
@@ -711,10 +699,9 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		CredsModeItem.Visibility = Visibility.Collapsed;
 		LegacyEyaModeItem.Visibility = Visibility.Collapsed;
 		VerifyModeItem.Visibility = Visibility.Visible;
-		IvanLuffyModeItem.Visibility = Visibility.Visible;
 		CardStoreModeItem.Visibility = Visibility.Visible;
 		// 语言切换不得把用户从核验/伊万路飞模式踢回 Token 登录：仅当当前选中项不可见时才回退。
-		if (ModeSelector.SelectedItem != VerifyModeItem && ModeSelector.SelectedItem != IvanLuffyModeItem && ModeSelector.SelectedItem != CardStoreModeItem)
+		if (ModeSelector.SelectedItem != VerifyModeItem && ModeSelector.SelectedItem != CardStoreModeItem)
 		{
 			ModeSelector.SelectedItem = TokenLoginModeItem;
 		}
@@ -797,12 +784,8 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		ShowStatus(Loc.T("Login_Status_ResolvingLicense"), InfoBarSeverity.Informational);
 		try
 		{
-			EyaLicenseParseResult eyaLicenseParseResult = await AppState.LegacyEyaLicenseClient.ParseLicenseKeyAsync(TokenLicenseKeyBox.Text, cancellationToken);
-			TokenSteamIdBox.Text = eyaLicenseParseResult.SteamId;
-			TokenBox.Text = eyaLicenseParseResult.Token;
-			UpdateAccountInfo(eyaLicenseParseResult.SteamId, eyaLicenseParseResult.Token);
-			string text = (string.IsNullOrWhiteSpace(eyaLicenseParseResult.AccountName) ? eyaLicenseParseResult.SteamId : eyaLicenseParseResult.AccountName);
-			ShowStatus(Loc.Tf("Login_Status_LicenseResolved_Format", text, eyaLicenseParseResult.SteamId), InfoBarSeverity.Success);
+			// 按当前选的上游解析（奶味 keygettoken；伊万/路飞 keygetdata），填回 SteamID + 令牌。
+			await ResolveTokenLicenseAndFillAsync(cancellationToken);
 		}
 		catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
 		{
@@ -975,250 +958,128 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		return account;
 	}
 
-    // ---------- 「伊万/路飞」：与 Token登录 面板一致的三项登录前操作 ----------
+	// ---------- Token 登录的「上游服务器」（奶味默认；伊万/路飞 已并入本页） ----------
 
-    private enum IvanLuffyPreLoginAction
-    {
-        ClearWorkshop,
-        ApplyLoadout,
-        Personalize
-    }
+	/// <summary>铺好上游下拉：奶味（默认）、伊万、路飞。</summary>
+	private void InitializeTokenUpstreamModule()
+	{
+		var servers = new List<SteamUpstreamServer> { SteamLicenseClient.Upstream };
+		servers.AddRange(SteamLicenseClient.IvanLuffyServers);
+		foreach (var server in servers)
+		{
+			var item = new MenuFlyoutItem
+			{
+				Text = server.Name,
+				Tag = server
+			};
+			item.Click += TokenUpstreamMenuItem_Click;
+			TokenUpstreamFlyout.Items.Add(item);
+		}
 
-    private async void IvanLuffyClearWorkshopButton_Click(object sender, RoutedEventArgs e) =>
-        await RunIvanLuffyPreLoginActionAsync(IvanLuffyPreLoginAction.ClearWorkshop);
+		_tokenUpstream = SteamLicenseClient.Upstream;
+		TokenUpstreamText.Text = _tokenUpstream.Name;
+	}
 
-    private async void IvanLuffyApplyLoadoutButton_Click(object sender, RoutedEventArgs e) =>
-        await RunIvanLuffyPreLoginActionAsync(IvanLuffyPreLoginAction.ApplyLoadout);
+	private void TokenUpstreamMenuItem_Click(object sender, RoutedEventArgs e)
+	{
+		if (sender is MenuFlyoutItem { Tag: SteamUpstreamServer server } && !Equals(_tokenUpstream, server))
+		{
+			_tokenUpstream = server;
+			TokenUpstreamText.Text = server.Name;
+			// 换了上游，之前解析出来的账号不再作数。
+			ResetTokenUpstreamResolution();
+		}
+	}
 
-    private async void IvanLuffyPersonalizeButton_Click(object sender, RoutedEventArgs e) =>
-        await RunIvanLuffyPreLoginActionAsync(IvanLuffyPreLoginAction.Personalize);
+	/// <summary>卡密或上游变化后清掉上一次的解析结果与缓存。</summary>
+	private void ResetTokenUpstreamResolution()
+	{
+		_tokenUpstreamCachedAccount = null;
+		_tokenUpstreamCachedKey = null;
+	}
 
-    /// <summary>
-    /// 登录前可选操作：先用本模块的卡密解析出账号，回填 Token登录 面板，再调用那三个按钮同一个处理函数
-    /// ——与「账号核验」页完全同一套做法，不复制也不改写既有逻辑。
-    /// </summary>
-    private async Task RunIvanLuffyPreLoginActionAsync(IvanLuffyPreLoginAction action)
-    {
-        if (AppState.IsBusy)
-        {
-            return;
-        }
+	/// <summary>
+	/// 按当前选的上游解析卡密：
+	///   · 奶味 —— 还是原来那条链路（keygettoken，兼容「账号----卡密」写法）；
+	///   · 伊万 / 路飞 —— 走各自上游的取名接口（keygetdata，与黑号存储同一套）。
+	/// </summary>
+	private async Task<SteamAccountData> ResolveTokenLicenseByUpstreamAsync(string licenseKey, CancellationToken cancellationToken)
+	{
+		var key = licenseKey.Trim();
+		var upstream = _tokenUpstream ?? SteamLicenseClient.Upstream;
+		if (Equals(upstream, SteamLicenseClient.Upstream))
+		{
+			var parsed = await AppState.LegacyEyaLicenseClient.ParseLicenseKeyAsync(key, cancellationToken);
+			var name = string.IsNullOrWhiteSpace(parsed.AccountName) ? parsed.SteamId : parsed.AccountName;
+			return new SteamAccountData(parsed.Token, name, parsed.SteamId);
+		}
 
-        if (!await EnsureIvanLuffyCredentialsAsync())
-        {
-            return;
-        }
+		if (_tokenUpstreamCachedAccount is not null &&
+			string.Equals(_tokenUpstreamCachedKey, key, StringComparison.Ordinal))
+		{
+			return _tokenUpstreamCachedAccount;
+		}
 
-        ApplyTokenLoginSelection();
-        switch (action)
-        {
-            case IvanLuffyPreLoginAction.ClearWorkshop:
-                ClearWorkshopButton_Click(ClearWorkshopButton, new RoutedEventArgs());
-                break;
-            case IvanLuffyPreLoginAction.ApplyLoadout:
-                ApplyLoadoutButton_Click(ApplyLoadoutButton, new RoutedEventArgs());
-                break;
-            case IvanLuffyPreLoginAction.Personalize:
-                PersonalizeButton_Click(PersonalizeButton, new RoutedEventArgs());
-                break;
-        }
-    }
+		var account = _tokenUpstreamCachedAccount = await AppState.LicenseClient.GetAccountDataAsync(key, upstream, cancellationToken);
+		_tokenUpstreamCachedKey = key;
+		return account;
+	}
 
-    /// <summary>用本模块的卡密解析出账号（同一卡密命中缓存就不再请求），回填 Token登录 面板（SteamID + JWT）。</summary>
-    private async Task<bool> EnsureIvanLuffyCredentialsAsync()
-    {
-        if (IvanLuffyKeyBox.Text.Trim().Length == 0)
-        {
-            ShowStatus(Loc.T("Login_Error_LicenseKeyRequired"), InfoBarSeverity.Warning);
-            return false;
-        }
+	/// <summary>解析卡密并把结果填进 Token 登录面板（SteamID + 令牌），返回解析到的账号。</summary>
+	private async Task<SteamAccountData?> ResolveTokenLicenseAndFillAsync(CancellationToken cancellationToken)
+	{
+		var key = TokenLicenseKeyBox.Text?.Trim() ?? string.Empty;
+		if (key.Length == 0)
+		{
+			ShowStatus(Loc.T("Login_Error_LicenseKeyRequired"), InfoBarSeverity.Warning);
+			return null;
+		}
 
-        var cancellationToken = AppState.BeginBusyOperation();
-        ShowStatus(Loc.T("Login_Status_ResolvingLicense"), InfoBarSeverity.Informational);
-        try
-        {
-            var account = await ResolveIvanLuffyAsync(cancellationToken);
-            TokenLicenseKeyBox.Text = IvanLuffyKeyBox.Text.Trim();
-            TokenSteamIdBox.Text = account.SteamId;
-            TokenBox.Text = account.Token;
-            UpdateAccountInfo(account.SteamId, account.Token);
-            ShowStatus(
-                Loc.Tf("Login_Status_LicenseResolved_Format", account.SteamId, account.SteamId),
-                InfoBarSeverity.Success);
-            return true;
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            ShowStatus(Loc.T("Login_Status_LicenseResolveCancelled"), InfoBarSeverity.Informational);
-            return false;
-        }
-        catch (Exception ex)
-        {
-            AppLog.Warn($"伊万/路飞解析失败（登录前操作）：{ex.Message}");
-            ShowStatus(ex.Message, InfoBarSeverity.Error);
-            return false;
-        }
-        finally
-        {
-            AppState.EndBusyOperation();
-        }
-    }
+		var account = await ResolveTokenLicenseByUpstreamAsync(key, cancellationToken);
+		TokenSteamIdBox.Text = account.SteamId;
+		TokenBox.Text = account.Token;
+		UpdateAccountInfo(account.User, account.Token);
+		var text = string.IsNullOrWhiteSpace(account.User) ? account.SteamId : account.User;
+		ShowStatus(Loc.Tf("Login_Status_LicenseResolved_Format", text, account.SteamId), InfoBarSeverity.Success);
+		return account;
+	}
 
-    // ---------- 「伊万/路飞」模块（两条上游取卡 → 解析 → 一键登录） ----------
+	/// <summary>「解析并登录」：解析成功后直接交给既有登录流程（原「伊万/路飞」页的一键登录）。</summary>
+	private async void ResolveAndLoginButton_Click(object sender, RoutedEventArgs e)
+	{
+		if (AppState.IsBusy)
+		{
+			return;
+		}
 
-    /// <summary>下拉里铺上伊万/小岛、路飞两条上游，默认选第一条。</summary>
-    private void InitializeIvanLuffyModule()
-    {
-        foreach (SteamUpstreamServer server in SteamLicenseClient.IvanLuffyServers)
-        {
-            var item = new MenuFlyoutItem
-            {
-                Text = server.Name,
-                Tag = server
-            };
-            item.Click += IvanLuffyServerMenuItem_Click;
-            IvanLuffyServerFlyout.Items.Add(item);
-        }
+		var cancellationToken = AppState.BeginBusyOperation();
+		ShowStatus(Loc.T("Login_Status_ResolvingLicense"), InfoBarSeverity.Informational);
+		try
+		{
+			if (await ResolveTokenLicenseAndFillAsync(cancellationToken) is null)
+			{
+				return;
+			}
+		}
+		catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+		{
+			ShowStatus(Loc.T("Login_Status_LicenseResolveCancelled"), InfoBarSeverity.Informational);
+			return;
+		}
+		catch (Exception ex)
+		{
+			AppLog.Warn($"Token 登录卡密解析失败（上游 {TokenUpstreamText.Text}）：{ex.Message}");
+			ShowStatus(ex.Message, InfoBarSeverity.Error);
+			return;
+		}
+		finally
+		{
+			AppState.EndBusyOperation();
+		}
 
-        if (SteamLicenseClient.IvanLuffyServers.Count > 0)
-        {
-            _ivanLuffyServer = SteamLicenseClient.IvanLuffyServers[0];
-            IvanLuffyServerText.Text = _ivanLuffyServer.Name;
-        }
-    }
-
-    private void IvanLuffyServerMenuItem_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is MenuFlyoutItem { Tag: SteamUpstreamServer server } && !Equals(_ivanLuffyServer, server))
-        {
-            _ivanLuffyServer = server;
-            IvanLuffyServerText.Text = server.Name;
-            // 换了上游，之前解析出来的账号不再作数。
-            ResetIvanLuffyResolution();
-        }
-    }
-
-    /// <summary>卡密改动或换上游后，清掉上一次的解析结果与缓存。</summary>
-    private void ResetIvanLuffyResolution()
-    {
-        _ivanLuffyCachedAccount = null;
-        _ivanLuffyCachedKey = null;
-        IvanLuffyResolvedBox.Text = string.Empty;
-    }
-
-    private void IvanLuffyKeyBox_TextChanged(object sender, TextChangedEventArgs e) => ResetIvanLuffyResolution();
-
-    private async void IvanLuffyKeyBox_KeyDown(object sender, KeyRoutedEventArgs e)
-    {
-        if (e.Key == VirtualKey.Enter && !AppState.IsBusy)
-        {
-            e.Handled = true;
-            await ResolveIvanLuffyInteractiveAsync();
-        }
-    }
-
-    private async void IvanLuffyResolveButton_Click(object sender, RoutedEventArgs e) =>
-        await ResolveIvanLuffyInteractiveAsync();
-
-    private void IvanLuffyClearButton_Click(object sender, RoutedEventArgs e)
-    {
-        IvanLuffyKeyBox.Text = string.Empty;
-        ResetIvanLuffyResolution();
-    }
-
-    /// <summary>解析卡密：向上游换账号+令牌（同一卡密命中缓存就不再请求），并校验令牌是否被 Steam 接受。</summary>
-    private async Task ResolveIvanLuffyInteractiveAsync()
-    {
-        var cancellationToken = AppState.BeginBusyOperation();
-        ShowStatus(Loc.T("Login_Status_ResolvingLicense"), InfoBarSeverity.Informational);
-        try
-        {
-            var account = await ResolveIvanLuffyAsync(cancellationToken);
-            var validation = await ValidateTokenOnlineAsync(account.Token, cancellationToken);
-            ShowStatus(
-                validation.IsValid
-                    ? Loc.Tf("Login_Status_LicenseResolved_Format", account.User, account.SteamId)
-                    : validation.Status,
-                validation.IsValid ? InfoBarSeverity.Success : InfoBarSeverity.Error);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            ShowStatus(Loc.T("Login_Status_LicenseResolveCancelled"), InfoBarSeverity.Informational);
-        }
-        catch (Exception ex)
-        {
-            AppLog.Warn($"伊万/路飞卡密解析失败：{ex.Message}");
-            ShowStatus(ex.Message, InfoBarSeverity.Error);
-        }
-        finally
-        {
-            AppState.EndBusyOperation();
-        }
-    }
-
-    /// <summary>向上游换账号数据（与奶味那条链路同一个 LicenseClient，只是指定了别家的 BaseUrl）。</summary>
-    private async Task<SteamAccountData> ResolveIvanLuffyAsync(CancellationToken cancellationToken)
-    {
-        var licenseKey = NormalizeLicenseKey(IvanLuffyKeyBox.Text.Trim());
-        if (!string.Equals(IvanLuffyKeyBox.Text.Trim(), licenseKey, StringComparison.Ordinal))
-        {
-            IvanLuffyKeyBox.Text = licenseKey;
-            IvanLuffyKeyBox.SelectionStart = licenseKey.Length;
-        }
-
-        if (string.IsNullOrWhiteSpace(licenseKey))
-        {
-            throw new InvalidOperationException(Loc.T("Login_Error_LicenseKeyRequired"));
-        }
-
-        var server = _ivanLuffyServer
-            ?? throw new InvalidOperationException(Loc.T("Login_Error_UpstreamServerRequired"));
-
-        if (_ivanLuffyCachedAccount is not null &&
-            string.Equals(_ivanLuffyCachedKey, licenseKey, StringComparison.Ordinal))
-        {
-            return _ivanLuffyCachedAccount;
-        }
-
-        var account = _ivanLuffyCachedAccount =
-            await AppState.LicenseClient.GetAccountDataAsync(licenseKey, server, cancellationToken);
-        _ivanLuffyCachedKey = licenseKey;
-        IvanLuffyResolvedBox.Text = account.User + "  (" + account.SteamId + ")";
-        UpdateAccountInfo(account.User, account.Token);
-        await UpdateAccountProfileAsync(account.User, account.Token);
-        return account;
-    }
-
-    /// <summary>
-    /// 一键登录：与「账号核验」页的取名登录同款做法——先用本模块的卡密解析出账号（命中缓存就不再请求），
-    /// 回填 Token 登录面板，再交给那套登录流程（走旧版 EYA 链路：合并写 Steam 配置，不重写 config.vdf）。
-    /// 不复制也不改写既有登录逻辑。
-    /// </summary>
-    private async void IvanLuffyLoginButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (AppState.IsBusy)
-        {
-            return;
-        }
-
-        if (!await EnsureIvanLuffyCredentialsAsync())
-        {
-            return;
-        }
-
-        // 切到 Token登录 面板（SteamID + JWT）并交给既有登录流程。
-        ApplyTokenLoginSelection();
-
-        string? configuredSteamPath = SteamPathCoordinator.GetPersistedInstallPath();
-        ShowStatus(
-            configuredSteamPath is null
-                ? Loc.T("Settings_SteamPath_NotSet")
-                : Loc.Tf("Login_Verify_SteamPath_Format", configuredSteamPath),
-            configuredSteamPath is null ? InfoBarSeverity.Warning : InfoBarSeverity.Informational);
-
-        LoginButton_Click(LoginButton, new RoutedEventArgs());
-    }
-
+		ApplyTokenLoginSelection();
+		LoginButton_Click(LoginButton, new RoutedEventArgs());
+	}
 	// ---------- 「黑号存储」模块（还没登录过的卡密：导入 / 验号 / 删除 / 送去 Token 登录） ----------
 
 	/// <summary>导入时选的来源：奶味 / 伊万·路飞（默认奶味）。</summary>
@@ -1425,9 +1286,31 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 			added > 0 ? InfoBarSeverity.Success : InfoBarSeverity.Warning);
 	}
 
-	private void CardStoreDeleteButton_Click(object sender, RoutedEventArgs e)
+	private async void CardStoreDeleteButton_Click(object sender, RoutedEventArgs e)
 	{
 		if ((sender as FrameworkElement)?.Tag is not CardKeyEntry entry)
+		{
+			return;
+		}
+
+		// 先确认一次再删（跟账号管理页删账号一个路子），避免误点把存着的卡密删掉。
+		var xamlRoot = XamlRoot;
+		if (xamlRoot is null)
+		{
+			return;
+		}
+
+		var dialog = new ContentDialog
+		{
+			XamlRoot = xamlRoot,
+			Title = Loc.T("CardStore_Delete_Title"),
+			Content = Loc.Tf("CardStore_Delete_Confirm_Format", entry.Key),
+			PrimaryButtonText = Loc.T("Common_Confirm"),
+			CloseButtonText = Loc.T("Common_Cancel"),
+			DefaultButton = ContentDialogButton.Close
+		};
+
+		if (await dialog.ShowAsync() != ContentDialogResult.Primary)
 		{
 			return;
 		}
