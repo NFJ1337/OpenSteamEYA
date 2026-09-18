@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Text;
 using System.IO;
 using Microsoft.UI.Dispatching;
@@ -64,6 +64,7 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
         ApplyLanguageModeAvailability();
         InitializeVerifyModule();
         InitializeIvanLuffyModule();
+        InitializeCardStoreModule();
 
         UpdateAccountInfoFromCurrentInputs();
     }
@@ -94,6 +95,8 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
             ApplyLanguageModeAvailability();
             UpdateAccountInfoFromCurrentInputs();
             UpdateVerifyTexts();
+            UpdateCardStoreSourceText();
+            RefreshCardStoreList();
             OnBusyChanged(AppState.IsBusy);
         });
     }
@@ -108,6 +111,10 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
         var enabled = !isBusy;
         ModeSelector.IsEnabled = enabled;
         ClearAllButton.IsEnabled = enabled;
+        CardStoreImportBox.IsEnabled = enabled;
+        CardStoreImportButton.IsEnabled = enabled;
+        CardStoreSourceButton.IsEnabled = enabled;
+        CardStoreList.IsEnabled = enabled;
         AccountNameBox.IsEnabled = enabled;
         EyaTokenBox.IsEnabled = enabled;
         ClearManualButton.IsEnabled = enabled;
@@ -168,6 +175,7 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
         ResetVerifyResult();
         IvanLuffyKeyBox.Text = string.Empty;
         IvanLuffyResolvedBox.Text = string.Empty;
+        CardStoreImportBox.Text = string.Empty;
         _ivanLuffyCachedAccount = null;
         _ivanLuffyCachedKey = null;
 
@@ -657,7 +665,7 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 
 	private void ModeSelector_SelectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
 	{
-		if ((object)ManualPanel != null && (object)LegacyEyaPanel != null && (object)TokenLoginPanel != null && (object)AutoPanel != null && (object)CredsPanel != null && (object)VerifyPanel != null && (object)ActionButtonGrid != null)
+		if ((object)ManualPanel != null && (object)LegacyEyaPanel != null && (object)TokenLoginPanel != null && (object)AutoPanel != null && (object)CredsPanel != null && (object)VerifyPanel != null && (object)CardStorePanel != null && (object)ActionButtonGrid != null)
 		{
 			ApplyModeVisibility();
 			UpdateAccountInfoFromCurrentInputs();
@@ -672,7 +680,8 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		bool isCredsMode = IsCredsMode;
 		bool isVerifyMode = IsVerifyMode;
 		bool isIvanLuffyMode = IsIvanLuffyMode;
-		ManualPanel.Visibility = ((isAutoMode | isLegacyEyaMode | isTokenLoginMode | isCredsMode | isVerifyMode | isIvanLuffyMode) ? Visibility.Collapsed : Visibility.Visible);
+		bool isCardStoreMode = IsCardStoreMode;
+		ManualPanel.Visibility = ((isAutoMode | isLegacyEyaMode | isTokenLoginMode | isCredsMode | isVerifyMode | isIvanLuffyMode | isCardStoreMode) ? Visibility.Collapsed : Visibility.Visible);
 		LegacyEyaPanel.Visibility = ((!isLegacyEyaMode) ? Visibility.Collapsed : Visibility.Visible);
 		TokenLoginPanel.Visibility = ((!isTokenLoginMode) ? Visibility.Collapsed : Visibility.Visible);
 		AutoPanel.Visibility = ((!isAutoMode) ? Visibility.Collapsed : Visibility.Visible);
@@ -680,13 +689,19 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		VerifyPanel.Visibility = ((!isVerifyMode) ? Visibility.Collapsed : Visibility.Visible);
 		// 「伊万/路飞」与「Token 登录」「账号核验」平级：选了那个页签才显示。
 		IvanLuffyPanel.Visibility = ((!isIvanLuffyMode) ? Visibility.Collapsed : Visibility.Visible);
+		// 「黑号存储」同样是独立页签：只在选中它时显示，并按当前内容刷一遍列表。
+		CardStorePanel.Visibility = ((!isCardStoreMode) ? Visibility.Collapsed : Visibility.Visible);
+		if (isCardStoreMode)
+		{
+			RefreshCardStoreList();
+		}
 		// 核验模式只查账号状态，不改 Steam 配置也不落盘，故与账密模式一样收起登录/装配操作区。
-		ActionButtonGrid.Visibility = ((isCredsMode || isVerifyMode || isIvanLuffyMode) ? Visibility.Collapsed : Visibility.Visible);
+		ActionButtonGrid.Visibility = ((isCredsMode || isVerifyMode || isIvanLuffyMode || isCardStoreMode) ? Visibility.Collapsed : Visibility.Visible);
 
 		// 右侧账号信息卡描述的是本机 EYA 会话，与核验（远端账号）无关：核验模式下暂时隐藏，
 		// 并把右列宽度归零，让核验面板用满宽度；切回其它模式即恢复。
-		AccountInfoPanel.Visibility = (isVerifyMode ? Visibility.Collapsed : Visibility.Visible);
-		LayoutGrid.ColumnDefinitions[1].Width = (isVerifyMode ? new GridLength(0) : _sideColumnWidth);
+		AccountInfoPanel.Visibility = ((isVerifyMode || isCardStoreMode) ? Visibility.Collapsed : Visibility.Visible);
+		LayoutGrid.ColumnDefinitions[1].Width = ((isVerifyMode || isCardStoreMode) ? new GridLength(0) : _sideColumnWidth);
 	}
 
 	private void ApplyLanguageModeAvailability()
@@ -697,8 +712,9 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		LegacyEyaModeItem.Visibility = Visibility.Collapsed;
 		VerifyModeItem.Visibility = Visibility.Visible;
 		IvanLuffyModeItem.Visibility = Visibility.Visible;
+		CardStoreModeItem.Visibility = Visibility.Visible;
 		// 语言切换不得把用户从核验/伊万路飞模式踢回 Token 登录：仅当当前选中项不可见时才回退。
-		if (ModeSelector.SelectedItem != VerifyModeItem && ModeSelector.SelectedItem != IvanLuffyModeItem)
+		if (ModeSelector.SelectedItem != VerifyModeItem && ModeSelector.SelectedItem != IvanLuffyModeItem && ModeSelector.SelectedItem != CardStoreModeItem)
 		{
 			ModeSelector.SelectedItem = TokenLoginModeItem;
 		}
@@ -1203,6 +1219,360 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
         LoginButton_Click(LoginButton, new RoutedEventArgs());
     }
 
+	// ---------- 「黑号存储」模块（还没登录过的卡密：导入 / 验号 / 删除 / 送去 Token 登录） ----------
+
+	/// <summary>导入时选的来源：奶味 / 伊万·路飞（默认奶味）。</summary>
+	private string _cardStoreSource = CardKeyEntry.SourceNaiwei;
+
+	/// <summary>验号解析出来的账号，仅在内存里留给「去 Token 登录」用；令牌不落盘。</summary>
+	private readonly Dictionary<string, SteamAccountData> _cardStoreResolved = new(StringComparer.Ordinal);
+
+	private bool IsCardStoreMode => ModeSelector.SelectedItem == CardStoreModeItem;
+
+	/// <summary>铺好来源下拉（奶味 / 伊万·路飞），并按已存内容刷一遍列表。</summary>
+	private void InitializeCardStoreModule()
+	{
+		foreach (var source in new[] { CardKeyEntry.SourceNaiwei, CardKeyEntry.SourceIvan, CardKeyEntry.SourceLuffy })
+		{
+			var item = new MenuFlyoutItem
+			{
+				Text = Loc.T(CardStoreSourceNameKey(source)),
+				Tag = source
+			};
+			item.Click += CardStoreSourceMenuItem_Click;
+			CardStoreSourceFlyout.Items.Add(item);
+		}
+
+		UpdateCardStoreSourceText();
+		RefreshCardStoreList();
+	}
+
+	private void CardStoreSourceMenuItem_Click(object sender, RoutedEventArgs e)
+	{
+		if (sender is MenuFlyoutItem { Tag: string source })
+		{
+			_cardStoreSource = source;
+			UpdateCardStoreSourceText();
+		}
+	}
+
+	private void UpdateCardStoreSourceText() =>
+		CardStoreSourceText.Text = Loc.T(CardStoreSourceNameKey(_cardStoreSource));
+
+	/// <summary>来源文案键：奶味 / 伊万 / 路飞（认不出来的历史值按奶味显示）。</summary>
+	private static string CardStoreSourceNameKey(string source) => CardStoreSourceKind(source) switch
+	{
+		CardKeyEntry.SourceIvan => "CardStore_Source_Ivan",
+		CardKeyEntry.SourceLuffy => "CardStore_Source_Luffy",
+		_ => "CardStore_Source_Naiwei"
+	};
+
+	/// <summary>把来源规整成三种之一：奶味 / 伊万 / 路飞（含早期存过的 ivanluffy、tokenlogin）。</summary>
+	private static string CardStoreSourceKind(string source)
+	{
+		if (string.Equals(source, CardKeyEntry.SourceIvan, StringComparison.Ordinal) ||
+			string.Equals(source, CardKeyEntry.SourceIvanLuffyLegacy, StringComparison.Ordinal))
+		{
+			return CardKeyEntry.SourceIvan;
+		}
+
+		return string.Equals(source, CardKeyEntry.SourceLuffy, StringComparison.Ordinal)
+			? CardKeyEntry.SourceLuffy
+			: CardKeyEntry.SourceNaiwei;
+	}
+
+	/// <summary>来源 → 上游：奶味固定那条；伊万 / 路飞各对应 IvanLuffyServers 里的一条。</summary>
+	private static SteamUpstreamServer CardStoreUpstream(string source)
+	{
+		var servers = SteamLicenseClient.IvanLuffyServers;
+		var kind = CardStoreSourceKind(source);
+		if (kind == CardKeyEntry.SourceIvan && servers.Count > 0)
+		{
+			return servers[0];
+		}
+
+		if (kind == CardKeyEntry.SourceLuffy && servers.Count > 1)
+		{
+			return servers[1];
+		}
+
+		return SteamLicenseClient.Upstream;
+	}
+
+	/// <summary>把已存卡密铺到列表上；来源/状态文案按当前语言现算（列表重建即刷新）。</summary>
+	private void RefreshCardStoreList()
+	{
+		var entries = AppState.CardKeys.Entries;
+		foreach (var entry in entries)
+		{
+			entry.SourceText = Loc.T(CardStoreSourceNameKey(entry.Source));
+			entry.StatusText = BuildCardKeyStatusText(entry);
+		}
+
+		// 列表是普通 List，导入/删除不会自己通知界面：重新挂一次 ItemsSource 强制重建。
+		CardStoreList.ItemsSource = null;
+		CardStoreList.ItemsSource = entries;
+		CardStoreEmptyText.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+	}
+
+	private static string BuildCardKeyStatusText(CardKeyEntry entry)
+	{
+		var parts = new List<string>();
+		if (entry.IsUsed)
+		{
+			parts.Add(Loc.T("CardStore_Status_Used"));
+		}
+
+		if (entry.CheckedAt is null)
+		{
+			parts.Add(Loc.T("CardStore_Status_Unchecked"));
+		}
+		else if (entry.CheckOk == true)
+		{
+			var account = string.IsNullOrWhiteSpace(entry.AccountName) ? entry.SteamId ?? string.Empty : entry.AccountName;
+			parts.Add(Loc.Tf("CardStore_Status_Ok_Format", account, entry.SteamId ?? string.Empty));
+			parts.AddRange(BuildCardKeyVerifySummary(entry));
+		}
+		else
+		{
+			parts.Add(Loc.Tf("CardStore_Status_Fail_Format", entry.CheckMessage ?? Loc.T("CardStore_Status_Unknown")));
+		}
+
+		return string.Join(" · ", parts);
+	}
+
+	/// <summary>奶味那条链路顺带拉回来的核验信息摘要：VAC / 游戏封禁 / 竞技冷却 / 优先 / 等级。</summary>
+	private static IEnumerable<string> BuildCardKeyVerifySummary(CardKeyEntry entry)
+	{
+		if (entry.VacBans is int vacBans)
+		{
+			yield return vacBans > 0 ? Loc.Tf("CardStore_Verify_VacBanned_Format", vacBans) : Loc.T("CardStore_Verify_VacOk");
+		}
+
+		if (entry.GameBans is int gameBans)
+		{
+			yield return gameBans > 0 ? Loc.Tf("CardStore_Verify_GameBanned_Format", gameBans) : Loc.T("CardStore_Verify_GameOk");
+		}
+
+		if (entry.CooldownActive is bool cooldownActive)
+		{
+			yield return cooldownActive ? Loc.T("CardStore_Verify_CooldownOn") : Loc.T("CardStore_Verify_CooldownOff");
+		}
+
+		if (entry.Prime is bool prime)
+		{
+			yield return prime ? Loc.T("CardStore_Verify_PrimeYes") : Loc.T("CardStore_Verify_PrimeNo");
+		}
+
+		if (entry.ProfileRank is int profileRank)
+		{
+			yield return Loc.Tf("CardStore_Verify_Level_Format", profileRank);
+		}
+	}
+
+	/// <summary>
+	/// 登录成功后把「黑号存储」里对应的那条卡密标成「已用」（用户要求：标记，不自动删除）。
+	/// 先按 Token 登录框里的卡密精确匹配，再退回按 SteamID 匹配 —— 手动把卡密粘到别的入口登录也能命中。
+	/// </summary>
+	private void MarkCardStoreKeyUsed(string steamId)
+	{
+		var entries = AppState.CardKeys.Entries;
+		if (entries.Count == 0)
+		{
+			return;
+		}
+
+		var typedKey = TokenLicenseKeyBox.Text?.Trim() ?? string.Empty;
+		var matched = entries.FirstOrDefault(entry =>
+			(typedKey.Length > 0 && string.Equals(entry.Key, typedKey, StringComparison.Ordinal)) ||
+			(!string.IsNullOrWhiteSpace(steamId) && string.Equals(entry.SteamId, steamId, StringComparison.Ordinal)));
+
+		if (matched is null || matched.IsUsed)
+		{
+			return;
+		}
+
+		matched.IsUsed = true;
+		matched.UsedAt = DateTimeOffset.Now;
+		if (string.IsNullOrWhiteSpace(matched.SteamId) && !string.IsNullOrWhiteSpace(steamId))
+		{
+			matched.SteamId = steamId;
+		}
+
+		AppState.CardKeys.Save();
+		RefreshCardStoreList();
+		AppLog.Info($"黑号存储：卡密「{matched.Key}」已标成已用（SteamID {steamId}）。");
+	}
+
+	private void CardStoreImportButton_Click(object sender, RoutedEventArgs e)
+	{
+		// 换行按 \r / \n 都拆（WinUI 的 TextBox 用 \r），每行一个卡密；卡密本身只去掉首尾空白。
+		var lines = (CardStoreImportBox.Text ?? string.Empty)
+			.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+		if (lines.Length == 0)
+		{
+			ShowStatus(Loc.T("CardStore_Status_NothingToImport"), InfoBarSeverity.Warning);
+			return;
+		}
+
+		var added = AppState.CardKeys.Import(lines, _cardStoreSource);
+		CardStoreImportBox.Text = string.Empty;
+		RefreshCardStoreList();
+		ShowStatus(
+			added > 0
+				? Loc.Tf("CardStore_Status_Imported_Format", added, Loc.T(CardStoreSourceNameKey(_cardStoreSource)))
+				: Loc.T("CardStore_Status_AllDuplicated"),
+			added > 0 ? InfoBarSeverity.Success : InfoBarSeverity.Warning);
+	}
+
+	private void CardStoreDeleteButton_Click(object sender, RoutedEventArgs e)
+	{
+		if ((sender as FrameworkElement)?.Tag is not CardKeyEntry entry)
+		{
+			return;
+		}
+
+		AppState.CardKeys.Remove(entry);
+		_cardStoreResolved.Remove(entry.Key);
+		RefreshCardStoreList();
+		ShowStatus(Loc.T("CardStore_Status_Deleted"), InfoBarSeverity.Informational);
+	}
+
+	private async void CardStoreVerifyButton_Click(object sender, RoutedEventArgs e)
+	{
+		if ((sender as FrameworkElement)?.Tag is not CardKeyEntry entry || AppState.IsBusy)
+		{
+			return;
+		}
+
+		await VerifyStoredCardKeyAsync(entry);
+	}
+
+	/// <summary>验号：按来源取卡 → 在线校验令牌 → 结果写回该行并存盘。</summary>
+	private async Task VerifyStoredCardKeyAsync(CardKeyEntry entry)
+	{
+		var cancellationToken = AppState.BeginBusyOperation();
+		ShowStatus(Loc.Tf("CardStore_Status_Verifying_Format", entry.Key), InfoBarSeverity.Informational);
+		try
+		{
+			var account = await ResolveStoredCardKeyAsync(entry.Key, entry.Source, cancellationToken);
+			var validation = await AppState.TokenOnlineValidationService.ValidateForLoginAsync(account.Token, cancellationToken);
+			_cardStoreResolved[entry.Key] = account;
+
+			// 奶味那条上游另外还有一份「封禁 / CS2」核验信息（核验模块用的就是它）：顺带拉回来存进该行。
+			// 这一步慢（实测几十秒），失败也不影响「验号」本身的结论，所以单独兜住。
+			if (CardStoreSourceKind(entry.Source) == CardKeyEntry.SourceNaiwei)
+			{
+				ShowStatus(Loc.Tf("CardStore_Status_VerifyingExtra_Format", entry.Key), InfoBarSeverity.Informational);
+				try
+				{
+					var payload = await AppState.VerifyService.VerifyAsync(entry.Key, cancellationToken);
+					entry.VacBans = payload.Bans?.VacBans;
+					entry.GameBans = payload.Bans?.GameBans;
+					entry.CooldownActive = payload.Cs2?.Cooldown?.Active;
+					entry.Prime = payload.Cs2?.Prime?.Status;
+					entry.ProfileRank = payload.Cs2?.ProfileRank;
+					if (string.IsNullOrWhiteSpace(entry.SteamId) && !string.IsNullOrWhiteSpace(payload.SteamId))
+					{
+						entry.SteamId = payload.SteamId;
+					}
+				}
+				catch (OperationCanceledException)
+				{
+					throw;
+				}
+				catch (Exception verifyEx)
+				{
+					AppLog.Warn($"黑号存储：核验信息获取失败（{entry.Key}）：{verifyEx.Message}");
+				}
+			}
+
+			entry.CheckedAt = DateTimeOffset.Now;
+			entry.CheckOk = validation.IsValid;
+			entry.AccountName = account.User;
+			entry.SteamId = account.SteamId;
+			entry.CheckMessage = validation.IsValid ? null : validation.Status;
+			AppState.CardKeys.Save();
+			RefreshCardStoreList();
+
+			ShowStatus(
+				validation.IsValid
+					? Loc.Tf("CardStore_Status_Verified_Format", account.User, account.SteamId)
+					: Loc.Tf("CardStore_Status_VerifyFailed_Format", validation.Status),
+				validation.IsValid ? InfoBarSeverity.Success : InfoBarSeverity.Error);
+		}
+		catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+		{
+			ShowStatus(Loc.T("Login_Status_LicenseResolveCancelled"), InfoBarSeverity.Informational);
+		}
+		catch (Exception ex)
+		{
+			entry.CheckedAt = DateTimeOffset.Now;
+			entry.CheckOk = false;
+			entry.CheckMessage = ex.Message;
+			AppState.CardKeys.Save();
+			RefreshCardStoreList();
+			AppLog.Warn($"黑号存储验号失败（{entry.Key}）：{ex.Message}");
+			ShowStatus(Loc.Tf("CardStore_Status_VerifyFailed_Format", ex.Message), InfoBarSeverity.Error);
+		}
+		finally
+		{
+			AppState.EndBusyOperation();
+		}
+	}
+
+	/// <summary>
+	/// 按来源取卡：奶味 / 伊万 / 路飞 各走自己那条上游的取名接口（keygetdata）。
+	/// 上游选错会直接报上游的错误，换个来源再验一次即可 —— 不偷偷换上游，免得存下来的来源对不上。
+	/// </summary>
+	private static Task<SteamAccountData> ResolveStoredCardKeyAsync(string key, string source, CancellationToken cancellationToken) =>
+		AppState.LicenseClient.GetAccountDataAsync(key, CardStoreUpstream(source), cancellationToken);
+
+	/// <summary>
+	/// 「去 Token 登录」：解析出账号令牌（刚验过就直接用内存里的），切到 Token登录 页签并回填，
+	/// 剩下的交给既有登录流程 —— 不自动点登录，由用户决定。
+	/// </summary>
+	private async void CardStoreTokenButton_Click(object sender, RoutedEventArgs e)
+	{
+		if ((sender as FrameworkElement)?.Tag is not CardKeyEntry entry || AppState.IsBusy)
+		{
+			return;
+		}
+
+		if (!_cardStoreResolved.TryGetValue(entry.Key, out var account))
+		{
+			var cancellationToken = AppState.BeginBusyOperation();
+			ShowStatus(Loc.T("Login_Status_ResolvingLicense"), InfoBarSeverity.Informational);
+			try
+			{
+				account = await ResolveStoredCardKeyAsync(entry.Key, entry.Source, cancellationToken);
+				_cardStoreResolved[entry.Key] = account;
+			}
+			catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+			{
+				ShowStatus(Loc.T("Login_Status_LicenseResolveCancelled"), InfoBarSeverity.Informational);
+				return;
+			}
+			catch (Exception ex)
+			{
+				AppLog.Warn($"黑号存储解析失败（{entry.Key}）：{ex.Message}");
+				ShowStatus(ex.Message, InfoBarSeverity.Error);
+				return;
+			}
+			finally
+			{
+				AppState.EndBusyOperation();
+			}
+		}
+
+		// 与「伊万/路飞」一键登录同款：回填 Token 登录面板，交给既有登录流程。
+		ApplyTokenLoginSelection();
+		TokenLicenseKeyBox.Text = entry.Key;
+		TokenSteamIdBox.Text = account.SteamId;
+		TokenBox.Text = account.Token;
+		UpdateAccountInfo(account.User, account.Token);
+		ShowStatus(Loc.Tf("CardStore_Status_ToToken_Format", account.User, account.SteamId), InfoBarSeverity.Success);
+	}
 	private static string NormalizeLicenseKey(string value)
 	{
 		string text = value.Trim();
@@ -1289,6 +1659,8 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 
 	private async Task<string> SaveLoginHistoryAsync(LoginResult result, string eyaToken, SteamAccountHistoryItem? prefetchedProfile)
 	{
+		// 登录成功这条路：顺手把黑号存储里对应的卡密标成「已用」（标记，不删除）。
+		MarkCardStoreKeyUsed(result.SteamId);
 		try
 		{
 			await AppState.AccountHistoryService.SaveLoginAsync(result.AccountName, result.SteamId, eyaToken, result.ExpiresAt, NullIfBlank(prefetchedProfile?.PersonaName), NullIfBlank(prefetchedProfile?.AvatarUrl), NullIfBlank(prefetchedProfile?.AvatarPath));

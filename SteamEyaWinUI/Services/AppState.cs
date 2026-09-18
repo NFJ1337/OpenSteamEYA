@@ -32,6 +32,9 @@ internal static class AppState
     public static UiColorService UiColorService { get; } = new();
     public static SteamVerifyService VerifyService { get; } = new();
 
+    /// <summary>「黑号存储」：本地攒着还没登录过的卡密（数据目录 card-keys.json）。</summary>
+    public static CardKeyStore CardKeys { get; } = new();
+
     /// <summary>由 MainWindow 注入，向全局状态栏输出消息。</summary>
     public static Action<string, InfoBarSeverity>? StatusReporter { get; set; }
 

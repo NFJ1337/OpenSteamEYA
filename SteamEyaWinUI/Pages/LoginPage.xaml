@@ -1,8 +1,9 @@
-﻿<Page
+<Page
     x:Class="SteamEyaWinUI.Pages.LoginPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:models="using:SteamEyaWinUI.Models"
+    xmlns:loc="using:SteamEyaWinUI.Localization"
     NavigationCacheMode="Required"
     SizeChanged="LoginPage_SizeChanged">
 
@@ -127,6 +128,12 @@
                     </Grid.ColumnDefinitions>
 
                     <SelectorBar x:Name="ModeSelector" SelectionChanged="ModeSelector_SelectionChanged" Background="{ThemeResource AuroraGlassStrongBrush}" BorderBrush="{ThemeResource AuroraGlassBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="4">
+                        <!-- 黑号存储：攒还没登录过的卡密（按来源导入、验号、删除、送去 Token 登录）—— 放在 Token登录 左边 -->
+                        <SelectorBarItem x:Name="CardStoreModeItem" Text="{x:Bind Strings.Get('Login_Mode_CardStore'), Mode=OneWay}">
+                            <SelectorBarItem.Icon>
+                                <FontIcon Glyph="&#xE777;" />
+                            </SelectorBarItem.Icon>
+                        </SelectorBarItem>
                         <SelectorBarItem x:Name="TokenLoginModeItem" Text="{x:Bind Strings.Get('Login_Mode_TokenLogin'), Mode=OneWay}">
                             <SelectorBarItem.Icon>
                                 <FontIcon Glyph="&#xE8D7;" />
@@ -311,6 +318,185 @@
                         </Grid>
                     </StackPanel>
                 </Border>
+                <!-- 黑号存储：上面一张卡片负责导入（文本框铺满，来源/导入按钮/提示在下面一行），
+                     下面单独一张表格卡片放已存卡密，表格样式与「账号管理」页一致。 -->
+                <StackPanel x:Name="CardStorePanel" Spacing="12" Visibility="Collapsed">
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="{x:Bind Strings.Get('CardStore_Section'), Mode=OneWay}" Style="{StaticResource SectionTitleTextStyle}" />
+                            <TextBlock
+                                Text="{x:Bind Strings.Get('CardStore_Desc'), Mode=OneWay}"
+                                Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                TextWrapping="Wrap" />
+
+                            <TextBox
+                                x:Name="CardStoreImportBox"
+                                Header="{x:Bind Strings.Get('CardStore_Import_Header'), Mode=OneWay}"
+                                PlaceholderText="{x:Bind Strings.Get('CardStore_Import_Placeholder'), Mode=OneWay}"
+                                AcceptsReturn="True"
+                                TextWrapping="Wrap"
+                                Height="132"
+                                HorizontalAlignment="Stretch"
+                                IsSpellCheckEnabled="False" />
+
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <DropDownButton
+                                    x:Name="CardStoreSourceButton"
+                                    Grid.Column="0"
+                                    MinWidth="150"
+                                    VerticalAlignment="Top"
+                                    Style="{StaticResource UiTintDropDownButtonStyle}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE8EC;" FontSize="14" />
+                                        <TextBlock x:Name="CardStoreSourceText" />
+                                    </StackPanel>
+                                    <DropDownButton.Flyout>
+                                        <MenuFlyout x:Name="CardStoreSourceFlyout" MenuFlyoutPresenterStyle="{StaticResource AuroraOpaqueMenuFlyoutPresenterStyle}" />
+                                    </DropDownButton.Flyout>
+                                </DropDownButton>
+
+                                <Button
+                                    x:Name="CardStoreImportButton"
+                                    Grid.Column="1"
+                                    MinWidth="150"
+                                    VerticalAlignment="Top"
+                                    Style="{StaticResource AccentButtonStyle}"
+                                    Click="CardStoreImportButton_Click">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE710;" FontSize="14" />
+                                        <TextBlock Text="{x:Bind Strings.Get('CardStore_Import_Button'), Mode=OneWay}" />
+                                    </StackPanel>
+                                </Button>
+
+                                <TextBlock
+                                    Grid.Column="2"
+                                    Text="{x:Bind Strings.Get('CardStore_Import_Hint'), Mode=OneWay}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                    TextWrapping="Wrap"
+                                    VerticalAlignment="Center" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 已存卡密：独立表格卡片 -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <Grid RowSpacing="0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+
+                            <Grid
+                                Grid.Row="0"
+                                ColumnSpacing="14"
+                                Padding="12,8,12,8"
+                                Background="{ThemeResource AuroraTableHeaderBrush}"
+                                BorderThickness="0,0,0,1"
+                                BorderBrush="{ThemeResource AuroraGlassBorderBrush}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="260" />
+                                    <ColumnDefinition Width="90" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{x:Bind Strings.Get('CardStore_Col_Key'), Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                                <TextBlock Grid.Column="1" Text="{x:Bind Strings.Get('CardStore_Col_Source'), Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                                <TextBlock Grid.Column="2" Text="{x:Bind Strings.Get('CardStore_Col_Status'), Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                                <TextBlock Grid.Column="3" Text="{x:Bind Strings.Get('CardStore_Col_Actions'), Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                            </Grid>
+
+                            <TextBlock
+                                x:Name="CardStoreEmptyText"
+                                Grid.Row="1"
+                                Margin="12,10,12,4"
+                                Text="{x:Bind Strings.Get('CardStore_Empty'), Mode=OneWay}"
+                                Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                TextWrapping="Wrap"
+                                Visibility="Collapsed" />
+
+                            <ListView
+                                x:Name="CardStoreList"
+                                Grid.Row="2"
+                                MaxHeight="380"
+                                SelectionMode="None">
+                                <ListView.ItemContainerStyle>
+                                    <Style TargetType="ListViewItem">
+                                        <Setter Property="Padding" Value="12,4,12,4" />
+                                        <Setter Property="MinHeight" Value="0" />
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    </Style>
+                                </ListView.ItemContainerStyle>
+                                <ListView.ItemTemplate>
+                                    <DataTemplate x:DataType="models:CardKeyEntry">
+                                        <Grid ColumnSpacing="14">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="260" />
+                                                <ColumnDefinition Width="90" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <TextBlock
+                                                Grid.Column="0"
+                                                Text="{x:Bind Key, Mode=OneWay}"
+                                                TextTrimming="CharacterEllipsis"
+                                                VerticalAlignment="Center" />
+
+                                            <TextBlock
+                                                Grid.Column="1"
+                                                Text="{x:Bind SourceText, Mode=OneWay}"
+                                                Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                                TextTrimming="CharacterEllipsis"
+                                                VerticalAlignment="Center" />
+
+                                            <TextBlock
+                                                Grid.Column="2"
+                                                Text="{x:Bind StatusText, Mode=OneWay}"
+                                                Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                                TextTrimming="CharacterEllipsis"
+                                                VerticalAlignment="Center" />
+
+                                            <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                <Button
+                                                    MinWidth="0"
+                                                    Padding="10,4"
+                                                    Style="{StaticResource AuroraGlassButtonStyle}"
+                                                    Tag="{x:Bind}"
+                                                    Click="CardStoreVerifyButton_Click">
+                                                    <TextBlock Text="{loc:Localize Key=CardStore_Btn_Verify}" />
+                                                </Button>
+                                                <Button
+                                                    MinWidth="0"
+                                                    Padding="10,4"
+                                                    Style="{StaticResource AuroraGlassButtonStyle}"
+                                                    Tag="{x:Bind}"
+                                                    Click="CardStoreTokenButton_Click">
+                                                    <TextBlock Text="{loc:Localize Key=CardStore_Btn_Token}" />
+                                                </Button>
+                                                <Button
+                                                    MinWidth="0"
+                                                    Padding="10,4"
+                                                    Style="{StaticResource AuroraGlassButtonStyle}"
+                                                    Tag="{x:Bind}"
+                                                    Click="CardStoreDeleteButton_Click">
+                                                    <TextBlock Text="{loc:Localize Key=CardStore_Btn_Delete}" />
+                                                </Button>
+                                            </StackPanel>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </Grid>
+                    </Border>
+                </StackPanel>
                 <Border x:Name="TokenLoginPanel" Style="{StaticResource CardBorderStyle}" Visibility="Collapsed">
                     <StackPanel Spacing="14">
                         <TextBlock Text="{x:Bind Strings.Get('Login_Token_Section'), Mode=OneWay}" Style="{StaticResource SectionTitleTextStyle}" />
