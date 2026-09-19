@@ -1,9 +1,9 @@
-﻿<#
+<#
 .SYNOPSIS
 把源码打包成 zip 上传到 GitHub Release，并把工作区改动提交、推送到远端仓库（用户说的「源码打包发送到 github」）。
 
 .DESCRIPTION
-1) 把仓库源码（任何层级都排除 .git/.vs/artifacts/bin/obj/node_modules）复制到临时目录，压成 artifacts\SteamEYA-<版本>-source.zip；
+1) 把仓库源码（任何层级都排除 .git/.vs/artifacts/bin/obj/node_modules）复制到临时目录，压成 artifacts\SteamEYANFJ-<版本>-source.zip；
 2) git add -A → 有改动就提交 → push 到指定分支；
 3) 把源码 zip 上传到 release（同名覆盖）。
 
@@ -28,7 +28,7 @@ if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
     $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 }
 
-$zipPath = Join-Path $ProjectRoot "artifacts\SteamEYA-$Version-source.zip"
+$zipPath = Join-Path $ProjectRoot "artifacts\SteamEYANFJ-$Version-source.zip"
 $excludedDirs = @('.git', '.vs', 'artifacts', 'node_modules', 'node_modules_temp', 'bin', 'obj')
 
 function Copy-SourceTree([string]$source, [string]$target) {
@@ -112,7 +112,7 @@ if ($DryRun) {
     Write-Host "  - git commit -m ""SteamEYA $Version：源码同步（含本次改动）""（无改动则跳过）"
     Write-Host "  - git push origin $Branch"
     Write-Host "  - git tag -f $Tag HEAD + git push --force origin refs/tags/$Tag（让发布页的 Source code zip/tar.gz 也变最新）"
-    Write-Host '  - 删除 release 上旧的 SteamEYA-*-source.zip（若有）'
+    Write-Host '  - 删除 release 上旧的 SteamEYA*-source.zip（含改名前遗留的）（若有）'
     Write-Host "  - gh release upload $Tag $zipPath --clobber（仓库 $Repository）"
     return
 }
@@ -156,7 +156,7 @@ finally {
 
 # 先删掉 release 上旧的源码包，只保留这一次的（和安装包一样做「替换」而不是堆积）
 $staleZips = @(gh release view $Tag --repo $Repository --json assets --jq '.assets[].name' |
-    Where-Object { $_ -like 'SteamEYA-*-source.zip' -and $_ -ne $zip.Name })
+    Where-Object { $_ -like 'SteamEYA*-source.zip' -and $_ -ne $zip.Name })
 foreach ($name in $staleZips) {
     Write-Host "删除旧源码包：$name"
     gh release delete-asset $Tag $name --repo $Repository --yes

@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.Win32;
 using SteamEyaWinUI.Models;
+using SteamEyaWinUI.Localization;
 
 namespace SteamEyaWinUI.Services;
 
@@ -253,35 +254,104 @@ internal sealed class SteamConfigService
         return GetActiveLoginAccount(paths, VdfDocument.LoadOrEmpty(loginUsersPath));
     }
 
+    /// <summary>
+    /// 更新 config.vdf：**保留其它账号**，只增改当前账号 —— 对齐旧版 Python 版
+    /// （_write_vdf_config："更新 config.vdf，保留已有账号并追加/更新当前 EYA 账号"）。
+    ///
+    /// 早先这里是从零生成、整体覆盖的最小模板，虽然能规避 VDF 往返损坏，副作用却是把用户
+    /// config.vdf 里其它账号的登录记录一并抹掉（用户反馈：登录后缓存被清空）。
+    /// 现在改成读旧文件再合并；解析不了就中止（见 LoadForRewrite），绝不拿空文档覆盖别人的账号。
+    /// </summary>
     private static void UpdateConfigVdf(string path, string accountName, string steamId)
     {
-        // 对齐 SteamEYA_GUI.exe（sub_140003640）：config.vdf 从零生成、整体覆盖，
-        // 绝不读取/合并旧文件。旧实现用 LoadOrEmpty 读出用户原有 config.vdf
-        // （常有 20KB+），再经我们手写的 VDF 解析/序列化往返一遍——只要某处结构
-        // 往返后被破坏，Steam 启动时读不动 config.vdf 就会把它重置，连带忽略我们
-        // 写入 loginusers.vdf/local.vdf 的自动登录，停在登录界面。这正是「上号流程
-        // 全部成功、Steam 进程也起来了，却没自动登录」且只在部分机器复现的根因
-        // （取决于该机 config.vdf 里有没有我们解析器处理不好的内容）。参考二进制
-        // 干脆只写下面这三项最小模板，彻底规避往返破坏。
-        var config = new Dictionary<string, object>(StringComparer.Ordinal);
+        var config = LoadForRewrite(path);
         var steam = EnsurePath(config, "InstallConfigStore", "Software", "Valve", "Steam");
 
-        steam["AutoUpdateWindowEnabled"] = "0";
-        steam["MTBF"] = Random.Shared.Next(100000000, 999999999).ToString();
+        if (steam.GetValueOrDefault("AutoUpdateWindowEnabled") is not string)
+        {
+            steam["AutoUpdateWindowEnabled"] = "0";
+        }
+
+        if (steam.GetValueOrDefault("MTBF") is not string)
+        {
+            steam["MTBF"] = Random.Shared.Next(100000000, 999999999).ToString();
+        }
 
         var accounts = EnsureObject(steam, "Accounts");
+
+        // 同一个 SteamID 换了登录名（改名/换号）时清掉旧条目；其它账号一律保留。
+        foreach (var oldName in accounts
+                     .Where(pair => pair.Key != accountName &&
+                         pair.Value is Dictionary<string, object> old &&
+                         string.Equals(old.GetValueOrDefault("SteamID")?.ToString(), steamId, StringComparison.Ordinal))
+                     .Select(pair => pair.Key)
+                     .ToList())
+        {
+            accounts.Remove(oldName);
+        }
+
         accounts[accountName] = new Dictionary<string, object>
         {
             ["SteamID"] = steamId
         };
 
+        BackupBeforeWrite(path);
         VdfDocument.Save(path, config);
     }
 
+    /// <summary>
+    /// 读取要改写的 VDF；解析不了就抛错、**中止这次写入**（对齐旧版 Python：
+    /// "无法解析 xxx，已中止登录以避免覆盖其它 Steam 账号"）。
+    /// 早先用的是 LoadOrEmpty：解析失败当空文档继续，等于把别的账号全抹掉。
+    /// </summary>
+    private static Dictionary<string, object> LoadForRewrite(string path)
+    {
+        try
+        {
+            return VdfDocument.Load(path);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                Loc.Tf("Steam_Error_VdfAbort_Format", Path.GetFileName(path), ex.Message),
+                ex);
+        }
+    }
+
+    /// <summary>改写前留一份同名 .bak：万一我们手写的 VDF 序列化有问题，还能手动还原。（旧版 EYA 那条链路也共用）</summary>
+    internal static void BackupBeforeWrite(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Copy(path, path + ".bak", overwrite: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"备份 {Path.GetFileName(path)} 失败（继续写入）：{ex.Message}");
+        }
+    }
+    /// <summary>
+    /// 更新 loginusers.vdf：保留其它已记住的账号，只增改当前账号 —— 旧版 Python
+    /// _write_vdf_loginusers 的语义（解析不了就中止，绝不拿空文档覆盖别人的账号）。
+    /// </summary>
     private static void UpdateLoginUsersVdf(string path, string accountName, string steamId)
     {
-        var loginUsers = VdfDocument.LoadOrEmpty(path);
+        var loginUsers = LoadForRewrite(path);
         var users = EnsureObject(loginUsers, "users");
+
+        // 同一登录名换了 SteamID（改名/换号）时清掉旧条目；其它账号一律保留。
+        foreach (var oldId in users
+                     .Where(pair => pair.Key != steamId &&
+                         pair.Value is Dictionary<string, object> old &&
+                         string.Equals(old.GetValueOrDefault("AccountName")?.ToString(), accountName, StringComparison.OrdinalIgnoreCase))
+                     .Select(pair => pair.Key)
+                     .ToList())
+        {
+            users.Remove(oldId);
+        }
 
         foreach (var user in users.Values.OfType<Dictionary<string, object>>())
         {
@@ -300,12 +370,12 @@ internal sealed class SteamConfigService
             ["Timestamp"] = DateTimeOffset.Now.ToUnixTimeSeconds().ToString()
         };
 
+        BackupBeforeWrite(path);
         VdfDocument.Save(path, loginUsers);
     }
-
     private static void RestoreLoginUsersVdf(string path, CachedSteamLoginAccount account)
     {
-        var loginUsers = VdfDocument.LoadOrEmpty(path);
+        var loginUsers = LoadForRewrite(path);
         var users = EnsureObject(loginUsers, "users");
 
         foreach (var user in users.Values.OfType<Dictionary<string, object>>())
@@ -329,12 +399,12 @@ internal sealed class SteamConfigService
         restoredUser["MostRecent"] = "1";
         restoredUser["Timestamp"] = DateTimeOffset.Now.ToUnixTimeSeconds().ToString();
 
+        BackupBeforeWrite(path);
         VdfDocument.Save(path, loginUsers);
     }
-
     private static void UpdateLocalVdf(string path, string accountCrc32, string encryptedJwt)
     {
-        var local = VdfDocument.LoadOrEmpty(path);
+        var local = LoadForRewrite(path);
         var connectCache = EnsurePath(
             local,
             "MachineUserConfigStore",
@@ -344,9 +414,9 @@ internal sealed class SteamConfigService
             "ConnectCache");
 
         connectCache[accountCrc32] = encryptedJwt;
+        BackupBeforeWrite(path);
         VdfDocument.Save(path, local);
     }
-
     private static Dictionary<string, object> EnsurePath(
         Dictionary<string, object> root,
         params string[] keys)

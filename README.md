@@ -46,7 +46,7 @@ SteamEYA 用 EYA 令牌（一种 Steam 登录凭据）代替账号密码登录�
 
 ## 安装
 
-1. 在 [Releases](https://github.com/NFJ1337/OpenSteamEYA/releases) 下载最新的 `SteamEYA-<版本>-win-x64-setup.exe`。
+1. 在 [Releases](https://github.com/NFJ1337/OpenSteamEYA/releases) 下载最新的 `SteamEYANFJ-<版本>-win-x64-setup.exe`。
 2. 双击安装包，按安装向导完成安装。
 3. 从开始菜单或桌面快捷方式启动 SteamEYA。
 

@@ -1085,8 +1085,6 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 	/// <summary>导入时选的来源：奶味 / 伊万·路飞（默认奶味）。</summary>
 	private string _cardStoreSource = CardKeyEntry.SourceNaiwei;
 
-	/// <summary>验号解析出来的账号，仅在内存里留给「去 Token 登录」用；令牌不落盘。</summary>
-	private readonly Dictionary<string, SteamAccountData> _cardStoreResolved = new(StringComparer.Ordinal);
 
 	private bool IsCardStoreMode => ModeSelector.SelectedItem == CardStoreModeItem;
 
@@ -1142,23 +1140,6 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 			: CardKeyEntry.SourceNaiwei;
 	}
 
-	/// <summary>来源 → 上游：奶味固定那条；伊万 / 路飞各对应 IvanLuffyServers 里的一条。</summary>
-	private static SteamUpstreamServer CardStoreUpstream(string source)
-	{
-		var servers = SteamLicenseClient.IvanLuffyServers;
-		var kind = CardStoreSourceKind(source);
-		if (kind == CardKeyEntry.SourceIvan && servers.Count > 0)
-		{
-			return servers[0];
-		}
-
-		if (kind == CardKeyEntry.SourceLuffy && servers.Count > 1)
-		{
-			return servers[1];
-		}
-
-		return SteamLicenseClient.Upstream;
-	}
 
 	/// <summary>把已存卡密铺到列表上；来源/状态文案按当前语言现算（列表重建即刷新）。</summary>
 	private void RefreshCardStoreList()
@@ -1316,146 +1297,42 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		}
 
 		AppState.CardKeys.Remove(entry);
-		_cardStoreResolved.Remove(entry.Key);
 		RefreshCardStoreList();
 		ShowStatus(Loc.T("CardStore_Status_Deleted"), InfoBarSeverity.Informational);
 	}
 
-	private async void CardStoreVerifyButton_Click(object sender, RoutedEventArgs e)
+	/// <summary>
+	/// 「去登录」：按来源把卡密送去对应页面（只跳页 + 填卡密，不发请求、不校验）——
+	///   · 奶味 → 「账号核验」：先把上一次的核验输入与结果清掉，再把卡密填进去；
+	///   · 伊万 / 路飞 → 「Token 登录」：先清空 Token 面板，再把卡密填进去。
+	/// </summary>
+	private void CardStoreGoLoginButton_Click(object sender, RoutedEventArgs e)
 	{
-		if ((sender as FrameworkElement)?.Tag is not CardKeyEntry entry || AppState.IsBusy)
+		if ((sender as FrameworkElement)?.Tag is not CardKeyEntry entry)
 		{
 			return;
 		}
 
-		await VerifyStoredCardKeyAsync(entry);
-	}
-
-	/// <summary>验号：按来源取卡 → 在线校验令牌 → 结果写回该行并存盘。</summary>
-	private async Task VerifyStoredCardKeyAsync(CardKeyEntry entry)
-	{
-		var cancellationToken = AppState.BeginBusyOperation();
-		ShowStatus(Loc.Tf("CardStore_Status_Verifying_Format", entry.Key), InfoBarSeverity.Informational);
-		try
+		if (CardStoreSourceKind(entry.Source) == CardKeyEntry.SourceNaiwei)
 		{
-			var account = await ResolveStoredCardKeyAsync(entry.Key, entry.Source, cancellationToken);
-			var validation = await AppState.TokenOnlineValidationService.ValidateForLoginAsync(account.Token, cancellationToken);
-			_cardStoreResolved[entry.Key] = account;
-
-			// 奶味那条上游另外还有一份「封禁 / CS2」核验信息（核验模块用的就是它）：顺带拉回来存进该行。
-			// 这一步慢（实测几十秒），失败也不影响「验号」本身的结论，所以单独兜住。
-			if (CardStoreSourceKind(entry.Source) == CardKeyEntry.SourceNaiwei)
-			{
-				ShowStatus(Loc.Tf("CardStore_Status_VerifyingExtra_Format", entry.Key), InfoBarSeverity.Informational);
-				try
-				{
-					var payload = await AppState.VerifyService.VerifyAsync(entry.Key, cancellationToken);
-					entry.VacBans = payload.Bans?.VacBans;
-					entry.GameBans = payload.Bans?.GameBans;
-					entry.CooldownActive = payload.Cs2?.Cooldown?.Active;
-					entry.Prime = payload.Cs2?.Prime?.Status;
-					entry.ProfileRank = payload.Cs2?.ProfileRank;
-					if (string.IsNullOrWhiteSpace(entry.SteamId) && !string.IsNullOrWhiteSpace(payload.SteamId))
-					{
-						entry.SteamId = payload.SteamId;
-					}
-				}
-				catch (OperationCanceledException)
-				{
-					throw;
-				}
-				catch (Exception verifyEx)
-				{
-					AppLog.Warn($"黑号存储：核验信息获取失败（{entry.Key}）：{verifyEx.Message}");
-				}
-			}
-
-			entry.CheckedAt = DateTimeOffset.Now;
-			entry.CheckOk = validation.IsValid;
-			entry.AccountName = account.User;
-			entry.SteamId = account.SteamId;
-			entry.CheckMessage = validation.IsValid ? null : validation.Status;
-			AppState.CardKeys.Save();
-			RefreshCardStoreList();
-
-			ShowStatus(
-				validation.IsValid
-					? Loc.Tf("CardStore_Status_Verified_Format", account.User, account.SteamId)
-					: Loc.Tf("CardStore_Status_VerifyFailed_Format", validation.Status),
-				validation.IsValid ? InfoBarSeverity.Success : InfoBarSeverity.Error);
-		}
-		catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-		{
-			ShowStatus(Loc.T("Login_Status_LicenseResolveCancelled"), InfoBarSeverity.Informational);
-		}
-		catch (Exception ex)
-		{
-			entry.CheckedAt = DateTimeOffset.Now;
-			entry.CheckOk = false;
-			entry.CheckMessage = ex.Message;
-			AppState.CardKeys.Save();
-			RefreshCardStoreList();
-			AppLog.Warn($"黑号存储验号失败（{entry.Key}）：{ex.Message}");
-			ShowStatus(Loc.Tf("CardStore_Status_VerifyFailed_Format", ex.Message), InfoBarSeverity.Error);
-		}
-		finally
-		{
-			AppState.EndBusyOperation();
-		}
-	}
-
-	/// <summary>
-	/// 按来源取卡：奶味 / 伊万 / 路飞 各走自己那条上游的取名接口（keygetdata）。
-	/// 上游选错会直接报上游的错误，换个来源再验一次即可 —— 不偷偷换上游，免得存下来的来源对不上。
-	/// </summary>
-	private static Task<SteamAccountData> ResolveStoredCardKeyAsync(string key, string source, CancellationToken cancellationToken) =>
-		AppState.LicenseClient.GetAccountDataAsync(key, CardStoreUpstream(source), cancellationToken);
-
-	/// <summary>
-	/// 「去 Token 登录」：解析出账号令牌（刚验过就直接用内存里的），切到 Token登录 页签并回填，
-	/// 剩下的交给既有登录流程 —— 不自动点登录，由用户决定。
-	/// </summary>
-	private async void CardStoreTokenButton_Click(object sender, RoutedEventArgs e)
-	{
-		if ((sender as FrameworkElement)?.Tag is not CardKeyEntry entry || AppState.IsBusy)
-		{
+			VerifyKeyBox.Text = string.Empty;
+			ResetVerifyResult();
+			VerifyKeyBox.Text = entry.Key;
+			ModeSelector.SelectedItem = VerifyModeItem;
+			ApplyModeVisibility();
+			ShowStatus(Loc.Tf("CardStore_Status_ToVerify_Format", entry.Key), InfoBarSeverity.Success);
 			return;
 		}
 
-		if (!_cardStoreResolved.TryGetValue(entry.Key, out var account))
-		{
-			var cancellationToken = AppState.BeginBusyOperation();
-			ShowStatus(Loc.T("Login_Status_ResolvingLicense"), InfoBarSeverity.Informational);
-			try
-			{
-				account = await ResolveStoredCardKeyAsync(entry.Key, entry.Source, cancellationToken);
-				_cardStoreResolved[entry.Key] = account;
-			}
-			catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-			{
-				ShowStatus(Loc.T("Login_Status_LicenseResolveCancelled"), InfoBarSeverity.Informational);
-				return;
-			}
-			catch (Exception ex)
-			{
-				AppLog.Warn($"黑号存储解析失败（{entry.Key}）：{ex.Message}");
-				ShowStatus(ex.Message, InfoBarSeverity.Error);
-				return;
-			}
-			finally
-			{
-				AppState.EndBusyOperation();
-			}
-		}
-
-		// 与「伊万/路飞」一键登录同款：回填 Token 登录面板，交给既有登录流程。
-		ApplyTokenLoginSelection();
+		ClearTokenLoginFields();
 		TokenLicenseKeyBox.Text = entry.Key;
-		TokenSteamIdBox.Text = account.SteamId;
-		TokenBox.Text = account.Token;
-		UpdateAccountInfo(account.User, account.Token);
-		ShowStatus(Loc.Tf("CardStore_Status_ToToken_Format", account.User, account.SteamId), InfoBarSeverity.Success);
+		ApplyTokenLoginSelection();
+		ShowStatus(Loc.Tf("CardStore_Status_ToToken_Format", entry.Key), InfoBarSeverity.Success);
 	}
+
+
+
+
 	private static string NormalizeLicenseKey(string value)
 	{
 		string text = value.Trim();

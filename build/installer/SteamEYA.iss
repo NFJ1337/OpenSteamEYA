@@ -1,5 +1,5 @@
-﻿#ifndef AppVersion
-  #define AppVersion "1.7.1"
+#ifndef AppVersion
+  #define AppVersion "1.7.2"
 #endif
 
 #ifndef PublishDir
@@ -22,7 +22,7 @@ DefaultGroupName=SteamEYANFJ
 DisableDirPage=no
 DisableProgramGroupPage=yes
 OutputDir={#OutputDir}
-OutputBaseFilename=SteamEYA-{#AppVersion}-win-x64-setup
+OutputBaseFilename=SteamEYANFJ-{#AppVersion}-win-x64-setup
 Compression=lzma2/ultra64
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible

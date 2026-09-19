@@ -46,7 +46,7 @@
 ## 打包交付方式（用户明确要求）
 - 打包成功后，**只回传一个东西**：安装包的**单个可点击链接**（Markdown 链接，绝对路径）。
 - **不要自动打开 / 点击查看**：不要调用「在面板中打开文件」（open_in_codex 之类）的动作，也不要替用户打开窗口或资源管理器——只给链接，用户自己决定何时打开。
-  - 例：`[SteamEYA-1.1.0-win-x64-setup.exe](D:\GithubProgram\OpenSteamEYA-main\artifacts\SteamEYA-1.1.0-win-x64-setup.exe)`
+  - 例：`[SteamEYANFJ-<版本>-win-x64-setup.exe](D:\GithubProgram\OpenSteamEYA-main\artifacts\SteamEYANFJ-<版本>-win-x64-setup.exe)`
 - **不要再罗列**目录清单、体积、文件数、哈希、发布目录明细等。
 - 只有以下情况才额外说明：打包**失败**、需要用户决策（版本号、AOT 回退、是否覆盖已有产物）、或产物与用户最近一次改动不一致。
 

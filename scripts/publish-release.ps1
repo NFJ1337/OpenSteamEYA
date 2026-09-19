@@ -4,7 +4,7 @@
 
 .DESCRIPTION
 凭据来源（按顺序）：环境变量 GH_TOKEN / GITHUB_TOKEN → 本机 Git 凭据管理器（与 git push 用的是同一份）。
-流程：算 sha256/大小 → 生成 artifacts\latest.json → 删掉 release 上旧的 SteamEYA-*-win-x64-setup.exe →
+流程：算 sha256/大小 → 生成 artifacts\latest.json → 删掉 release 上旧的 SteamEYA*-win-x64-setup.exe（含改名前遗留的） →
       上传新安装包与 latest.json（同名 --clobber 覆盖）→ 把本次改动的精简说明写进 release 正文
       （程序「关于页 → 更新日志」读的就是 release 正文，latest.json 的 changelog 字段也同步）。
 
@@ -35,7 +35,7 @@ if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
 }
 
 if ([string]::IsNullOrWhiteSpace($InstallerPath)) {
-    $InstallerPath = Join-Path $ProjectRoot "artifacts\SteamEYA-$Version-win-x64-setup.exe"
+    $InstallerPath = Join-Path $ProjectRoot "artifacts\SteamEYANFJ-$Version-win-x64-setup.exe"
 }
 
 if (-not (Test-Path -LiteralPath $InstallerPath)) {
@@ -95,7 +95,7 @@ Write-Host "安装包：$($file.Name)（$([math]::Round($file.Length / 1MB, 2)) 
 Write-Host "latest.json：$metadataPath"
 
 $assetNames = @(gh release view $Tag --repo $Repository --json assets --jq '.assets[].name')
-$stale = @($assetNames | Where-Object { $_ -like 'SteamEYA-*-win-x64-setup.exe' -and $_ -ne $file.Name })
+$stale = @($assetNames | Where-Object { $_ -like 'SteamEYA*-win-x64-setup.exe' -and $_ -ne $file.Name })
 
 if ($assetNames.Count -gt 0) {
     Write-Host "release 现有资产：$($assetNames -join ', ')"

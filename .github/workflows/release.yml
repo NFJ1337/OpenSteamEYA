@@ -140,7 +140,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
 
-          $expectedArtifactName = "SteamEYA-${{ steps.meta.outputs.version }}-win-x64-setup.exe"
+          $expectedArtifactName = "SteamEYANFJ-${{ steps.meta.outputs.version }}-win-x64-setup.exe"
           $metadataPath = Join-Path $PWD "artifacts\latest.json"
           $publishDir = Join-Path $PWD "artifacts\build\win-x64"
           $artifactDir = Join-Path $PWD "artifacts"
@@ -180,7 +180,7 @@ jobs:
           }
 
           # Inno Setup 在少数场景会输出带后缀的文件名（如 setup-1.exe）；这里按模式取最新文件，避免写死路径导致误判。
-          $artifact = Get-ChildItem -LiteralPath $artifactDir -Filter "SteamEYA-${{ steps.meta.outputs.version }}-win-x64-setup*.exe" -File |
+          $artifact = Get-ChildItem -LiteralPath $artifactDir -Filter "SteamEYANFJ-${{ steps.meta.outputs.version }}-win-x64-setup*.exe" -File |
             Sort-Object LastWriteTime -Descending |
             Select-Object -First 1
 

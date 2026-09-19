@@ -463,18 +463,10 @@
                                                 <Button
                                                     MinWidth="0"
                                                     Padding="10,4"
-                                                    Style="{StaticResource AuroraGlassButtonStyle}"
+                                                    Style="{StaticResource AccentButtonStyle}"
                                                     Tag="{x:Bind}"
-                                                    Click="CardStoreVerifyButton_Click">
-                                                    <TextBlock Text="{loc:Localize Key=CardStore_Btn_Verify}" />
-                                                </Button>
-                                                <Button
-                                                    MinWidth="0"
-                                                    Padding="10,4"
-                                                    Style="{StaticResource AuroraGlassButtonStyle}"
-                                                    Tag="{x:Bind}"
-                                                    Click="CardStoreTokenButton_Click">
-                                                    <TextBlock Text="{loc:Localize Key=CardStore_Btn_Token}" />
+                                                    Click="CardStoreGoLoginButton_Click">
+                                                    <TextBlock Text="{loc:Localize Key=CardStore_Btn_GoLogin}" />
                                                 </Button>
                                                 <Button
                                                     MinWidth="0"

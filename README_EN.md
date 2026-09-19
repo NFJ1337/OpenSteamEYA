@@ -46,7 +46,7 @@ If you need the original program, please visit the GitHub open-source project be
 
 ## Installation
 
-1. Download the latest `SteamEYA-<version>-win-x64-setup.exe` from [Releases](https://github.com/NFJ1337/OpenSteamEYA/releases).
+1. Download the latest `SteamEYANFJ-<version>-win-x64-setup.exe` from [Releases](https://github.com/NFJ1337/OpenSteamEYA/releases).
 2. Run the installer and finish the setup wizard.
 3. Launch SteamEYA from Start Menu or Desktop shortcut.
 

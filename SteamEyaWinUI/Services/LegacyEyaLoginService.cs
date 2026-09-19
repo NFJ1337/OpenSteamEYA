@@ -1,4 +1,4 @@
-﻿using SteamEyaWinUI.Localization;
+using SteamEyaWinUI.Localization;
 using SteamEyaWinUI.Models;
 
 namespace SteamEyaWinUI.Services;
@@ -96,6 +96,7 @@ internal sealed class LegacyEyaLoginService
         {
             ["SteamID"] = steamId
         };
+        SteamConfigService.BackupBeforeWrite(path);
         VdfDocument.Save(path, config);
     }
 
@@ -133,6 +134,7 @@ internal sealed class LegacyEyaLoginService
             ["MostRecent"] = "1",
             ["Timestamp"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString()
         };
+        SteamConfigService.BackupBeforeWrite(path);
         VdfDocument.Save(path, loginUsers);
     }
 
@@ -147,6 +149,7 @@ internal sealed class LegacyEyaLoginService
             "Steam",
             "ConnectCache");
         connectCache[accountKey] = encryptedJwt;
+        SteamConfigService.BackupBeforeWrite(path);
         VdfDocument.Save(path, local);
     }
 
