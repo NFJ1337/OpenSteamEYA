@@ -503,6 +503,7 @@
     "CardStore_Col_Actions": "操作",
     "CardStore_Btn_GoLogin": "去登入",
     "CardStore_Status_ToVerify_Format": "已把卡密送到「帳號核驗」：{0}",
+    "CardStore_Status_Copied_Format": "已複製卡密：{0}",
     "CardStore_Source_Naiwei": "奶味",
     "CardStore_Source_Ivan": "伊萬",
     "CardStore_Source_Luffy": "路飛",

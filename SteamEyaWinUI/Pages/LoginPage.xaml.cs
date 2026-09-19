@@ -10,6 +10,8 @@ using SteamEyaWinUI.Localization;
 using SteamEyaWinUI.Models;
 using SteamEyaWinUI.Services;
 using Windows.System;
+using Windows.ApplicationModel.DataTransfer;
+using System.Runtime.InteropServices;
 
 #pragma warning disable CS8600
 
@@ -1009,9 +1011,24 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		var upstream = _tokenUpstream ?? SteamLicenseClient.Upstream;
 		if (Equals(upstream, SteamLicenseClient.Upstream))
 		{
-			var parsed = await AppState.LegacyEyaLicenseClient.ParseLicenseKeyAsync(key, cancellationToken);
-			var name = string.IsNullOrWhiteSpace(parsed.AccountName) ? parsed.SteamId : parsed.AccountName;
-			return new SteamAccountData(parsed.Token, name, parsed.SteamId);
+			try
+			{
+				var parsed = await AppState.LegacyEyaLicenseClient.ParseLicenseKeyAsync(key, cancellationToken);
+				var name = string.IsNullOrWhiteSpace(parsed.AccountName) ? parsed.SteamId : parsed.AccountName;
+				return new SteamAccountData(parsed.Token, name, parsed.SteamId);
+			}
+			catch (OperationCanceledException)
+			{
+				throw;
+			}
+			catch (Exception ex)
+			{
+				// 奶味有两套取名接口：老的 keygettoken（上面那条）对「新版卡密」会回 400 Bad Request，
+				// 回退到核验模块一直在用的新版 SSE 取名接口，别让整条链路直接挂掉。
+				AppLog.Warn($"奶味 keygettoken 取名失败（{ex.Message}），改用新版取名接口重试。");
+				var redeem = await VerifyRedeemClient.RedeemAsync(key, CreateVerifyRedeemProgressReporter(), cancellationToken);
+				return new SteamAccountData(redeem.Token, redeem.SteamId, redeem.SteamId);
+			}
 		}
 
 		if (_tokenUpstreamCachedAccount is not null &&
@@ -1330,7 +1347,41 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		ShowStatus(Loc.Tf("CardStore_Status_ToToken_Format", entry.Key), InfoBarSeverity.Success);
 	}
 
+	/// <summary>双击卡密单元格：把卡密原文复制到剪贴板（与账号管理页双击复制同款：不进剪贴板历史）。</summary>
+	private void CardStoreKeyCell_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+	{
+		if ((sender as FrameworkElement)?.Tag is not CardKeyEntry entry || string.IsNullOrWhiteSpace(entry.Key))
+		{
+			return;
+		}
 
+		CopyToClipboard(entry.Key);
+		ShowStatus(Loc.Tf("CardStore_Status_Copied_Format", entry.Key), InfoBarSeverity.Success);
+	}
+
+	/// <summary>写剪贴板：卡密算凭据，不进 Win+V 历史、不随云剪贴板漫游。</summary>
+	private static void CopyToClipboard(string text)
+	{
+		var package = new DataPackage();
+		package.SetText(text);
+
+		try
+		{
+			var options = new ClipboardContentOptions
+			{
+				IsAllowedInHistory = false,
+				IsRoamable = false
+			};
+			if (!Clipboard.SetContentWithOptions(package, options))
+			{
+				Clipboard.SetContent(package);
+			}
+		}
+		catch (COMException)
+		{
+			ShowStatus(Loc.T("History_Status_ClipboardWriteFail"), InfoBarSeverity.Error);
+		}
+	}
 
 
 	private static string NormalizeLicenseKey(string value)
@@ -2191,11 +2242,14 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
         ShowStatus(Loc.T("Login_Status_ResolvingLicense"), InfoBarSeverity.Informational);
         try
         {
-            NaiweiRedeemClient.RedeemAccount account = await VerifyRedeemClient.RedeemAsync(licenseKey, CreateVerifyRedeemProgressReporter(), cancellationToken);
+            // 与「Token 登录」页面同一套取名：按 Token 面板选的上游（奶味 / 伊万 / 路飞）把卡密换成 SteamID + JWT，
+            // 之后交给 Token 面板既有的按钮处理函数（清除创意工坊等走的都是这条 JWT 链路）。
+            // 早先这里写死用奶味新版 SSE 取名接口，伊万/路飞 的卡密在这一页会取不到。
+            var account = await ResolveTokenLicenseByUpstreamAsync(licenseKey, cancellationToken);
             TokenLicenseKeyBox.Text = licenseKey;
             TokenSteamIdBox.Text = account.SteamId;
             TokenBox.Text = account.Token;
-            UpdateAccountInfo(account.SteamId, account.Token);
+            UpdateAccountInfo(account.User, account.Token);
             ShowStatus(Loc.Tf("Login_Status_LicenseResolved_Format", account.SteamId, account.SteamId), InfoBarSeverity.Success);
             return true;
         }
@@ -2229,6 +2283,7 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
             VerifyProgressText.Text = text;
             ShowStatus(text, InfoBarSeverity.Informational);
         });
+
     private void LoginPage_SizeChanged(object sender, SizeChangedEventArgs e)
     {
         var height = e.NewSize.Height;

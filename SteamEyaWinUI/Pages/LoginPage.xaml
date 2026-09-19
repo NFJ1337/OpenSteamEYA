@@ -397,9 +397,9 @@
                                 BorderThickness="0,0,0,1"
                                 BorderBrush="{ThemeResource AuroraGlassBorderBrush}">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="260" />
-                                    <ColumnDefinition Width="90" />
-                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="3*" MinWidth="240" />
+                                    <ColumnDefinition Width="Auto" MinWidth="90" />
+                                    <ColumnDefinition Width="2*" MinWidth="200" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{x:Bind Strings.Get('CardStore_Col_Key'), Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource AuroraTextMutedBrush}" />
@@ -433,17 +433,22 @@
                                     <DataTemplate x:DataType="models:CardKeyEntry">
                                         <Grid ColumnSpacing="14">
                                             <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="260" />
-                                                <ColumnDefinition Width="90" />
-                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="3*" MinWidth="240" />
+                                                <ColumnDefinition Width="Auto" MinWidth="90" />
+                                                <ColumnDefinition Width="2*" MinWidth="200" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
 
-                                            <TextBlock
-                                                Grid.Column="0"
-                                                Text="{x:Bind Key, Mode=OneWay}"
-                                                TextTrimming="CharacterEllipsis"
-                                                VerticalAlignment="Center" />
+                                                <TextBlock
+                                                    Grid.Column="0"
+                                                    Text="{x:Bind Key, Mode=OneWay}"
+                                                    TextWrapping="Wrap"
+                                                    TextTrimming="None"
+                                                    Tag="{x:Bind}"
+                                                    IsDoubleTapEnabled="True"
+                                                    DoubleTapped="CardStoreKeyCell_DoubleTapped"
+                                                    ToolTipService.ToolTip="{x:Bind Key, Mode=OneWay}"
+                                                    VerticalAlignment="Center" />
 
                                             <TextBlock
                                                 Grid.Column="1"
@@ -456,7 +461,8 @@
                                                 Grid.Column="2"
                                                 Text="{x:Bind StatusText, Mode=OneWay}"
                                                 Foreground="{ThemeResource AuroraTextMutedBrush}"
-                                                TextTrimming="CharacterEllipsis"
+                                                TextWrapping="Wrap"
+                                                ToolTipService.ToolTip="{x:Bind StatusText, Mode=OneWay}"
                                                 VerticalAlignment="Center" />
 
                                             <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">

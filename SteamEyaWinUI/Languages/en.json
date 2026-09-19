@@ -493,6 +493,7 @@
     "CardStore_Col_Actions": "Actions",
     "CardStore_Btn_GoLogin": "Log in",
     "CardStore_Status_ToVerify_Format": "Key sent to account verification: {0}",
+    "CardStore_Status_Copied_Format": "Key copied: {0}",
     "CardStore_Source_Naiwei": "Naiwei",
     "CardStore_Source_Ivan": "Ivan",
     "CardStore_Source_Luffy": "Luffy",
