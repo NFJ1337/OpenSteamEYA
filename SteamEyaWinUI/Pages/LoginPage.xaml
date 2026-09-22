@@ -112,72 +112,78 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="340" />
             </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
 
-            <StackPanel x:Name="FormPanel" Spacing="20">
+            <!-- 页签独占整行；右侧详情从下一行的卡密登录卡片处开始对齐。 -->
+            <Grid Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" ColumnSpacing="20">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <SelectorBar x:Name="ModeSelector" SelectionChanged="ModeSelector_SelectionChanged" Background="{ThemeResource AuroraGlassStrongBrush}" BorderBrush="{ThemeResource AuroraGlassBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="4">
+                    <!-- 黑号存储：攒还没登录过的卡密（按来源导入、验号、删除、送去 Token 登录）—— 放在 Token登录 左边 -->
+                    <SelectorBarItem x:Name="CardStoreModeItem" Text="{x:Bind Strings.Get('Login_Mode_CardStore'), Mode=OneWay}">
+                        <SelectorBarItem.Icon>
+                            <FontIcon Glyph="&#xE777;" />
+                        </SelectorBarItem.Icon>
+                    </SelectorBarItem>
+                    <SelectorBarItem x:Name="TokenLoginModeItem" Text="{x:Bind Strings.Get('Login_Mode_TokenLogin'), Mode=OneWay}">
+                        <SelectorBarItem.Icon>
+                            <FontIcon Glyph="&#xE8D7;" />
+                        </SelectorBarItem.Icon>
+                    </SelectorBarItem>
+                    <SelectorBarItem x:Name="VerifyModeItem" Text="{x:Bind Strings.Get('Login_Mode_Verify'), Mode=OneWay}">
+                        <SelectorBarItem.Icon>
+                            <FontIcon Glyph="&#xE73E;" />
+                        </SelectorBarItem.Icon>
+                    </SelectorBarItem>
+                    <SelectorBarItem x:Name="LegacyEyaModeItem" Text="{x:Bind Strings.Get('Login_Mode_LegacyEya'), Mode=OneWay}" Visibility="Collapsed">
+                        <SelectorBarItem.Icon>
+                            <FontIcon Glyph="&#xE8D4;" />
+                        </SelectorBarItem.Icon>
+                    </SelectorBarItem>
+                    <SelectorBarItem x:Name="AutoModeItem" Text="{x:Bind Strings.Get('Login_Mode_Auto'), Mode=OneWay}" Visibility="Collapsed">
+                        <SelectorBarItem.Icon>
+                            <FontIcon Glyph="&#xE945;" />
+                        </SelectorBarItem.Icon>
+                    </SelectorBarItem>
+                    <SelectorBarItem x:Name="ManualModeItem" Text="{x:Bind Strings.Get('Login_Mode_Manual'), Mode=OneWay}" Visibility="Collapsed">
+                        <SelectorBarItem.Icon>
+                            <FontIcon Glyph="&#xE70F;" />
+                        </SelectorBarItem.Icon>
+                    </SelectorBarItem>
+                    <SelectorBarItem x:Name="CredsModeItem" Text="{x:Bind Strings.Get('Login_Mode_Creds'), Mode=OneWay}" Visibility="Collapsed">
+                        <SelectorBarItem.Icon>
+                            <FontIcon Glyph="&#xE72E;" />
+                        </SelectorBarItem.Icon>
+                    </SelectorBarItem>
+                </SelectorBar>
+
+                <Button
+                    x:Name="ClearAllButton"
+                    Grid.Column="1"
+                    MinWidth="112"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Center"
+                    Click="ClearAllButton_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE894;" FontSize="16" Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
+                        <TextBlock Text="{x:Bind Strings.Get('Login_Btn_ClearAll'), Mode=OneWay}" Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
+                    </StackPanel>
+                </Button>
+            </Grid>
+
+            <StackPanel x:Name="FormPanel" Grid.Row="1" Grid.Column="0" Spacing="20">
                 <StackPanel Spacing="4">
                     <TextBlock Text="{x:Bind Strings.Get('Login_Title'), Mode=OneWay}" Style="{StaticResource PageTitleTextStyle}" Visibility="Collapsed" />
                     <TextBlock
                         Text="{x:Bind Strings.Get('Login_Subtitle'), Mode=OneWay}"
                         Style="{StaticResource PageSubtitleTextStyle}" Visibility="Collapsed" />
                 </StackPanel>
-
-                <Grid ColumnSpacing="20">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-
-                    <SelectorBar x:Name="ModeSelector" SelectionChanged="ModeSelector_SelectionChanged" Background="{ThemeResource AuroraGlassStrongBrush}" BorderBrush="{ThemeResource AuroraGlassBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="4">
-                        <!-- 黑号存储：攒还没登录过的卡密（按来源导入、验号、删除、送去 Token 登录）—— 放在 Token登录 左边 -->
-                        <SelectorBarItem x:Name="CardStoreModeItem" Text="{x:Bind Strings.Get('Login_Mode_CardStore'), Mode=OneWay}">
-                            <SelectorBarItem.Icon>
-                                <FontIcon Glyph="&#xE777;" />
-                            </SelectorBarItem.Icon>
-                        </SelectorBarItem>
-                        <SelectorBarItem x:Name="TokenLoginModeItem" Text="{x:Bind Strings.Get('Login_Mode_TokenLogin'), Mode=OneWay}">
-                            <SelectorBarItem.Icon>
-                                <FontIcon Glyph="&#xE8D7;" />
-                            </SelectorBarItem.Icon>
-                        </SelectorBarItem>
-                        <SelectorBarItem x:Name="VerifyModeItem" Text="{x:Bind Strings.Get('Login_Mode_Verify'), Mode=OneWay}">
-                            <SelectorBarItem.Icon>
-                                <FontIcon Glyph="&#xE73E;" />
-                            </SelectorBarItem.Icon>
-                        </SelectorBarItem>
-                        <SelectorBarItem x:Name="LegacyEyaModeItem" Text="{x:Bind Strings.Get('Login_Mode_LegacyEya'), Mode=OneWay}" Visibility="Collapsed">
-                            <SelectorBarItem.Icon>
-                                <FontIcon Glyph="&#xE8D4;" />
-                            </SelectorBarItem.Icon>
-                        </SelectorBarItem>
-                        <SelectorBarItem x:Name="AutoModeItem" Text="{x:Bind Strings.Get('Login_Mode_Auto'), Mode=OneWay}" Visibility="Collapsed">
-                            <SelectorBarItem.Icon>
-                                <FontIcon Glyph="&#xE945;" />
-                            </SelectorBarItem.Icon>
-                        </SelectorBarItem>
-                        <SelectorBarItem x:Name="ManualModeItem" Text="{x:Bind Strings.Get('Login_Mode_Manual'), Mode=OneWay}" Visibility="Collapsed">
-                            <SelectorBarItem.Icon>
-                                <FontIcon Glyph="&#xE70F;" />
-                            </SelectorBarItem.Icon>
-                        </SelectorBarItem>
-                        <SelectorBarItem x:Name="CredsModeItem" Text="{x:Bind Strings.Get('Login_Mode_Creds'), Mode=OneWay}" Visibility="Collapsed">
-                            <SelectorBarItem.Icon>
-                                <FontIcon Glyph="&#xE72E;" />
-                            </SelectorBarItem.Icon>
-                        </SelectorBarItem>
-                    </SelectorBar>
-
-                    <Button
-                        x:Name="ClearAllButton"
-                        Grid.Column="1"
-                        MinWidth="112"
-                        VerticalAlignment="Center"
-                        Click="ClearAllButton_Click">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE894;" FontSize="16" Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
-                            <TextBlock Text="{x:Bind Strings.Get('Login_Btn_ClearAll'), Mode=OneWay}" Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
-                        </StackPanel>
-                    </Button>
-                </Grid>
 
                 <Border x:Name="ManualPanel" Style="{StaticResource CardBorderStyle}" Visibility="Collapsed">
                     <StackPanel Spacing="14">
@@ -498,54 +504,46 @@
                             Foreground="{ThemeResource AuroraTextMutedBrush}"
                             TextWrapping="Wrap" />
 
-                        <!-- 上游服务器：奶味（默认）/ 伊万 / 路飞 —— 这张卡密去哪个上游取名（伊万/路飞 已并入本页） -->
-                        <StackPanel Spacing="6">
-                            <TextBlock Text="{x:Bind Strings.Get('Login_Field_UpstreamServer'), Mode=OneWay}" Style="{StaticResource FieldLabelTextStyle}" />
-                            <DropDownButton
-                                x:Name="TokenUpstreamButton"
-                                MinWidth="166"
-                                HorizontalAlignment="Left"
-                                Style="{StaticResource UiTintDropDownButtonStyle}">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <FontIcon Glyph="&#xE8EC;" FontSize="14" />
-                                    <TextBlock x:Name="TokenUpstreamText" />
-                                </StackPanel>
-                                <DropDownButton.Flyout>
-                                    <MenuFlyout x:Name="TokenUpstreamFlyout" />
-                                </DropDownButton.Flyout>
-                            </DropDownButton>
-                        </StackPanel>
-
-                        <Grid ColumnSpacing="20">
+                        <!-- 上游服务器：奶味（默认）/ 伊万 / 路飞；操作按钮与服务器控件并排。 -->
+                        <Grid ColumnSpacing="16">
                             <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
 
-                            <TextBox
-                                x:Name="TokenLicenseKeyBox"
-                                Header="{x:Bind Strings.Get('Login_Field_LicenseKey'), Mode=OneWay}"
-                                PlaceholderText="{x:Bind Strings.Get('Login_Field_LicenseKey_Placeholder'), Mode=OneWay}"
-                                IsSpellCheckEnabled="False"
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="{x:Bind Strings.Get('Login_Field_UpstreamServer'), Mode=OneWay}" Style="{StaticResource FieldLabelTextStyle}" />
+                                <DropDownButton
+                                    x:Name="TokenUpstreamButton"
+                                    MinWidth="166"
+                                    HorizontalAlignment="Left"
+                                    Style="{StaticResource UiTintDropDownButtonStyle}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE8EC;" FontSize="14" />
+                                        <TextBlock x:Name="TokenUpstreamText" />
+                                    </StackPanel>
+                                    <DropDownButton.Flyout>
+                                        <MenuFlyout x:Name="TokenUpstreamFlyout" />
+                                    </DropDownButton.Flyout>
+                                </DropDownButton>
+                            </StackPanel>
 
-                                KeyDown="TokenLicenseKeyBox_KeyDown" />
-
+                            <StackPanel
+                                Grid.Column="1"
+                                Orientation="Horizontal"
+                                Spacing="8"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Bottom">
                             <Button
                                 x:Name="ClearTokenButton"
-                                Grid.Column="1"
                                 MinWidth="80"
-                                VerticalAlignment="Bottom"
                                 Click="ClearTokenButton_Click">
                                 <TextBlock Text="{x:Bind Strings.Get('Common_Clear'), Mode=OneWay}" />
                             </Button>
 
                             <Button
                                 x:Name="ResolveTokenLicenseButton"
-                                Grid.Column="2"
                                 MinWidth="112"
-                                VerticalAlignment="Bottom"
                                 Click="ResolveTokenLicenseButton_Click">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <FontIcon Glyph="&#xE721;" FontSize="16" />
@@ -554,9 +552,7 @@
                             </Button>
                             <Button
                                 x:Name="ResolveAndLoginButton"
-                                Grid.Column="3"
                                 MinWidth="132"
-                                VerticalAlignment="Bottom"
                                 Style="{StaticResource AccentButtonStyle}"
                                 Click="ResolveAndLoginButton_Click">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
@@ -564,7 +560,16 @@
                                     <TextBlock Text="{x:Bind Strings.Get('Login_Btn_ResolveAndLogin'), Mode=OneWay}" />
                                 </StackPanel>
                             </Button>
+                            </StackPanel>
                         </Grid>
+
+                        <TextBox
+                            x:Name="TokenLicenseKeyBox"
+                            Header="{x:Bind Strings.Get('Login_Field_LicenseKey'), Mode=OneWay}"
+                            PlaceholderText="{x:Bind Strings.Get('Login_Field_LicenseKey_Placeholder'), Mode=OneWay}"
+                            IsSpellCheckEnabled="False"
+                            KeyDown="TokenLicenseKeyBox_KeyDown" />
+
                         <TextBox
                             x:Name="TokenSteamIdBox"
                             Header="{x:Bind Strings.Get('Login_Field_SteamId'), Mode=OneWay}"
@@ -1066,7 +1071,7 @@
 
             </StackPanel>
 
-            <Border x:Name="AccountInfoPanel" Grid.Column="1" Style="{StaticResource CardBorderStyle}" VerticalAlignment="Top">
+            <Border x:Name="AccountInfoPanel" Grid.Row="1" Grid.Column="1" Margin="0,20,0,0" Style="{StaticResource CardBorderStyle}" VerticalAlignment="Top">
                 <StackPanel Spacing="14">
                     <TextBlock Text="{x:Bind Strings.Get('Login_AccountInfo_Section'), Mode=OneWay}" Style="{StaticResource SectionTitleTextStyle}" />
 
