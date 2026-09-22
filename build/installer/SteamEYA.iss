@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "1.7.5"
+  #define AppVersion "1.7.6"
 #endif
 
 #ifndef PublishDir

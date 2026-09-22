@@ -201,10 +201,10 @@
                                         DoubleTapped="LegacyAccountCell_DoubleTapped" HorizontalAlignment="Stretch"
                                         MinHeight="20"
                                         />
-                                    <TextBlock Grid.Column="4" Text="{x:Bind StatusText}" Foreground="{x:Bind StatusBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="4" Text="{x:Bind StatusText, Mode=OneWay}" Foreground="{x:Bind StatusBrush, Mode=OneWay}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                                     <TextBlock
                                         Grid.Column="5"
-                                        Text="{x:Bind Note}"
+                                        Text="{x:Bind Note, Mode=OneWay}"
                                         TextTrimming="CharacterEllipsis"
                                         VerticalAlignment="Center"
                                         Tag="note"
@@ -225,7 +225,7 @@
                                     <!-- 冷却时间（冷却结束的绝对时间）：右键可改冷却 -->
                                     <TextBlock
                                         Grid.Column="6"
-                                        Text="{x:Bind CooldownEndText}"
+                                        Text="{x:Bind CooldownEndText, Mode=OneWay}"
                                         TextTrimming="CharacterEllipsis"
                                         VerticalAlignment="Center"
                                         Tag="cooldownEnd"
@@ -246,4 +246,3 @@
     </Grid>
 
 </Page>
-

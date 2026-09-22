@@ -88,11 +88,13 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
     /// <summary>是否显示密码 / 其他两列的真实内容（默认遮住）。</summary>
     private bool RevealHiddenContent => LegacyShowHiddenCheck?.IsChecked == true;
 
-    private void RebuildRows()
+    private void RebuildRows(bool highlightFirst = true)
     {
         var keyword = SearchText;
         var availableOnly = LegacyShowAvailableCheck?.IsChecked == true;
         var remarkedOnly = LegacyShowRemarkedCheck?.IsChecked == true;
+        var preserveScroll = !highlightFirst;
+        var scrollOffset = preserveScroll ? FindDescendant<ScrollViewer>(LegacyAccountList)?.VerticalOffset : null;
 
         Rows.Clear();
         var index = 0;
@@ -121,15 +123,50 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
 
         UpdateBatchButtonsState();
 
-        // 重建后默认高亮第一行（贴顶显示）。
-        if (Rows.Count > 0)
+        // 仅首次/筛选重建时高亮第一行；右键操作后的行重建由 FocusRowForAccount 恢复原行。
+        if (highlightFirst && Rows.Count > 0)
         {
-            HighlightRow(Rows[0]);
+            HighlightRow(Rows[0], scrollToTop: false);
         }
         else
         {
             _highlightedRow = null;
         }
+
+        // ListView 在 Clear/Add 后会回到顶部；右键操作后的重建需要恢复原滚动偏移。
+        if (scrollOffset is { } offset && LegacyAccountList is not null)
+        {
+            _dispatcherQueue.TryEnqueue(() =>
+            {
+                var scrollViewer = FindDescendant<ScrollViewer>(LegacyAccountList);
+                scrollViewer?.ChangeView(null, offset, null, disableAnimation: true);
+            });
+        }
+    }
+
+    private static T? FindDescendant<T>(DependencyObject? root) where T : DependencyObject
+    {
+        if (root is null)
+        {
+            return null;
+        }
+
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is T match)
+            {
+                return match;
+            }
+
+            if (FindDescendant<T>(child) is { } nested)
+            {
+                return nested;
+            }
+        }
+
+        return null;
     }
 
     private void LegacyAccountRow_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -467,8 +504,8 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         return null;
     }
 
-    /// <summary>把高亮切到指定行（其余行取消），并滚到最上方显示。</summary>
-    private void HighlightRow(LegacyAccountRow row, bool scrollToTop = true)
+    /// <summary>把高亮切到指定行（其余行取消）；默认不改变当前滚动位置。</summary>
+    private void HighlightRow(LegacyAccountRow row, bool scrollToTop = false)
     {
         foreach (var item in Rows)
         {
@@ -501,7 +538,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             return;
         }
 
-        HighlightRow(row);
+        HighlightRow(row, scrollToTop: false);
     }
 
     private List<SteamAccountHistoryItem> CheckedAccounts() =>
@@ -894,15 +931,10 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
     private void ApplyNote(LegacyAccountRow row, string? note)
     {
         var account = row.Item;
-        AppState.WhiteAccountService.SetNote(account, note);
-        AppState.ReloadWhiteAccounts();
-        RebuildRows();
-        FocusRowForAccount(account);
-        AppState.ShowStatus(
-            note is null || note.Length == 0
-                ? Loc.Tf("Legacy_Status_NoteCleared_Format", row.Item.AccountName)
-                : Loc.Tf("Legacy_Status_NoteUpdated_Format", row.Item.AccountName, note),
-            InfoBarSeverity.Success);
+        var normalized = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+        AppState.WhiteAccountService.SetNote(account, normalized);
+        account.Note = normalized;
+        row.RefreshStateFromItem();
     }
 
     private async Task PromptCustomNoteAsync(LegacyAccountRow row)
@@ -986,14 +1018,10 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             account.SteamId,
             seconds,
             account.GcVacBanned);
-        AppState.ReloadWhiteAccounts();
-        RebuildRows();
-        FocusRowForAccount(account);
-        AppState.ShowStatus(
-            seconds == 0
-                ? Loc.Tf("Legacy_Status_CooldownCleared_Format", row.Item.AccountName)
-                : Loc.Tf("Legacy_Status_CooldownUpdated_Format", row.Item.AccountName, FormatHelper.FormatRemaining(TimeSpan.FromSeconds(seconds))),
-            InfoBarSeverity.Success);
+        account.CooldownSeconds = seconds;
+        account.CooldownReason = null;
+        account.CsStatusUpdatedAt = DateTimeOffset.Now;
+        row.RefreshStateFromItem();
     }
 
     private async Task PromptCustomCooldownAsync(LegacyAccountRow row)
@@ -1133,7 +1161,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             SaveValidationResult(account, result);
 
             AppState.ReloadWhiteAccounts();
-            RebuildRows();
+            RebuildRows(highlightFirst: false);
             FocusRowForAccount(account);
             AppState.ShowStatus(
                 Loc.Tf("Legacy_Status_VacDoneOne_Format", account.AccountName, result.SummaryText),
@@ -1479,15 +1507,75 @@ public sealed partial class LegacyAccountRow : INotifyPropertyChanged
     /// <summary>密码列显示内容：默认 ********，勾选「显示隐藏」后是真实密码。</summary>
     public string PasswordText { get; }
 
-    public string StatusText { get; }
+    private string _statusText = string.Empty;
+
+    public string StatusText
+    {
+        get => _statusText;
+        private set
+        {
+            if (_statusText == value)
+            {
+                return;
+            }
+
+            _statusText = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(StatusText)));
+        }
+    }
 
     /// <summary>状态列的文字颜色：可用=绿、冷却中=橙、VAC 封禁=红。</summary>
-    public Brush StatusBrush { get; }
+    private Brush _statusBrush = FormatHelper.GetStatusBrush(InfoBarSeverity.Success);
 
-    public string Note { get; }
+    public Brush StatusBrush
+    {
+        get => _statusBrush;
+        private set
+        {
+            if (ReferenceEquals(_statusBrush, value))
+            {
+                return;
+            }
+
+            _statusBrush = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(StatusBrush)));
+        }
+    }
+
+    private string _note = string.Empty;
+
+    public string Note
+    {
+        get => _note;
+        private set
+        {
+            if (_note == value)
+            {
+                return;
+            }
+
+            _note = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Note)));
+        }
+    }
 
     /// <summary>「冷却时间」列：冷却结束的绝对时间（VAC 显示 VAC，无冷却为空）。</summary>
-    public string CooldownEndText { get; }
+    private string _cooldownEndText = string.Empty;
+
+    public string CooldownEndText
+    {
+        get => _cooldownEndText;
+        private set
+        {
+            if (_cooldownEndText == value)
+            {
+                return;
+            }
+
+            _cooldownEndText = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CooldownEndText)));
+        }
+    }
 
     public string Others { get; }
 
@@ -1507,5 +1595,25 @@ public sealed partial class LegacyAccountRow : INotifyPropertyChanged
             _isChecked = value;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsChecked)));
         }
+    }
+
+    /// <summary>备注或冷却状态原地保存后，只刷新当前行绑定，不重建整个列表。</summary>
+    public void RefreshStateFromItem()
+    {
+        Note = Item.Note ?? string.Empty;
+
+        var isVacBanned = Item.GcVacBanned == true;
+        var hasCooldown = (Item.CooldownSeconds ?? 0) > 0;
+        StatusText = isVacBanned
+            ? Loc.T("Legacy_Status_Vac")
+            : hasCooldown ? Loc.T("Legacy_Status_Cooldown") : Loc.T("Legacy_Status_Available");
+        StatusBrush = isVacBanned
+            ? FormatHelper.GetStatusBrush(InfoBarSeverity.Error)
+            : hasCooldown ? FormatHelper.GetWarningBrush() : FormatHelper.GetStatusBrush(InfoBarSeverity.Success);
+        CooldownEndText = isVacBanned
+            ? "VAC"
+            : hasCooldown
+                ? DateTimeOffset.Now.AddSeconds(Item.CooldownSeconds!.Value).ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture)
+                : string.Empty;
     }
 }

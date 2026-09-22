@@ -536,7 +536,7 @@ internal sealed class AccountHistoryService
     {
         accountName = accountName.Trim();
         steamId = steamId.Trim();
-        if (string.IsNullOrWhiteSpace(accountName) || string.IsNullOrWhiteSpace(steamId))
+        if (string.IsNullOrWhiteSpace(accountName))
         {
             return;
         }
