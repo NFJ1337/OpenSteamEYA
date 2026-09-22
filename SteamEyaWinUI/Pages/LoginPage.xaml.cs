@@ -49,6 +49,13 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
     private bool _verifyLibraryRecentTab = true;
     private string _verifyLibrarySort = "playtime";
 
+    private sealed class CardKeyTokenRejectedException : InvalidOperationException
+    {
+        public CardKeyTokenRejectedException(string message) : base(message)
+        {
+        }
+    }
+
     public LoginPage()
     {
         InitializeComponent();
@@ -84,7 +91,6 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
     private bool IsCredsMode => ModeSelector.SelectedItem == CredsModeItem;
 
     private bool IsVerifyMode => ModeSelector.SelectedItem == VerifyModeItem;
-
 
     private void OnLanguageChanged()
     {
@@ -447,6 +453,11 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		{
 			var (text, eyaToken) = await GetCredentialsAsync(cancellationToken);
 			EnsureTokenValidForAction(eyaToken, "Login_Action_ClearWorkshop");
+			await EnsureTokenAcceptedBySteamAsync(
+				eyaToken,
+				"Login_Action_ClearWorkshop",
+				cancellationToken,
+				passwordChangedHint: IsTokenLoginMode);
 			UpdateAccountInfo(text, eyaToken);
 			await UpdateAccountProfileAsync(text, eyaToken);
 			int num = await AppState.WorkshopService.ClearSubscriptionsAsync(eyaToken, progress, cancellationToken);
@@ -502,8 +513,12 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 			var (accountName, eyaToken) = await GetCredentialsAsync(cancellationToken);
 			EnsureTokenValidForAction(eyaToken, "Login_Action_Login");
 			UpdateAccountInfo(accountName, eyaToken);
+			await EnsureTokenAcceptedBySteamAsync(
+				eyaToken,
+				"Login_Action_Login",
+				cancellationToken,
+				passwordChangedHint: IsTokenLoginMode);
 			SteamAccountHistoryItem profile = await UpdateAccountProfileAsync(accountName, eyaToken, triggerBackgroundRefresh: false);
-			await EnsureTokenAcceptedBySteamAsync(eyaToken, "Login_Action_Login", cancellationToken);
 			LoginResult result = await Task.Run(() => AppState.LoginService.Login(accountName, eyaToken, progress), cancellationToken);
 			if (whiteAccountName != null)
 			{
@@ -520,6 +535,10 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		catch (OperationCanceledException)
 		{
 			ShowStatus(Loc.T("Login_Status_LoginCancelled"), InfoBarSeverity.Informational);
+		}
+		catch (CardKeyTokenRejectedException ex2)
+		{
+			ShowStatus(ex2.Message, InfoBarSeverity.Error);
 		}
 		catch (Exception ex2)
 		{
@@ -786,8 +805,22 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		ShowStatus(Loc.T("Login_Status_ResolvingLicense"), InfoBarSeverity.Informational);
 		try
 		{
-			// 按当前选的上游解析（奶味 keygettoken；伊万/路飞 keygetdata），填回 SteamID + 令牌。
-			await ResolveTokenLicenseAndFillAsync(cancellationToken);
+			// 按当前选的上游解析（奶味新版卡密优先；伊万/路飞 keygetdata），填回 SteamID + 令牌。
+			var account = await ResolveTokenLicenseAndFillAsync(cancellationToken);
+			if (account is null)
+			{
+				return;
+			}
+
+			// 解析成功后先验证令牌是否已被 Steam 拒绝，再提示解析成功。
+			await EnsureTokenAcceptedBySteamAsync(
+				account.Token,
+				"Login_Action_Login",
+				cancellationToken,
+				passwordChangedHint: true);
+			ShowStatus(
+				Loc.Tf("Login_Status_LicenseResolved_Format", account.User, account.SteamId),
+				InfoBarSeverity.Success);
 		}
 		catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
 		{
@@ -1002,7 +1035,7 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 
 	/// <summary>
 	/// 按当前选的上游解析卡密：
-	///   · 奶味 —— 还是原来那条链路（keygettoken，兼容「账号----卡密」写法）；
+	///   · 奶味 —— 先走账号核验按钮同款的新版 SSE 取名接口，兼容新版卡密；失败再回退 keygettoken；
 	///   · 伊万 / 路飞 —— 走各自上游的取名接口（keygetdata，与黑号存储同一套）。
 	/// </summary>
 	private async Task<SteamAccountData> ResolveTokenLicenseByUpstreamAsync(string licenseKey, CancellationToken cancellationToken)
@@ -1011,11 +1044,19 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		var upstream = _tokenUpstream ?? SteamLicenseClient.Upstream;
 		if (Equals(upstream, SteamLicenseClient.Upstream))
 		{
+			if (_tokenUpstreamCachedAccount is not null &&
+				string.Equals(_tokenUpstreamCachedKey, key, StringComparison.Ordinal))
+			{
+				return _tokenUpstreamCachedAccount;
+			}
+
 			try
 			{
-				var parsed = await AppState.LegacyEyaLicenseClient.ParseLicenseKeyAsync(key, cancellationToken);
-				var name = string.IsNullOrWhiteSpace(parsed.AccountName) ? parsed.SteamId : parsed.AccountName;
-				return new SteamAccountData(parsed.Token, name, parsed.SteamId);
+				// 与「账号核验」的卡密一键登录使用同一套新版取名逻辑。
+				var redeemedAccount = await RedeemNaiweiNewKeyAsync(key, CreateStatusOnlyRedeemProgressReporter(), cancellationToken);
+				_tokenUpstreamCachedAccount = redeemedAccount;
+				_tokenUpstreamCachedKey = key;
+				return redeemedAccount;
 			}
 			catch (OperationCanceledException)
 			{
@@ -1023,11 +1064,14 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 			}
 			catch (Exception ex)
 			{
-				// 奶味有两套取名接口：老的 keygettoken（上面那条）对「新版卡密」会回 400 Bad Request，
-				// 回退到核验模块一直在用的新版 SSE 取名接口，别让整条链路直接挂掉。
-				AppLog.Warn($"奶味 keygettoken 取名失败（{ex.Message}），改用新版取名接口重试。");
-				var redeem = await VerifyRedeemClient.RedeemAsync(key, CreateVerifyRedeemProgressReporter(), cancellationToken);
-				return new SteamAccountData(redeem.Token, redeem.SteamId, redeem.SteamId);
+				// 新版卡密优先；旧卡密或新版接口临时失败时，保留原来的 keygettoken 兼容链路。
+				AppLog.Warn($"奶味新版取名失败（{ex.Message}），回退 keygettoken。");
+				var parsed = await AppState.LegacyEyaLicenseClient.ParseLicenseKeyAsync(key, cancellationToken);
+				var name = string.IsNullOrWhiteSpace(parsed.AccountName) ? parsed.SteamId : parsed.AccountName;
+				var legacyAccount = new SteamAccountData(parsed.Token, name, parsed.SteamId);
+				_tokenUpstreamCachedAccount = legacyAccount;
+				_tokenUpstreamCachedKey = key;
+				return legacyAccount;
 			}
 		}
 
@@ -1056,8 +1100,6 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		TokenSteamIdBox.Text = account.SteamId;
 		TokenBox.Text = account.Token;
 		UpdateAccountInfo(account.User, account.Token);
-		var text = string.IsNullOrWhiteSpace(account.User) ? account.SteamId : account.User;
-		ShowStatus(Loc.Tf("Login_Status_LicenseResolved_Format", text, account.SteamId), InfoBarSeverity.Success);
 		return account;
 	}
 
@@ -1684,7 +1726,11 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		}
 	}
 
-	private async Task EnsureTokenAcceptedBySteamAsync(string eyaToken, string actionName, CancellationToken cancellationToken = default(CancellationToken))
+	private async Task EnsureTokenAcceptedBySteamAsync(
+		string eyaToken,
+		string actionName,
+		CancellationToken cancellationToken = default(CancellationToken),
+		bool passwordChangedHint = false)
 	{
 		AccountInfoAvailabilityText.Text = Loc.T("Login_Availability_Verifying");
 		ResetAvailabilityForeground();
@@ -1705,12 +1751,23 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 			ShowStatus(Loc.Tf("Login_Status_SkippedOnlineValidation_Format", Loc.T(actionName)), InfoBarSeverity.Warning);
 			return;
 		}
-		AccountInfoAvailabilityText.Text = (steamTokenOnlineValidationResult.IsValid ? Loc.T("Login_Availability_Valid") : Loc.T("Login_Availability_Invalid"));
-		AccountInfoAvailabilityText.Foreground = FormatHelper.GetStatusBrush(steamTokenOnlineValidationResult.IsValid ? InfoBarSeverity.Success : InfoBarSeverity.Error);
 		if (steamTokenOnlineValidationResult.IsValid)
 		{
+			AccountInfoAvailabilityText.Text = Loc.T("Login_Availability_Valid");
+			AccountInfoAvailabilityText.Foreground = FormatHelper.GetStatusBrush(InfoBarSeverity.Success);
 			return;
 		}
+
+		if (passwordChangedHint)
+		{
+			var rejectedMessage = Loc.T("Login_Error_TokenRejectedPasswordChanged");
+			AccountInfoAvailabilityText.Text = rejectedMessage;
+			AccountInfoAvailabilityText.Foreground = FormatHelper.GetStatusBrush(InfoBarSeverity.Error);
+			throw new CardKeyTokenRejectedException(rejectedMessage);
+		}
+
+		AccountInfoAvailabilityText.Text = Loc.T("Login_Availability_Invalid");
+		AccountInfoAvailabilityText.Foreground = FormatHelper.GetStatusBrush(InfoBarSeverity.Error);
 		throw new InvalidOperationException(Loc.Tf("Login_Error_StatusCannotAction_Format", steamTokenOnlineValidationResult.Status, Loc.T(actionName)));
 	}
 
@@ -2139,7 +2196,7 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
     /// </summary>
     // ---------- 核验模块内的「卡密一键登录」 ----------
 
-    /// <summary>新版取名接口客户端：只服务核验模块的一键登录，不参与既有卡密解析链路。</summary>
+    /// <summary>新版取名接口客户端：账号核验一键登录与 Token 登录的奶味上游共用。</summary>
     private static readonly NaiweiRedeemClient VerifyRedeemClient = new();
 
     /// <summary>
@@ -2242,10 +2299,8 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
         ShowStatus(Loc.T("Login_Status_ResolvingLicense"), InfoBarSeverity.Informational);
         try
         {
-            // 与「Token 登录」页面同一套取名：按 Token 面板选的上游（奶味 / 伊万 / 路飞）把卡密换成 SteamID + JWT，
-            // 之后交给 Token 面板既有的按钮处理函数（清除创意工坊等走的都是这条 JWT 链路）。
-            // 早先这里写死用奶味新版 SSE 取名接口，伊万/路飞 的卡密在这一页会取不到。
-            var account = await ResolveTokenLicenseByUpstreamAsync(licenseKey, cancellationToken);
+            // 账号核验只对接奶味：保留原「卡密一键登录」按钮的新版 SSE 取名逻辑。
+            var account = await RedeemNaiweiNewKeyAsync(licenseKey, CreateVerifyRedeemProgressReporter(), cancellationToken);
             TokenLicenseKeyBox.Text = licenseKey;
             TokenSteamIdBox.Text = account.SteamId;
             TokenBox.Text = account.Token;
@@ -2271,6 +2326,27 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
             AppState.EndBusyOperation();
         }
     }
+
+    /// <summary>奶味新版卡密取名：账号核验按钮与 Token 登录的奶味上游共用同一套逻辑。</summary>
+    private static async Task<SteamAccountData> RedeemNaiweiNewKeyAsync(
+        string licenseKey,
+        IProgress<NaiweiRedeemProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        var redeem = await VerifyRedeemClient.RedeemAsync(licenseKey, progress, cancellationToken);
+        return new SteamAccountData(redeem.Token, redeem.SteamId, redeem.SteamId);
+    }
+
+    /// <summary>Token 登录里的新版取名进度：状态栏实时反馈，不依赖核验面板是否展开。</summary>
+    private static IProgress<NaiweiRedeemProgress> CreateStatusOnlyRedeemProgressReporter() =>
+        new Progress<NaiweiRedeemProgress>(progress =>
+        {
+            int percent = Math.Clamp(progress.Percent, 0, 100);
+            string text = string.IsNullOrWhiteSpace(progress.Message)
+                ? Loc.Tf("Login_Redeem_Status_Percent_Format", percent)
+                : $"{progress.Message} · {percent}%";
+            ShowStatus(text, InfoBarSeverity.Informational);
+        });
 
     /// <summary>取名进度：把服务端 SSE 文案写进核验模块的进度行，并在状态栏同步一条。</summary>
     private IProgress<NaiweiRedeemProgress> CreateVerifyRedeemProgressReporter() =>

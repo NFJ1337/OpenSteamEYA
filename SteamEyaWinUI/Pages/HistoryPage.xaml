@@ -123,7 +123,7 @@
                                 <TextBlock x:Name="WhiteStatusFilterText" />
                             </StackPanel>
                             <DropDownButton.Flyout>
-                                <MenuFlyout x:Name="WhiteStatusFilterFlyout" MenuFlyoutPresenterStyle="{StaticResource AuroraOpaqueMenuFlyoutPresenterStyle}">
+                                <MenuFlyout x:Name="WhiteStatusFilterFlyout">
                                     <MenuFlyoutItem Tag="all" Text="{x:Bind Strings.Get('WhiteAccounts_Filter_All'), Mode=OneWay}" Click="WhiteStatusFilterMenuItem_Click" />
                                     <MenuFlyoutItem Tag="available" Text="{x:Bind Strings.Get('WhiteAccounts_Filter_Available'), Mode=OneWay}" Click="WhiteStatusFilterMenuItem_Click" />
                                     <MenuFlyoutItem Tag="unavailable" Text="{x:Bind Strings.Get('WhiteAccounts_Filter_Unavailable'), Mode=OneWay}" Click="WhiteStatusFilterMenuItem_Click" />

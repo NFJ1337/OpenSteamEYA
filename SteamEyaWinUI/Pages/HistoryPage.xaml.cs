@@ -1203,16 +1203,25 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
         var result = await AppState.AccountValidationService.QueryAsync(
             account.AccountName,
             account.Password,
+            account.EyaToken,
             GuardProvider,
             progress,
             cancellationToken);
+
+        DateTimeOffset? tokenExpiresAt = null;
+        if (!string.IsNullOrWhiteSpace(result.RefreshToken))
+        {
+            tokenExpiresAt = AppState.JwtTokenService.Inspect(result.RefreshToken).ExpiresAt;
+        }
 
         await Task.Run(
             () => AccountStore.SaveValidationStatus(
                 account.AccountName,
                 result.SteamId,
                 result.CooldownSeconds ?? 0,
-                result.VacBanned),
+                result.VacBanned,
+                result.RefreshToken,
+                tokenExpiresAt),
             cancellationToken);
         return result;
     }
@@ -1714,9 +1723,6 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
 
     // ---------- 批量导入白号（账号+密码换取 EYA 令牌入库；带 shared_secret 自动过 2FA，否则逐个输码） ----------
 
-    private sealed record WhiteAccountEntry(
-        string AccountName, string Password, string? SharedSecret, string? Email, string? EmailPassword);
-
     private async void BatchImportWhiteButton_Click(object sender, RoutedEventArgs e)
     {
         if (_isDialogFlowActive)
@@ -1771,7 +1777,7 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
             _isDialogFlowActive = false;
         }
 
-        var entries = ParseWhiteAccounts(pasteText);
+        var entries = WhiteAccountLineParser.Parse(pasteText);
         if (entries.Count == 0)
         {
             AppState.ShowStatus(Loc.T("History_WhiteImport_NoneParsed"), InfoBarSeverity.Error);
@@ -1810,73 +1816,6 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
             importItems.Clear();
             AppState.SetBusy(false);
         }
-    }
-    // 解析批量白号文本：每行「账号----密码」或「账号----密码----shared_secret」，也兼容空白分隔。
-    private static List<WhiteAccountEntry> ParseWhiteAccounts(string text)
-    {
-        var list = new List<WhiteAccountEntry>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var rawLine in text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
-        {
-            var line = rawLine.Trim();
-            if (line.Length == 0)
-            {
-                continue;
-            }
-
-            var parts = line.Contains("----", StringComparison.Ordinal)
-                ? line.Split("----", StringSplitOptions.None)
-                : line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length < 2)
-            {
-                continue;
-            }
-
-            var accountName = parts[0].Trim();
-            var password = parts[1].Trim();
-            if (accountName.Length == 0 || password.Length == 0)
-            {
-                continue;
-            }
-
-            // 其余列：含 @ 的视为邮箱（其后一列为邮箱密码），非邮箱列视为 shared_secret。兼容
-            // 「账号----密码」「账号----密码----shared_secret」「账号----密码----邮箱----邮箱密码」。
-            string? sharedSecret = null, email = null, emailPassword = null;
-            for (var i = 2; i < parts.Length; i++)
-            {
-                var field = parts[i].Trim();
-                if (field.Length == 0)
-                {
-                    continue;
-                }
-
-                if (email is null && field.Contains('@'))
-                {
-                    email = field;
-                    if (i + 1 < parts.Length)
-                    {
-                        var pwd = parts[i + 1].Trim();
-                        emailPassword = pwd.Length == 0 ? null : pwd;
-                        i++;
-                    }
-                }
-                else
-                {
-                    sharedSecret ??= field;
-                }
-            }
-
-            // 同一账号多行取第一行。
-            if (!seen.Add(accountName))
-            {
-                continue;
-            }
-
-            list.Add(new WhiteAccountEntry(accountName, password, sharedSecret, email, emailPassword));
-        }
-
-        return list;
     }
 
     // 令牌验证器需要输码时弹窗索取邮箱/手机验证码（无 shared_secret 的账号）；取消返回 null。

@@ -20,9 +20,12 @@ internal sealed record CredentialsAuthResult(string RefreshToken, string Account
 
 internal sealed class SteamCredentialsAuthException : InvalidOperationException
 {
-    public SteamCredentialsAuthException(string message) : base(message)
+    public SteamCredentialsAuthException(string message, int? eresult = null) : base(message)
     {
+        EResult = eresult;
     }
+
+    public int? EResult { get; }
 }
 
 /// <summary>
@@ -322,7 +325,7 @@ internal sealed class SteamCredentialsAuthService
             var errorMessage = response.Headers.TryGetValues("x-error_message", out var messages)
                 ? messages.FirstOrDefault()
                 : null;
-            throw new SteamCredentialsAuthException(MapEResult(eresult, errorMessage));
+            throw new SteamCredentialsAuthException(MapEResult(eresult, errorMessage), eresult);
         }
 
         return body;
@@ -345,6 +348,7 @@ internal sealed class SteamCredentialsAuthService
         {
             5 => Loc.T("Creds_Error_InvalidPassword"),        // InvalidPassword
             84 => Loc.T("Creds_Error_RateLimited"),            // RateLimitExceeded
+            87 => Loc.T("Creds_Error_LoginThrottled"),         // AccountLoginDeniedThrottle
             65 or 88 => Loc.T("Creds_Error_GuardMismatch"),    // InvalidLoginAuthCode / TwoFactorCodeMismatch
             _ => string.IsNullOrWhiteSpace(errorMessage)
                 ? Loc.Tf("Creds_Error_Failed_Format", eresult)

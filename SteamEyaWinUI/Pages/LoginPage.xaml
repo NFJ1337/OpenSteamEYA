@@ -352,7 +352,7 @@
                                         <TextBlock x:Name="CardStoreSourceText" />
                                     </StackPanel>
                                     <DropDownButton.Flyout>
-                                        <MenuFlyout x:Name="CardStoreSourceFlyout" MenuFlyoutPresenterStyle="{StaticResource AuroraOpaqueMenuFlyoutPresenterStyle}" />
+                                        <MenuFlyout x:Name="CardStoreSourceFlyout" />
                                     </DropDownButton.Flyout>
                                 </DropDownButton>
 
@@ -511,7 +511,7 @@
                                     <TextBlock x:Name="TokenUpstreamText" />
                                 </StackPanel>
                                 <DropDownButton.Flyout>
-                                    <MenuFlyout x:Name="TokenUpstreamFlyout" MenuFlyoutPresenterStyle="{StaticResource AuroraOpaqueMenuFlyoutPresenterStyle}" />
+                                    <MenuFlyout x:Name="TokenUpstreamFlyout" />
                                 </DropDownButton.Flyout>
                             </DropDownButton>
                         </StackPanel>
@@ -584,7 +584,7 @@
                             TextChanged="TokenLoginBox_TextChanged" />
                     </StackPanel>
                 </Border>
-                <!-- 账号核验（卡密）：复刻 Steam 账号核验站的验号结果——封禁状态、CS2 竞技记录与游戏库。
+                <!-- 奶味验号.xyz：复刻 Steam 账号核验站的验号结果——封禁状态、CS2 竞技记录与游戏库。
                      版式按软件默认窗口（1380x810）压缩：小字号、细边卡片、列表各自内部滚动、游戏库默认折叠。 -->
                 <Border x:Name="VerifyPanel" Style="{StaticResource CardBorderStyle}" Visibility="Collapsed">
                     <StackPanel Spacing="12">
@@ -641,7 +641,7 @@
                         <!-- 卡密一键登录：只用核验模块内的这张卡密走新版取名接口（SSE /api/v1/redeem），
                              成功后切到 Token登录 并把 SteamID/Token 填好，再交给既有登录流程。
                              不改动既有面板的行为，也不清理 Steam 账号缓存。 -->
-                        <StackPanel Spacing="6">
+                        <StackPanel Spacing="6" Visibility="Collapsed">
                             <TextBlock
                                 Text="{x:Bind Strings.Get('Login_Verify_Login_Hint'), Mode=OneWay}"
                                 Foreground="{ThemeResource AuroraTextMutedBrush}"
@@ -662,7 +662,7 @@
 
                         <!-- 登录前可选操作：与 Token登录 面板完全相同的三个按钮（点击后切到 Token登录 面板，
                              并调用该面板既有按钮的同一个处理函数；登录/这些操作都走 SteamID + JWT 的 Token 逻辑）。 -->
-                        <StackPanel Spacing="6">
+                        <StackPanel Spacing="6" Visibility="Collapsed">
                             <TextBlock
                                 Text="{x:Bind Strings.Get('Login_Verify_PreLoginActions_Hint'), Mode=OneWay}"
                                 Foreground="{ThemeResource AuroraTextMutedBrush}"
@@ -981,6 +981,20 @@
                     </StackPanel>
                 </Border>
 
+                <!-- 取消按钮仅忙碌时可见；放在操作区顶部，避免窗口较矮时被登录/装配按钮挤到视口之外。 -->
+                <Button
+                    x:Name="CancelButton"
+                    HorizontalAlignment="Stretch"
+                    Padding="0,10"
+                    Visibility="Collapsed"
+                    Click="CancelButton_Click"
+                    ToolTipService.ToolTip="{x:Bind Strings.Get('Login_Btn_Cancel_Tip'), Mode=OneWay}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE711;" FontSize="16" />
+                        <TextBlock Text="{x:Bind Strings.Get('Common_Cancel'), Mode=OneWay}" />
+                    </StackPanel>
+                </Button>
+
                 <!-- 主操作独占一行强调层级；三个次级操作等宽一行，避免与主按钮抢视觉权重。 -->
                 <Grid x:Name="ActionButtonGrid" RowSpacing="12" ColumnSpacing="12">
                     <Grid.RowDefinitions>
@@ -1050,19 +1064,6 @@
                     </Button>
                 </Grid>
 
-                <!-- 取消按钮仅忙碌时可见；OnBusyChanged 不禁用它，busy 期间始终可点。 -->
-                <Button
-                    x:Name="CancelButton"
-                    HorizontalAlignment="Stretch"
-                    Padding="0,10"
-                    Visibility="Collapsed"
-                    Click="CancelButton_Click"
-                    ToolTipService.ToolTip="{x:Bind Strings.Get('Login_Btn_Cancel_Tip'), Mode=OneWay}">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon Glyph="&#xE711;" FontSize="16" />
-                        <TextBlock Text="{x:Bind Strings.Get('Common_Cancel'), Mode=OneWay}" />
-                    </StackPanel>
-                </Button>
             </StackPanel>
 
             <Border x:Name="AccountInfoPanel" Grid.Column="1" Style="{StaticResource CardBorderStyle}" VerticalAlignment="Top">

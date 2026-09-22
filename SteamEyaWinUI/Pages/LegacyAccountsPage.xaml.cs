@@ -577,35 +577,17 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             return;
         }
 
-        var entries = new List<SteamAccountHistoryItem>();
-
-        // 换行按 \r / \n 都拆：WinUI 的 TextBox 内部用 \r 表示换行（回车输入、或粘贴后被规范化），
-        // 只按 \n 拆会把整段当成一行 —— 结果只加进第一个账号、后面几行被当成它的密码。
-        // 与历史页导入白号那里的写法保持一致（Split(['\r', '\n'], RemoveEmptyEntries)）。
-        foreach (var raw in (box.Text ?? string.Empty).Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+        var parsed = WhiteAccountLineParser.Parse(box.Text, allowMissingPassword: true);
+        var entries = parsed.Select(entry => new SteamAccountHistoryItem
         {
-            var line = raw.Trim();
-            if (line.Length == 0)
-            {
-                continue;
-            }
-
-            var parts = line.Split("----", 2, StringSplitOptions.None);
-            var name = parts[0].Trim();
-            if (name.Length == 0)
-            {
-                continue;
-            }
-
-            entries.Add(new SteamAccountHistoryItem
-            {
-                AccountName = name,
-                Password = parts.Length > 1 ? parts[1].Trim() : string.Empty,
-                IsWhiteAccount = true,
-                LastLoginAt = DateTimeOffset.Now
-            });
-        }
-
+            AccountName = entry.AccountName,
+            Password = entry.Password,
+            SharedSecret = entry.SharedSecret,
+            Email = entry.Email,
+            EmailPassword = entry.EmailPassword,
+            IsWhiteAccount = true,
+            LastLoginAt = DateTimeOffset.Now
+        }).ToList();
         if (entries.Count == 0)
         {
             return;
@@ -618,8 +600,8 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
     }
 
     /// <summary>
-    /// 「一键查询」：对勾选的账号逐个走「账号 + 密码登录 Steam 读冷却/VAC」这条链路（与「账号查询」页同款），
-    /// 结果写回账号并刷新表格；需要 Steam Guard 会弹验证码框。
+    /// 「一键查询」：对勾选的账号逐个优先复用令牌，没有可用令牌才走「账号 + 密码登录 Steam」，
+    /// 再读冷却/VAC；结果与登录成功后拿到的令牌一并写回账号，刷新表格。需要 Steam Guard 会弹验证码框。
     /// </summary>
     private async void LegacyBatchQueryButton_Click(object sender, RoutedEventArgs e)
     {
@@ -633,6 +615,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         var cancellationToken = AppState.BeginBusyOperation();
         var succeeded = 0;
         var failed = 0;
+        var loginThrottled = false;
 
         try
         {
@@ -644,7 +627,8 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
                 }
 
                 var account = accounts[i];
-                if (string.IsNullOrWhiteSpace(account.Password))
+                if (string.IsNullOrWhiteSpace(account.Password) &&
+                    string.IsNullOrWhiteSpace(account.EyaToken))
                 {
                     failed++;
                     continue;
@@ -667,19 +651,23 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
                     var result = await AppState.AccountValidationService.QueryAsync(
                         account.AccountName,
                         account.Password,
+                        account.EyaToken,
                         (prompt, token) => PromptGuardCodeAsync(prompt, token, account),
                         progress,
                         cancellationToken);
 
-                    AppState.WhiteAccountService.SaveValidationStatus(
-                        account.AccountName,
-                        result.SteamId,
-                        result.CooldownSeconds ?? 0,
-                        result.VacBanned);
+                    SaveValidationResult(account, result);
                     succeeded++;
                 }
                 catch (OperationCanceledException)
                 {
+                    break;
+                }
+                catch (SteamCredentialsAuthException ex) when (ex.EResult == 87)
+                {
+                    failed++;
+                    loginThrottled = true;
+                    AppLog.Warn($"一键查询被 Steam 限流：{account.AccountName}，{ex.Message}");
                     break;
                 }
                 catch (Exception ex)
@@ -698,7 +686,9 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         RebuildRows();
 
         // 结束提示同样带进度（如 61/61），一眼能看出整轮跑完了。
-        var doneText = Loc.Tf("Legacy_Status_BatchDone_Format", succeeded, failed);
+        var doneText = loginThrottled
+            ? Loc.T("Creds_Error_LoginThrottled")
+            : Loc.Tf("Legacy_Status_BatchDone_Format", succeeded, failed);
         AppState.ShowStatus(
             Loc.Tf("Legacy_Status_BatchProgress_Format", accounts.Count, accounts.Count, doneText),
             failed == 0 ? InfoBarSeverity.Success : InfoBarSeverity.Warning);
@@ -1111,7 +1101,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         e.Handled = true;
     }
 
-    /// <summary>右键弹窗里的「查询VAC」：用该账号的账号+密码登录 Steam 读冷却/VAC 页，结果写回账号。</summary>
+    /// <summary>右键弹窗里的「查询VAC」：优先复用令牌，没有可用令牌才用账号+密码登录 Steam 读冷却/VAC 页。</summary>
     private async void LegacyRowQueryVac_Click(object sender, RoutedEventArgs e)
     {
         if (_contextAccount is not { } account)
@@ -1119,7 +1109,8 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(account.Password))
+        if (string.IsNullOrWhiteSpace(account.Password) &&
+            string.IsNullOrWhiteSpace(account.EyaToken))
         {
             AppState.ShowStatus(Loc.T("Creds_Error_PasswordRequired"), InfoBarSeverity.Error);
             return;
@@ -1134,15 +1125,12 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             var result = await AppState.AccountValidationService.QueryAsync(
                 account.AccountName,
                 account.Password,
+                account.EyaToken,
                 (prompt, token) => PromptGuardCodeAsync(prompt, token, account),
                 progress,
                 cancellationToken);
 
-            AppState.WhiteAccountService.SaveValidationStatus(
-                account.AccountName,
-                result.SteamId,
-                result.CooldownSeconds ?? 0,
-                result.VacBanned);
+            SaveValidationResult(account, result);
 
             AppState.ReloadWhiteAccounts();
             RebuildRows();
@@ -1164,6 +1152,25 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         {
             AppState.EndBusyOperation();
         }
+    }
+
+    private static void SaveValidationResult(
+        SteamAccountHistoryItem account,
+        SteamAccountValidationResult result)
+    {
+        DateTimeOffset? tokenExpiresAt = null;
+        if (!string.IsNullOrWhiteSpace(result.RefreshToken))
+        {
+            tokenExpiresAt = AppState.JwtTokenService.Inspect(result.RefreshToken).ExpiresAt;
+        }
+
+        AppState.WhiteAccountService.SaveValidationStatus(
+            account.AccountName,
+            result.SteamId,
+            result.CooldownSeconds ?? 0,
+            result.VacBanned,
+            result.RefreshToken,
+            tokenExpiresAt);
     }
 
     /// <summary>需要 Steam Guard 时弹框要验证码（与历史页同一套交互，页面各自持有）。</summary>

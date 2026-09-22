@@ -54,29 +54,45 @@ internal sealed class AccountHistoryService
     // 读到旧版明文凭据时置位：Load() 会回写一次完成迁移（加密落盘）。
     private bool _plaintextCredentialsDetected;
 
+    // 旧版「添加账号」曾把邮箱/邮箱密码整段并进 password；加载时拆回并回写修复。
+    private int _legacyCredentialShapeRepairCount;
+
     public IReadOnlyList<SteamAccountHistoryItem> Load()
     {
         var document = ReadDocument();
-        if (_plaintextCredentialsDetected)
+        var accounts = NormalizeAccounts(document.Accounts);
+        var plaintextDetected = _plaintextCredentialsDetected;
+        var repairedCount = _legacyCredentialShapeRepairCount;
+        if (plaintextDetected || repairedCount > 0)
         {
-            _plaintextCredentialsDetected = false;
             try
             {
-                // 迁移：同一份数据原样回写，只是敏感字段变成密文。失败不影响本次读取。
+                document.Accounts = accounts.ToList();
                 WriteDocument(document);
-                AppLog.Info($"本地凭据已加密迁移：{Path.GetFileName(HistoryFilePath)}");
+                if (plaintextDetected)
+                {
+                    AppLog.Info($"本地凭据已加密迁移：{Path.GetFileName(HistoryFilePath)}");
+                }
+
+                if (repairedCount > 0)
+                {
+                    AppLog.Info($"已自动修复白号导入格式：{Path.GetFileName(HistoryFilePath)}，{repairedCount} 个账号的邮箱信息已从密码字段拆回。");
+                }
+
+                _plaintextCredentialsDetected = false;
+                _legacyCredentialShapeRepairCount = 0;
 
                 EnsureBackupHasNoPlaintext();
             }
             catch (Exception ex)
             {
-                AppLog.Warn($"本地凭据加密迁移失败，本次仍按明文使用：{ex.Message}");
+                AppLog.Warn($"账号库回写失败，本次仍按内存中的修复结果使用：{ex.Message}");
             }
         }
 
         // 主文件已加密但同目录 .bak 还是旧版明文时，这里自愈一次（只覆盖备份，不动主文件）。
         EnsureBackupHasNoPlaintext();
-        return NormalizeAccounts(document.Accounts);
+        return accounts;
     }
 
     /// <summary>
@@ -509,12 +525,14 @@ internal sealed class AccountHistoryService
         }
     }
 
-    /// <summary>Python 版账号管理验证只回写冷却与 VAC，不覆盖分数/等级等其它字段。</summary>
+    /// <summary>账号管理验证只回写冷却、VAC 与本次登录拿到的令牌，不覆盖分数/等级等其它字段。</summary>
     public void SaveValidationStatus(
         string accountName,
         string steamId,
         uint cooldownSeconds,
-        bool? vacBanned)
+        bool? vacBanned,
+        string? refreshToken = null,
+        DateTimeOffset? tokenExpiresAt = null)
     {
         accountName = accountName.Trim();
         steamId = steamId.Trim();
@@ -545,6 +563,12 @@ internal sealed class AccountHistoryService
             if (vacBanned.HasValue)
             {
                 item.GcVacBanned = vacBanned.Value;
+            }
+
+            if (!string.IsNullOrWhiteSpace(refreshToken))
+            {
+                item.EyaToken = refreshToken.Trim();
+                item.TokenExpiresAt = tokenExpiresAt;
             }
 
             item.CsStatusUpdatedAt = DateTimeOffset.Now;
@@ -1129,7 +1153,29 @@ internal sealed class AccountHistoryService
     private IReadOnlyList<SteamAccountHistoryItem> NormalizeAccounts(
         IEnumerable<SteamAccountHistoryItem> accounts)
     {
-        var normalized = accounts
+        var materialized = accounts.ToList();
+
+        // JSON 里显式的 "groupIds": null 会覆盖属性初始值；消费方（如批量分组 flyout）直接 .GroupIds.Contains 会 NRE。
+        foreach (var account in materialized)
+        {
+            account.GroupIds ??= [];
+
+            if (WhiteAccountLineParser.TryRepairStoredCredential(
+                    account.Password,
+                    out var password,
+                    out var sharedSecret,
+                    out var email,
+                    out var emailPassword))
+            {
+                account.Password = password;
+                account.SharedSecret ??= sharedSecret;
+                account.Email ??= email;
+                account.EmailPassword ??= emailPassword;
+                _legacyCredentialShapeRepairCount++;
+            }
+        }
+
+        var normalized = materialized
             .Where(account =>
                 !string.IsNullOrWhiteSpace(account.AccountName) &&
                 (!string.IsNullOrWhiteSpace(account.EyaToken) ||
@@ -1147,12 +1193,6 @@ internal sealed class AccountHistoryService
             .ThenBy(account => _sortOldestFirst ? account.LastLoginAt : DateTimeOffset.MinValue)
             .ThenByDescending(account => _sortOldestFirst ? DateTimeOffset.MinValue : account.LastLoginAt)
             .ToList();
-
-        // JSON 里显式的 "groupIds": null 会覆盖属性初始值；消费方（如批量分组 flyout）直接 .GroupIds.Contains 会 NRE。
-        foreach (var account in normalized)
-        {
-            account.GroupIds ??= [];
-        }
 
         return normalized;
     }

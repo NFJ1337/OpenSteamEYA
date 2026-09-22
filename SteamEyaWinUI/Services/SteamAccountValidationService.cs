@@ -9,12 +9,13 @@ internal sealed record SteamAccountValidationResult(
     string SteamId,
     uint? CooldownSeconds,
     bool? VacBanned,
-    string SummaryText);
+    string SummaryText,
+    string? RefreshToken = null);
 
 /// <summary>
 /// 与本地 SteamAccountManager 的账号管理验证保持一致：
-/// 使用账号名 + 密码登录 Steam，再访问 help.steampowered.com 的冷却/VAC页面。
-/// 不复用 EYA Token 的 GC 查询逻辑。
+/// 优先复用已保存令牌；没有可用令牌时使用账号名 + 密码登录 Steam，
+/// 再访问 help.steampowered.com 的冷却/VAC 页面。不复用 EYA Token 的 GC 查询逻辑。
 /// </summary>
 internal sealed class SteamAccountValidationService
 {
@@ -43,9 +44,28 @@ internal sealed class SteamAccountValidationService
     private SteamCmClient? _reusedCmClient;
     private DateTimeOffset _reusedCmUsedAt;
 
+    public Task<SteamAccountValidationResult> QueryAsync(
+        string accountName,
+        string password,
+        Func<SteamGuardPrompt, CancellationToken, Task<string?>> guardCodeProvider,
+        IProgress<string>? progress,
+        CancellationToken cancellationToken) =>
+        QueryAsync(
+            accountName: accountName,
+            password: password,
+            cachedRefreshToken: null,
+            guardCodeProvider: guardCodeProvider,
+            progress: progress,
+            cancellationToken: cancellationToken);
+
+    /// <summary>
+    /// 优先复用账号库里已有的 refresh token；令牌不可用时才回退到账号密码登录。
+    /// 成功后返回本次实际使用的令牌，供调用方保存，避免每次查 VAC 都重复登录触发 Steam 限流。
+    /// </summary>
     public async Task<SteamAccountValidationResult> QueryAsync(
         string accountName,
         string password,
+        string? cachedRefreshToken,
         Func<SteamGuardPrompt, CancellationToken, Task<string?>> guardCodeProvider,
         IProgress<string>? progress,
         CancellationToken cancellationToken)
@@ -53,6 +73,19 @@ internal sealed class SteamAccountValidationService
         if (string.IsNullOrWhiteSpace(accountName))
         {
             throw new InvalidOperationException(Loc.T("Creds_Error_AccountRequired"));
+        }
+
+        if (TryGetUsableCachedToken(cachedRefreshToken, out var cachedToken, out var cachedSteamId))
+        {
+            progress?.Report(Loc.T("Login_Status_QueryingAccount"));
+            try
+            {
+                return await QueryWithTokenAsync(cachedToken, cachedSteamId, cancellationToken);
+            }
+            catch (SteamCmException ex) when (ex.IsTokenFailure)
+            {
+                AppLog.Warn($"账号管理验证：缓存令牌不可用，回退账号密码登录（{accountName.Trim()}）：{ex.Message}");
+            }
         }
 
         if (string.IsNullOrWhiteSpace(password))
@@ -69,17 +102,48 @@ internal sealed class SteamAccountValidationService
             cancellationToken);
 
         progress?.Report(Loc.T("Login_Status_QueryingAccount"));
+        var refreshToken = FormatHelper.NormalizeToken(auth.RefreshToken);
+        return await QueryWithTokenAsync(refreshToken, auth.SteamId, cancellationToken);
+    }
 
+    private static bool TryGetUsableCachedToken(
+        string? cachedRefreshToken,
+        out string refreshToken,
+        out string steamId)
+    {
+        refreshToken = string.Empty;
+        steamId = string.Empty;
+        if (string.IsNullOrWhiteSpace(cachedRefreshToken))
+        {
+            return false;
+        }
+
+        refreshToken = FormatHelper.NormalizeToken(cachedRefreshToken.Trim());
+        var tokenInfo = new JwtTokenService().Inspect(refreshToken);
+        if (!tokenInfo.IsValid || string.IsNullOrWhiteSpace(tokenInfo.SteamId))
+        {
+            return false;
+        }
+
+        steamId = tokenInfo.SteamId;
+        return true;
+    }
+
+    private async Task<SteamAccountValidationResult> QueryWithTokenAsync(
+        string refreshToken,
+        string steamId,
+        CancellationToken cancellationToken)
+    {
         // 整段查询独占这条 CM 连接：同一个 socket 上并发换账号会把别的账号的请求搅乱。
         // 查完不关连接，留给下一个账号复用；批次结束时由 ReleaseReusedCmAsync 统一释放。
         await _cmGate.WaitAsync(cancellationToken);
         try
         {
-            var cmClient = await AcquireCmClientAsync(auth.RefreshToken, auth.SteamId, cancellationToken);
+            var cmClient = await AcquireCmClientAsync(refreshToken, steamId, cancellationToken);
             var session = await SteamWebSession.BuildAsync(
                 cmClient,
-                auth.RefreshToken,
-                auth.SteamId,
+                refreshToken,
+                steamId,
                 cancellationToken);
 
             var cooldownHtml = await GetHtmlAsync(CooldownUrl, session, cancellationToken);
@@ -102,19 +166,21 @@ internal sealed class SteamAccountValidationService
             if (activeCooldownSeconds is > 0)
             {
                 return new SteamAccountValidationResult(
-                    auth.SteamId,
+                    steamId,
                     activeCooldownSeconds,
                     false,
-                    Loc.Tf("Account_Cooldown_Summary_Format", cooldownText));
+                    Loc.Tf("Account_Cooldown_Summary_Format", cooldownText),
+                    refreshToken);
             }
 
             var vacHtml = await GetHtmlAsync(VacUrl, session, cancellationToken);
             var vacBanned = vacHtml.Contains("Counter-Strike 2", StringComparison.OrdinalIgnoreCase);
             return new SteamAccountValidationResult(
-                auth.SteamId,
+                steamId,
                 0,
                 vacBanned,
-                vacBanned ? Loc.T("WhiteAccounts_Filter_Vac") : Loc.T("Cs_Premier_NoRestrictions"));
+                vacBanned ? Loc.T("WhiteAccounts_Filter_Vac") : Loc.T("Cs_Premier_NoRestrictions"),
+                refreshToken);
         }
         finally
         {
