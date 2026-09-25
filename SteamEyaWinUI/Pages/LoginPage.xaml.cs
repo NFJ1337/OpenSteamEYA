@@ -1361,9 +1361,8 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 	}
 
 	/// <summary>
-	/// 「去登录」：按来源把卡密送去对应页面（只跳页 + 填卡密，不发请求、不校验）——
-	///   · 奶味 → 「账号核验」：先把上一次的核验输入与结果清掉，再把卡密填进去；
-	///   · 伊万 / 路飞 → 「Token 登录」：先清空 Token 面板，再把卡密填进去。
+	/// 「去登录」：无论来源，统一切到「卡密登录」页面，按来源选中对应上游，
+	/// 并把卡密填入卡密输入框（只填文本框，不发请求、不校验）。
 	/// </summary>
 	private void CardStoreGoLoginButton_Click(object sender, RoutedEventArgs e)
 	{
@@ -1372,22 +1371,49 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 			return;
 		}
 
-		if (CardStoreSourceKind(entry.Source) == CardKeyEntry.SourceNaiwei)
-		{
-			VerifyKeyBox.Text = string.Empty;
-			ResetVerifyResult();
-			VerifyKeyBox.Text = entry.Key;
-			ModeSelector.SelectedItem = VerifyModeItem;
-			ApplyModeVisibility();
-			ShowStatus(Loc.Tf("CardStore_Status_ToVerify_Format", entry.Key), InfoBarSeverity.Success);
-			return;
-		}
-
+		_tokenUpstream = ResolveUpstreamForCardSource(entry.Source);
+		TokenUpstreamText.Text = _tokenUpstream.Name;
+		ResetTokenUpstreamResolution();
 		ClearTokenLoginFields();
 		TokenLicenseKeyBox.Text = entry.Key;
 		ApplyTokenLoginSelection();
-		ShowStatus(Loc.Tf("CardStore_Status_ToToken_Format", entry.Key), InfoBarSeverity.Success);
+		ShowStatus(
+			Loc.Tf(
+				"CardStore_Status_ToToken_Format",
+				entry.Key,
+				Loc.T(CardStoreSourceNameKey(entry.Source))),
+			InfoBarSeverity.Success);
 	}
+
+	/// <summary>「奶味验号」：只允许奶味来源，切到奶味验号.xyz 并填入该卡密。</summary>
+	private void CardStoreGoVerifyButton_Click(object sender, RoutedEventArgs e)
+	{
+		if ((sender as FrameworkElement)?.Tag is not CardKeyEntry entry)
+		{
+			return;
+		}
+
+		if (CardStoreSourceKind(entry.Source) != CardKeyEntry.SourceNaiwei)
+		{
+			ShowStatus(Loc.T("CardStore_Status_VerifyNaiweiOnly"), InfoBarSeverity.Warning);
+			return;
+		}
+
+		VerifyKeyBox.Text = string.Empty;
+		ResetVerifyResult();
+		VerifyKeyBox.Text = entry.Key;
+		ModeSelector.SelectedItem = VerifyModeItem;
+		ApplyModeVisibility();
+		ShowStatus(Loc.Tf("CardStore_Status_ToVerify_Format", entry.Key), InfoBarSeverity.Success);
+	}
+
+	private static SteamUpstreamServer ResolveUpstreamForCardSource(string source) =>
+		CardStoreSourceKind(source) switch
+		{
+			CardKeyEntry.SourceIvan => SteamLicenseClient.IvanLuffyServers[0],
+			CardKeyEntry.SourceLuffy => SteamLicenseClient.IvanLuffyServers[1],
+			_ => SteamLicenseClient.Upstream
+		};
 
 	/// <summary>双击卡密单元格：把卡密原文复制到剪贴板（与账号管理页双击复制同款：不进剪贴板历史）。</summary>
 	private void CardStoreKeyCell_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)

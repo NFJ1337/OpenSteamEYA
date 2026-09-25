@@ -404,9 +404,9 @@
                                 BorderBrush="{ThemeResource AuroraGlassBorderBrush}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="3*" MinWidth="240" />
-                                    <ColumnDefinition Width="Auto" MinWidth="90" />
+                                    <ColumnDefinition Width="110" />
                                     <ColumnDefinition Width="2*" MinWidth="200" />
-                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="250" />
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{x:Bind Strings.Get('CardStore_Col_Key'), Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource AuroraTextMutedBrush}" />
                                 <TextBlock Grid.Column="1" Text="{x:Bind Strings.Get('CardStore_Col_Source'), Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource AuroraTextMutedBrush}" />
@@ -440,9 +440,9 @@
                                         <Grid ColumnSpacing="14">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="3*" MinWidth="240" />
-                                                <ColumnDefinition Width="Auto" MinWidth="90" />
+                                                <ColumnDefinition Width="110" />
                                                 <ColumnDefinition Width="2*" MinWidth="200" />
-                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="250" />
                                             </Grid.ColumnDefinitions>
 
                                                 <TextBlock
@@ -483,7 +483,15 @@
                                                 <Button
                                                     MinWidth="0"
                                                     Padding="10,4"
-                                                    Style="{StaticResource AuroraGlassButtonStyle}"
+                                                    Style="{StaticResource AccentButtonStyle}"
+                                                    Tag="{x:Bind}"
+                                                    Click="CardStoreGoVerifyButton_Click">
+                                                    <TextBlock Text="{loc:Localize Key=CardStore_Btn_NaiweiVerify}" />
+                                                </Button>
+                                                <Button
+                                                    MinWidth="0"
+                                                    Padding="10,4"
+                                                    Style="{StaticResource AccentButtonStyle}"
                                                     Tag="{x:Bind}"
                                                     Click="CardStoreDeleteButton_Click">
                                                     <TextBlock Text="{loc:Localize Key=CardStore_Btn_Delete}" />
