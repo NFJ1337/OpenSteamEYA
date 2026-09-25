@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Diagnostics;
 using System.IO;
@@ -50,6 +51,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         // 来源账号候选实时跟随账号管理页 / 历史账号页的账号变化（两个事件都在账号集合重载后触发）。
         AppState.HistoryChanged += OnCs2AccountsChanged;
         AppState.WhiteAccountsChanged += OnCs2AccountsChanged;
+        AppState.CachedLoginAccountsRefreshed += OnCachedLoginAccountsRefreshed;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -999,17 +1001,19 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
 
     /// <summary>来源账号下拉候选：展示文本（昵称（Steam64））+ 搜索文本（昵称/账号名/Steam64/历史备注）。</summary>
     /// <summary>来源账号候选项：账号管理页 + 历史账号页里的账号（Steam64 + 展示文本）。</summary>
-    private sealed record Cs2SourceOption(string SteamId64, string Display);
+    private sealed record Cs2SourceOption(string SteamId64, string? Name, string Display);
 
     private List<Cs2SourceOption> _cs2SourceOptions = [];
+    private readonly ConcurrentDictionary<string, string> _cs2ResolvedNames = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, byte> _cs2NameLookupAttempted = new(StringComparer.OrdinalIgnoreCase);
+    private bool _cs2NameLookupRunning;
 
     // 已保存的来源账号 SteamID64 的本地镜像，避免各处反复 Load 设置来判断“选中了谁”。
     private string? _cs2SourceSteamId;
 
     /// <summary>
-    /// 重建来源账号候选并刷新下拉菜单：候选 = 账号管理页的账号（页面上到下）在前、
-    /// 历史账号页的账号（页面上到下）在后，同一 Steam64 只留第一条。
-    /// 两个列表都是内存快照，所以这里是同步重建；账号增删/改名由 AppState 的事件实时触发（见构造函数订阅）。
+    /// 重建来源账号候选并刷新下拉菜单：账号管理页、历史账号、应用缓存、Steam 本机记住账号，
+    /// 再合并本地 userdata 中存在 CS2 配置但尚未出现在上面的账号；同一 Steam64 只保留一项。
     /// </summary>
     private void RefreshCs2SyncSources()
     {
@@ -1020,24 +1024,92 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         _cs2SourceSteamId = settings.Cs2SyncSourceSteamId;
 
         RebuildCs2SourceFlyout();
+        _ = ResolveMissingCs2SourceNamesAsync();
     }
 
-    /// <summary>按「账号管理页 → 历史账号页」顺序拼候选，逐条保序去重；没有 Steam64 的账号无法作为来源，跳过。</summary>
-    private static List<Cs2SourceOption> BuildCs2SourceOptions()
+    /// <summary>合并多来源账号并按 Steam64 保序去重；没有 Steam64 的账号无法作为来源，跳过。</summary>
+    private List<Cs2SourceOption> BuildCs2SourceOptions()
     {
-        var options = new List<Cs2SourceOption>();
+        var ids = new List<string>();
+        var names = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var account in AppState.WhiteAccounts.Concat(AppState.HistoryAccounts))
+        void Add(string? steamId, string? personaName, string? accountName)
         {
-            var steamId = account.SteamId?.Trim();
-            if (string.IsNullOrWhiteSpace(steamId) || !seen.Add(steamId))
+            steamId = steamId?.Trim();
+            if (string.IsNullOrWhiteSpace(steamId))
             {
-                continue;
+                return;
             }
 
-            // 显示名优先级：昵称 > 登录账号名 > Steam64（名字就是 Steam64 的不重复显示，避免「X（X）」噪音）。
-            var name = FirstNonEmpty(account.PersonaName, account.AccountName);
+            if (seen.Add(steamId))
+            {
+                ids.Add(steamId);
+                names[steamId] = null;
+            }
+
+            if (string.IsNullOrWhiteSpace(names[steamId]))
+            {
+                names[steamId] = FirstNonEmpty(personaName, accountName);
+            }
+        }
+
+        // 1) 账号管理页；2) 历史账号；3) 应用缓存账号。
+        foreach (var account in AppState.WhiteAccounts)
+        {
+            Add(account.SteamId, account.PersonaName, account.AccountName);
+        }
+
+        foreach (var account in AppState.HistoryAccounts)
+        {
+            Add(account.SteamId, account.PersonaName, account.AccountName);
+        }
+
+        try
+        {
+            foreach (var account in AppState.LoginService.GetCachedLoginAccounts())
+            {
+                Add(account.SteamId, account.PersonaName, account.AccountName);
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"读取应用缓存账号用于 CS2 设置同步失败：{ex.Message}");
+        }
+
+        // 4) Steam 本机记住的全部账号（包括从未经本软件登录的账号）。
+        // 5) userdata 中有 CS2 配置、但还不在上面的账号，并用离线名称来源补全显示名。
+        try
+        {
+            var paths = SteamPathCoordinator.ResolvePathsOrThrow();
+            var configService = new SteamConfigService();
+            foreach (var account in configService.GetLoginAccounts(paths))
+            {
+                Add(account.SteamId, account.PersonaName, account.AccountName);
+            }
+
+            var sources = AppState.Cs2CloudService.EnumerateSources(paths.UserdataPath);
+            var offlineNames = SteamAccountNameService.BuildOfflineNames(paths, sources);
+            foreach (var source in sources)
+            {
+                offlineNames.TryGetValue(source.SteamId64, out var offline);
+                Add(source.SteamId64, offline?.PersonaName, offline?.AccountName);
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"枚举 Steam 本机账号用于 CS2 设置同步失败：{ex.Message}");
+        }
+
+        var options = new List<Cs2SourceOption>(ids.Count);
+        foreach (var steamId in ids)
+        {
+            var name = names[steamId];
+            if (string.IsNullOrWhiteSpace(name) && _cs2ResolvedNames.TryGetValue(steamId, out var resolvedName))
+            {
+                name = resolvedName;
+            }
+
             if (name is not null && string.Equals(name, steamId, StringComparison.OrdinalIgnoreCase))
             {
                 name = null;
@@ -1046,7 +1118,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             var display = name is null
                 ? steamId
                 : Loc.Tf("Settings_Cs2Sync_SourceItem_Format", name, steamId);
-            options.Add(new Cs2SourceOption(steamId, display));
+            options.Add(new Cs2SourceOption(steamId, name, display));
         }
 
         return options;
@@ -1069,6 +1141,87 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
 
         Cs2SyncSourceButton.IsEnabled = _cs2SourceOptions.Count > 0;
         UpdateCs2SourceButtonText();
+    }
+
+    /// <summary>对下拉里仍只有 SteamID 的账号做在线昵称补全，成功后就地刷新下拉文字。</summary>
+    private async Task ResolveMissingCs2SourceNamesAsync()
+    {
+        if (_cs2NameLookupRunning)
+        {
+            return;
+        }
+
+        var missing = _cs2SourceOptions
+            .Where(option => string.IsNullOrWhiteSpace(option.Name))
+            .Select(option => option.SteamId64)
+            .Where(steamId => !_cs2NameLookupAttempted.ContainsKey(steamId))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(50)
+            .ToList();
+        if (missing.Count == 0)
+        {
+            return;
+        }
+
+        _cs2NameLookupRunning = true;
+        try
+        {
+            using var throttle = new SemaphoreSlim(4);
+            await Task.WhenAll(missing.Select(async steamId =>
+            {
+                _cs2NameLookupAttempted.TryAdd(steamId, 0);
+                await throttle.WaitAsync();
+                try
+                {
+                    var name = await AppState.AccountHistoryService.TryGetSteamPersonaNameAsync(steamId);
+                    if (!string.IsNullOrWhiteSpace(name))
+                    {
+                        _cs2ResolvedNames[steamId] = name;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Warn($"在线查询 SteamID 名称失败（{steamId}）：{ex.Message}");
+                }
+                finally
+                {
+                    throttle.Release();
+                }
+            }));
+        }
+        finally
+        {
+            _cs2NameLookupRunning = false;
+        }
+
+        var changed = false;
+        for (var i = 0; i < _cs2SourceOptions.Count; i++)
+        {
+            var option = _cs2SourceOptions[i];
+            if (!string.IsNullOrWhiteSpace(option.Name) ||
+                !_cs2ResolvedNames.TryGetValue(option.SteamId64, out var resolvedName))
+            {
+                continue;
+            }
+
+            _cs2SourceOptions[i] = new Cs2SourceOption(
+                option.SteamId64,
+                resolvedName,
+                Loc.Tf("Settings_Cs2Sync_SourceItem_Format", resolvedName, option.SteamId64));
+            changed = true;
+        }
+
+        if (changed)
+        {
+            if (_dispatcherQueue.HasThreadAccess)
+            {
+                RebuildCs2SourceFlyout();
+            }
+            else
+            {
+                _dispatcherQueue.TryEnqueue(RebuildCs2SourceFlyout);
+            }
+        }
     }
 
     /// <summary>按钮文本：未选择显示占位；已选账号已不在候选里（被删了）时回退显示 Steam64。</summary>
@@ -1107,6 +1260,17 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
 
     /// <summary>账号集合变化（新增/删除/改名/登录落库）时实时刷新候选；事件可能来自后台线程，统一回 UI 线程。</summary>
     private void OnCs2AccountsChanged(string? selectSteamId)
+    {
+        if (!_dispatcherQueue.HasThreadAccess)
+        {
+            _dispatcherQueue.TryEnqueue(() => RefreshCs2SyncSources());
+            return;
+        }
+
+        RefreshCs2SyncSources();
+    }
+
+    private void OnCachedLoginAccountsRefreshed()
     {
         if (!_dispatcherQueue.HasThreadAccess)
         {

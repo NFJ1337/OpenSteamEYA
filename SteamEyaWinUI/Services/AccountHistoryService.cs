@@ -252,6 +252,13 @@ internal sealed class AccountHistoryService
         };
     }
 
+    /// <summary>按 SteamID64 在线查询 Steam 个人资料昵称；供设置页补全来源账号名称。</summary>
+    internal async Task<string?> TryGetSteamPersonaNameAsync(string steamId)
+    {
+        var profile = await TryGetSteamProfileAsync(steamId);
+        return string.IsNullOrWhiteSpace(profile?.PersonaName) ? null : profile.PersonaName;
+    }
+
     public async Task SaveLoginAsync(
         string accountName,
         string steamId,
