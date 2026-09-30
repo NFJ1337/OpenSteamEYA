@@ -27,10 +27,13 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
     private SteamAccountData? _cachedLegacyAccountData;
     private string? _cachedLegacyLicenseKey;
 
-    // ---------- Token 登录的「上游服务器」状态（奶味默认；伊万/路飞已并入本页） ----------
+    // ---------- Token 登录的「上游服务器」状态（奶味默认；伊万/路飞/小谢已并入本页） ----------
     private SteamUpstreamServer? _tokenUpstream;
     private SteamAccountData? _tokenUpstreamCachedAccount;
     private string? _tokenUpstreamCachedKey;
+
+    /// <summary>小谢平台的新版取名客户端（服务端 111.170.18.31:9095，协议与奶味新版接口相同）。</summary>
+    private static readonly NaiweiRedeemClient XiaoxieRedeemClient = new(SteamLicenseClient.Xiaoxie.BaseUrl);
 
     // 历史账号保存是否失败：SaveLoginHistoryAsync 置位，登录消息据此决定 Warning/Success 严重度
     // （本地化后历史后缀文案不再含固定中文前缀，故改用此标志替代原先的字符串前缀判断）。
@@ -805,7 +808,7 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		ShowStatus(Loc.T("Login_Status_ResolvingLicense"), InfoBarSeverity.Informational);
 		try
 		{
-			// 按当前选的上游解析（奶味新版卡密优先；伊万/路飞 keygetdata），填回 SteamID + 令牌。
+			// 按当前选的上游解析（奶味/小谢 新版卡密；伊万/路飞 keygetdata），填回 SteamID + 令牌。
 			var account = await ResolveTokenLicenseAndFillAsync(cancellationToken);
 			if (account is null)
 			{
@@ -995,11 +998,16 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 
 	// ---------- Token 登录的「上游服务器」（奶味默认；伊万/路飞 已并入本页） ----------
 
-	/// <summary>铺好上游下拉：奶味（默认）、伊万、路飞。</summary>
+	/// <summary>铺好上游下拉：奶味（默认，排第一）、小谢、伊万/小岛、路飞、小泽、Apex杨小美（最后）。</summary>
+	/// <remarks>小泽、Apex杨小美依次排在最后（用户要求）；默认选中仍是奶味。</remarks>
 	private void InitializeTokenUpstreamModule()
 	{
-		var servers = new List<SteamUpstreamServer> { SteamLicenseClient.Upstream };
+		// 顺序按用户要求：奶味排第一并作为默认选中；其后小谢落在伊万/小岛上面，再是路飞，小泽排最后。
+		var servers = new List<SteamUpstreamServer> { SteamLicenseClient.Upstream, SteamLicenseClient.Xiaoxie };
 		servers.AddRange(SteamLicenseClient.IvanLuffyServers);
+		servers.Add(SteamLicenseClient.Xiaozhe);
+		// Apex杨小美：杨小美1 + 杨小美2 两条线路合成一条，排最后（用户要求）。
+		servers.Add(SteamLicenseClient.ApexYangXiaomei);
 		foreach (var server in servers)
 		{
 			var item = new MenuFlyoutItem
@@ -1013,6 +1021,7 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 
 		_tokenUpstream = SteamLicenseClient.Upstream;
 		TokenUpstreamText.Text = _tokenUpstream.Name;
+		UpdateTokenUpstreamHint();
 	}
 
 	private void TokenUpstreamMenuItem_Click(object sender, RoutedEventArgs e)
@@ -1021,6 +1030,7 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		{
 			_tokenUpstream = server;
 			TokenUpstreamText.Text = server.Name;
+			UpdateTokenUpstreamHint();
 			// 换了上游，之前解析出来的账号不再作数。
 			ResetTokenUpstreamResolution();
 		}
@@ -1034,14 +1044,75 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 	}
 
 	/// <summary>
+	/// 上游提示：只有 Apex杨小美 带一行红字说明（提示没有正式卡密测试、解析失败联系南方见），
+	/// 其它上游一律隐藏。切换上游的三个入口（初始化 / 下拉点选 / 黑号存储去登录）都会调它。
+	/// </summary>
+	private void UpdateTokenUpstreamHint() =>
+		TokenUpstreamApexHint.Visibility = Equals(_tokenUpstream, SteamLicenseClient.ApexYangXiaomei)
+			? Visibility.Visible
+			: Visibility.Collapsed;
+
+	/// <summary>
 	/// 按当前选的上游解析卡密：
 	///   · 奶味 —— 先走账号核验按钮同款的新版 SSE 取名接口，兼容新版卡密；失败再回退 keygettoken；
-	///   · 伊万 / 路飞 —— 走各自上游的取名接口（keygetdata，与黑号存储同一套）。
+	///   · 伊万 / 路飞 —— 走各自上游的取名接口（keygetdata，与黑号存储同一套）；小谢只有新版接口，不回退；
+	///   · 小泽 —— 走 /keygettoken（纯文本 SteamID----Token；与奶味同主机不同路由，同样不回退）；
+	///   · Apex杨小美 —— 杨小美1 / 杨小美2 两条 /keygetdata 线路合成一条，依次尝试。
 	/// </summary>
 	private async Task<SteamAccountData> ResolveTokenLicenseByUpstreamAsync(string licenseKey, CancellationToken cancellationToken)
 	{
 		var key = licenseKey.Trim();
 		var upstream = _tokenUpstream ?? SteamLicenseClient.Upstream;
+
+		// 小谢：与奶味新版接口同一套协议，只是主机/端口不同（解包「小谢平台上号器.exe」确认）。
+		// 取名走的是同一个 RedeemNewKeyAsync（同一个 NaiweiRedeemClient、同一套 SSE 解析与账号映射），
+		// 唯一差别是它没有旧的 keygetdata/keygettoken 链路，所以失败就是失败，不做事后回退。
+		if (Equals(upstream, SteamLicenseClient.Xiaoxie))
+		{
+			if (_tokenUpstreamCachedAccount is not null &&
+				string.Equals(_tokenUpstreamCachedKey, key, StringComparison.Ordinal))
+			{
+				return _tokenUpstreamCachedAccount;
+			}
+
+			var xiaoxieAccount = await RedeemNewKeyAsync(XiaoxieRedeemClient, key, cancellationToken);
+			_tokenUpstreamCachedAccount = xiaoxieAccount;
+			_tokenUpstreamCachedKey = key;
+			return xiaoxieAccount;
+		}
+
+		// 小泽：上游记录取自 SteamEYAToolNew 的「小泽」那条（BaseUrl http://111.170.18.37:9095 + 路径 /keygettoken），
+		// 正文是纯文本 SteamID----Token；与奶味同一个主机但路由不同，同样不做事后回退。
+		if (Equals(upstream, SteamLicenseClient.Xiaozhe))
+		{
+			if (_tokenUpstreamCachedAccount is not null &&
+				string.Equals(_tokenUpstreamCachedKey, key, StringComparison.Ordinal))
+			{
+				return _tokenUpstreamCachedAccount;
+			}
+
+			var xiaozheAccount = await AppState.LicenseClient.GetAccountDataViaKeyTokenAsync(key, upstream, cancellationToken);
+			_tokenUpstreamCachedAccount = xiaozheAccount;
+			_tokenUpstreamCachedKey = key;
+			return xiaozheAccount;
+		}
+
+		// Apex杨小美：SteamEYAToolNew 里的杨小美1（111.170.150.94:9099）与杨小美2（45.205.17.32:5000）
+		// 合一条入口，两条线都是经典 /keygetdata，按顺序尝试，第一个成功的生效（用户要求：登录合一块）。
+		if (Equals(upstream, SteamLicenseClient.ApexYangXiaomei))
+		{
+			if (_tokenUpstreamCachedAccount is not null &&
+				string.Equals(_tokenUpstreamCachedKey, key, StringComparison.Ordinal))
+			{
+				return _tokenUpstreamCachedAccount;
+			}
+
+			var apexAccount = await AppState.LicenseClient.GetAccountDataFromAnyAsync(key, SteamLicenseClient.ApexYangXiaomeiServers, cancellationToken);
+			_tokenUpstreamCachedAccount = apexAccount;
+			_tokenUpstreamCachedKey = key;
+			return apexAccount;
+		}
+
 		if (Equals(upstream, SteamLicenseClient.Upstream))
 		{
 			if (_tokenUpstreamCachedAccount is not null &&
@@ -1141,16 +1212,17 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 	}
 	// ---------- 「黑号存储」模块（还没登录过的卡密：导入 / 验号 / 删除 / 送去 Token 登录） ----------
 
-	/// <summary>导入时选的来源：奶味 / 伊万·路飞（默认奶味）。</summary>
+	/// <summary>导入时选的来源：奶味 / 小谢 / 伊万·路飞 / 小泽 / Apex杨小美（默认奶味）。</summary>
 	private string _cardStoreSource = CardKeyEntry.SourceNaiwei;
 
 
 	private bool IsCardStoreMode => ModeSelector.SelectedItem == CardStoreModeItem;
 
-	/// <summary>铺好来源下拉（奶味 / 伊万·路飞），并按已存内容刷一遍列表。</summary>
+	/// <summary>铺好来源下拉（奶味 / 小谢 / 伊万 / 路飞 / 小泽 / Apex杨小美），并按已存内容刷一遍列表。</summary>
 	private void InitializeCardStoreModule()
 	{
-		foreach (var source in new[] { CardKeyEntry.SourceNaiwei, CardKeyEntry.SourceIvan, CardKeyEntry.SourceLuffy })
+		// 来源顺序与 Token 登录的「上游服务器」下拉一致：奶味（默认）-> 小谢 -> 伊万/小岛 -> 路飞 -> 小泽（最后）。
+		foreach (var source in new[] { CardKeyEntry.SourceNaiwei, CardKeyEntry.SourceXiaoxie, CardKeyEntry.SourceIvan, CardKeyEntry.SourceLuffy, CardKeyEntry.SourceXiaozhe, CardKeyEntry.SourceApexYangXiaomei })
 		{
 			var item = new MenuFlyoutItem
 			{
@@ -1177,15 +1249,18 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 	private void UpdateCardStoreSourceText() =>
 		CardStoreSourceText.Text = Loc.T(CardStoreSourceNameKey(_cardStoreSource));
 
-	/// <summary>来源文案键：奶味 / 伊万 / 路飞（认不出来的历史值按奶味显示）。</summary>
+	/// <summary>来源文案键：奶味 / 小谢 / 伊万 / 路飞 / 小泽 / Apex杨小美（认不出来的历史值按奶味显示）。</summary>
 	private static string CardStoreSourceNameKey(string source) => CardStoreSourceKind(source) switch
 	{
 		CardKeyEntry.SourceIvan => "CardStore_Source_Ivan",
 		CardKeyEntry.SourceLuffy => "CardStore_Source_Luffy",
+		CardKeyEntry.SourceXiaoxie => "CardStore_Source_Xiaoxie",
+		CardKeyEntry.SourceXiaozhe => "CardStore_Source_Xiaozhe",
+		CardKeyEntry.SourceApexYangXiaomei => "CardStore_Source_ApexYangXiaomei",
 		_ => "CardStore_Source_Naiwei"
 	};
 
-	/// <summary>把来源规整成三种之一：奶味 / 伊万 / 路飞（含早期存过的 ivanluffy、tokenlogin）。</summary>
+	/// <summary>把来源规整成六种之一：奶味 / 小谢 / 伊万 / 路飞 / 小泽 / Apex杨小美（含早期存过的 ivanluffy、tokenlogin）。</summary>
 	private static string CardStoreSourceKind(string source)
 	{
 		if (string.Equals(source, CardKeyEntry.SourceIvan, StringComparison.Ordinal) ||
@@ -1194,8 +1269,24 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 			return CardKeyEntry.SourceIvan;
 		}
 
-		return string.Equals(source, CardKeyEntry.SourceLuffy, StringComparison.Ordinal)
-			? CardKeyEntry.SourceLuffy
+		if (string.Equals(source, CardKeyEntry.SourceLuffy, StringComparison.Ordinal))
+		{
+			return CardKeyEntry.SourceLuffy;
+		}
+
+		// 小谢 / 小泽都是独立来源（取名协议相近但服务器、路由不同），来源必须原样保留。
+		if (string.Equals(source, CardKeyEntry.SourceXiaoxie, StringComparison.Ordinal))
+		{
+			return CardKeyEntry.SourceXiaoxie;
+		}
+
+		if (string.Equals(source, CardKeyEntry.SourceXiaozhe, StringComparison.Ordinal))
+		{
+			return CardKeyEntry.SourceXiaozhe;
+		}
+
+		return string.Equals(source, CardKeyEntry.SourceApexYangXiaomei, StringComparison.Ordinal)
+			? CardKeyEntry.SourceApexYangXiaomei
 			: CardKeyEntry.SourceNaiwei;
 	}
 
@@ -1373,6 +1464,7 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 
 		_tokenUpstream = ResolveUpstreamForCardSource(entry.Source);
 		TokenUpstreamText.Text = _tokenUpstream.Name;
+		UpdateTokenUpstreamHint();
 		ResetTokenUpstreamResolution();
 		ClearTokenLoginFields();
 		TokenLicenseKeyBox.Text = entry.Key;
@@ -1412,6 +1504,9 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		{
 			CardKeyEntry.SourceIvan => SteamLicenseClient.IvanLuffyServers[0],
 			CardKeyEntry.SourceLuffy => SteamLicenseClient.IvanLuffyServers[1],
+			CardKeyEntry.SourceXiaoxie => SteamLicenseClient.Xiaoxie,
+			CardKeyEntry.SourceXiaozhe => SteamLicenseClient.Xiaozhe,
+			CardKeyEntry.SourceApexYangXiaomei => SteamLicenseClient.ApexYangXiaomei,
 			_ => SteamLicenseClient.Upstream
 		};
 
@@ -2360,8 +2455,25 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
         CancellationToken cancellationToken)
     {
         var redeem = await VerifyRedeemClient.RedeemAsync(licenseKey, progress, cancellationToken);
-        return new SteamAccountData(redeem.Token, redeem.SteamId, redeem.SteamId);
+        return ToAccountData(redeem);
     }
+
+    /// <summary>
+    /// 新版取名（SSE）→ 账号数据的唯一映射点：奶味与小谢都走这里，
+    /// 保证「小谢的上号链路 == 奶味的上号链路」，两家只有上游基址不同。
+    /// </summary>
+    private static async Task<SteamAccountData> RedeemNewKeyAsync(
+        NaiweiRedeemClient client,
+        string licenseKey,
+        CancellationToken cancellationToken)
+    {
+        var redeem = await client.RedeemAsync(licenseKey, CreateStatusOnlyRedeemProgressReporter(), cancellationToken);
+        return ToAccountData(redeem);
+    }
+
+    /// <summary>取名结果 → 账号数据：SteamID 同时充当账号名，与旧版卡密链路一致。</summary>
+    private static SteamAccountData ToAccountData(NaiweiRedeemClient.RedeemAccount redeem) =>
+        new(redeem.Token, redeem.SteamId, redeem.SteamId);
 
     /// <summary>Token 登录里的新版取名进度：状态栏实时反馈，不依赖核验面板是否展开。</summary>
     private static IProgress<NaiweiRedeemProgress> CreateStatusOnlyRedeemProgressReporter() =>

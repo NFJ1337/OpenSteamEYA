@@ -597,6 +597,33 @@ public sealed partial class LoadoutPage : Page, INotifyPropertyChanged
         }
     }
 
+    private async void ApplyDefaultLoadoutButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (XamlRoot is null)
+        {
+            return;
+        }
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = Loc.T("Loadout_Default_Dialog_Title"),
+            Content = Loc.T("Loadout_Default_Dialog_Content"),
+            PrimaryButtonText = Loc.T("Common_Confirm"),
+            CloseButtonText = Loc.T("Common_Cancel"),
+            DefaultButton = ContentDialogButton.Close
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        _working = CsLoadoutPreset.Default();
+        Persist();
+        RefreshAll();
+        AppState.ShowStatus(Loc.T("Loadout_Status_DefaultApplied"), InfoBarSeverity.Success);
+    }
+
     private void Persist()
     {
         var settings = AppState.SettingsService.Load();

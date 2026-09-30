@@ -47,10 +47,28 @@
                 Style="{StaticResource PageSubtitleTextStyle}" Visibility="Collapsed" />
         </StackPanel>
 
-        <SelectorBar Grid.Row="1" x:Name="TeamSelector" SelectionChanged="TeamSelector_SelectionChanged" Background="{ThemeResource AuroraGlassStrongBrush}" BorderBrush="{ThemeResource AuroraGlassBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="4">
-            <SelectorBarItem x:Name="TeamTItem" Text="{x:Bind Strings.Get('Loadout_Team_T'), Mode=OneWay}" IsSelected="True" />
-            <SelectorBarItem x:Name="TeamCtItem" Text="{x:Bind Strings.Get('Loadout_Team_Ct'), Mode=OneWay}" />
-        </SelectorBar>
+        <Grid Grid.Row="1" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <SelectorBar x:Name="TeamSelector" SelectionChanged="TeamSelector_SelectionChanged" Background="{ThemeResource AuroraGlassStrongBrush}" BorderBrush="{ThemeResource AuroraGlassBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="4">
+                <SelectorBarItem x:Name="TeamTItem" Text="{x:Bind Strings.Get('Loadout_Team_T'), Mode=OneWay}" IsSelected="True" />
+                <SelectorBarItem x:Name="TeamCtItem" Text="{x:Bind Strings.Get('Loadout_Team_Ct'), Mode=OneWay}" />
+            </SelectorBar>
+            <Button
+                Grid.Column="1"
+                x:Name="ApplyDefaultLoadoutButton"
+                VerticalAlignment="Center"
+                Style="{StaticResource AuroraGlassButtonStyle}"
+                Click="ApplyDefaultLoadoutButton_Click"
+                ToolTipService.ToolTip="{x:Bind Strings.Get('Loadout_Btn_Default_Tip'), Mode=OneWay}">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon Glyph="&#xE72C;" FontSize="16" />
+                    <TextBlock Text="{x:Bind Strings.Get('Loadout_Btn_Default'), Mode=OneWay}" />
+                </StackPanel>
+            </Button>
+        </Grid>
 
         <!-- 主题「装备面板」：武器格子使用应用主题玻璃背景与边框，
              明暗主题和自定义主题色变化时同步更新。 -->

@@ -512,7 +512,7 @@
                             Foreground="{ThemeResource AuroraTextMutedBrush}"
                             TextWrapping="Wrap" />
 
-                        <!-- 上游服务器：奶味（默认）/ 伊万 / 路飞；操作按钮与服务器控件并排。 -->
+                        <!-- 上游服务器：奶味（默认，排第一）/ 小谢 / 伊万·小岛 / 路飞 / 小泽 / Apex杨小美（最后）；操作按钮与服务器控件并排。 -->
                         <Grid ColumnSpacing="16">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -571,12 +571,36 @@
                             </StackPanel>
                         </Grid>
 
-                        <TextBox
-                            x:Name="TokenLicenseKeyBox"
-                            Header="{x:Bind Strings.Get('Login_Field_LicenseKey'), Mode=OneWay}"
-                            PlaceholderText="{x:Bind Strings.Get('Login_Field_LicenseKey_Placeholder'), Mode=OneWay}"
-                            IsSpellCheckEnabled="False"
-                            KeyDown="TokenLicenseKeyBox_KeyDown" />
+                        <!-- 卡密一行：标签行右侧挂红字提示（只有选到 Apex杨小美 才显示，UpdateTokenUpstreamHint 切换），下面才是输入框。 -->
+                        <StackPanel Spacing="6">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock
+                                    Text="{x:Bind Strings.Get('Login_Field_LicenseKey'), Mode=OneWay}"
+                                    Style="{StaticResource FieldLabelTextStyle}" />
+
+                                <TextBlock
+                                    x:Name="TokenUpstreamApexHint"
+                                    Grid.Column="1"
+                                    Text="{x:Bind Strings.Get('Login_Upstream_ApexHint'), Mode=OneWay}"
+                                    Foreground="#FFDC2626"
+                                    TextWrapping="Wrap"
+                                    MaxWidth="520"
+                                    Margin="16,0,0,0"
+                                    VerticalAlignment="Center"
+                                    Visibility="Collapsed" />
+                            </Grid>
+
+                            <TextBox
+                                x:Name="TokenLicenseKeyBox"
+                                PlaceholderText="{x:Bind Strings.Get('Login_Field_LicenseKey_Placeholder'), Mode=OneWay}"
+                                IsSpellCheckEnabled="False"
+                                KeyDown="TokenLicenseKeyBox_KeyDown" />
+                        </StackPanel>
 
                         <TextBox
                             x:Name="TokenSteamIdBox"

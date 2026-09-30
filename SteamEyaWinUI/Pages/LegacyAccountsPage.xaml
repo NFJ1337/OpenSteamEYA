@@ -95,24 +95,53 @@
                                 </Button>
                             </StackPanel>
                         </Grid>
-                        <StackPanel Orientation="Horizontal" Spacing="12">
-                            <CheckBox
-                                x:Name="LegacyShowAvailableCheck"
-                                Content="{x:Bind Strings.Get('Legacy_Filter_Available'), Mode=OneWay}"
-                                Checked="LegacyFilter_Changed"
-                                Unchecked="LegacyFilter_Changed" />
-                            <CheckBox
-                                x:Name="LegacyShowRemarkedCheck"
-                                Content="{x:Bind Strings.Get('Legacy_Filter_Remarked'), Mode=OneWay}"
-                                Checked="LegacyFilter_Changed"
-                                Unchecked="LegacyFilter_Changed" />
-                            <CheckBox
-                                x:Name="LegacyShowHiddenCheck"
-                                Content="{x:Bind Strings.Get('Legacy_Filter_Hidden'), Mode=OneWay}"
-                                ToolTipService.ToolTip="{x:Bind Strings.Get('Legacy_Filter_Hidden_Tip'), Mode=OneWay}"
-                                Checked="LegacyShowHiddenCheck_Changed"
-                                Unchecked="LegacyShowHiddenCheck_Changed" />
-                        </StackPanel>
+                        <!-- 左侧三个筛选框与右侧一键装配 / 一键个性化同一行；按钮作用于当前高亮/右键选中的账号。 -->
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                                <CheckBox
+                                    x:Name="LegacyShowAvailableCheck"
+                                    Content="{x:Bind Strings.Get('Legacy_Filter_Available'), Mode=OneWay}"
+                                    Checked="LegacyFilter_Changed"
+                                    Unchecked="LegacyFilter_Changed" />
+                                <CheckBox
+                                    x:Name="LegacyShowRemarkedCheck"
+                                    Content="{x:Bind Strings.Get('Legacy_Filter_Remarked'), Mode=OneWay}"
+                                    Checked="LegacyFilter_Changed"
+                                    Unchecked="LegacyFilter_Changed" />
+                                <CheckBox
+                                    x:Name="LegacyShowHiddenCheck"
+                                    Content="{x:Bind Strings.Get('Legacy_Filter_Hidden'), Mode=OneWay}"
+                                    ToolTipService.ToolTip="{x:Bind Strings.Get('Legacy_Filter_Hidden_Tip'), Mode=OneWay}"
+                                    Checked="LegacyShowHiddenCheck_Changed"
+                                    Unchecked="LegacyShowHiddenCheck_Changed" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <Button
+                                    x:Name="LegacyApplyLoadoutButton"
+                                    Style="{StaticResource AuroraGlassButtonStyle}"
+                                    Click="LegacyApplyLoadoutButton_Click"
+                                    ToolTipService.ToolTip="{x:Bind Strings.Get('Login_Btn_ApplyLoadout_Tip'), Mode=OneWay}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE7C1;" FontSize="14" />
+                                        <TextBlock Text="{x:Bind Strings.Get('Login_Btn_ApplyLoadout'), Mode=OneWay}" />
+                                    </StackPanel>
+                                </Button>
+                                <Button
+                                    x:Name="LegacyPersonalizeButton"
+                                    Style="{StaticResource AuroraGlassButtonStyle}"
+                                    Click="LegacyPersonalizeButton_Click"
+                                    ToolTipService.ToolTip="{x:Bind Strings.Get('Login_Btn_Personalize_Tip'), Mode=OneWay}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE779;" FontSize="14" />
+                                        <TextBlock Text="{x:Bind Strings.Get('Login_Btn_Personalize'), Mode=OneWay}" />
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Grid>
                     </StackPanel>
                 </StackPanel>
 

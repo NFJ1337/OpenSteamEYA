@@ -21,6 +21,15 @@ public sealed partial class CardKeyEntry : INotifyPropertyChanged
     /// <summary>卡密来源：路飞（上游 38.76.193.80:9099）。</summary>
     public const string SourceLuffy = "luffy";
 
+    /// <summary>卡密来源：小谢（新版取名接口 111.170.18.31:9095）。</summary>
+    public const string SourceXiaoxie = "xiaoxie";
+
+    /// <summary>卡密来源：小泽（/keygettoken 路由，111.170.18.37:9095）。</summary>
+    public const string SourceXiaozhe = "xiaozhe";
+
+    /// <summary>卡密来源：Apex杨小美（杨小美1 / 杨小美2 两条 /keygetdata 线路合成一条）。</summary>
+    public const string SourceApexYangXiaomei = "apexyangxiaomei";
+
     /// <summary>历史值：早期版本把「伊万/路飞」当成一个来源存过，按伊万处理。</summary>
     public const string SourceIvanLuffyLegacy = "ivanluffy";
 
@@ -34,7 +43,7 @@ public sealed partial class CardKeyEntry : INotifyPropertyChanged
     /// <summary>卡密原文（原样保存）。</summary>
     public string Key { get; set; } = string.Empty;
 
-    /// <summary>来源：<see cref="SourceNaiwei"/> / <see cref="SourceIvan"/> / <see cref="SourceLuffy"/>。</summary>
+    /// <summary>来源：<see cref="SourceNaiwei"/> / <see cref="SourceIvan"/> / <see cref="SourceLuffy"/> / <see cref="SourceXiaoxie"/> / <see cref="SourceXiaozhe"/> / <see cref="SourceApexYangXiaomei"/>。</summary>
     public string Source { get; set; } = SourceNaiwei;
 
     /// <summary>入库时间。</summary>

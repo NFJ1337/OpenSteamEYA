@@ -1317,6 +1317,173 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         }
     }
 
+    /// <summary>当前操作目标：优先当前高亮行，其次右键选中的账号。</summary>
+    private SteamAccountHistoryItem? GetActionTargetAccount() => _highlightedRow?.Item ?? _contextAccount;
+
+    /// <summary>取账号可用令牌并校验；失败时直接写状态栏。</summary>
+    private bool TryGetActionToken(
+        SteamAccountHistoryItem account, string actionName, out string token, out string steamId)
+    {
+        token = account.EyaToken?.Trim() ?? string.Empty;
+        steamId = account.SteamId?.Trim() ?? string.Empty;
+        var info = AppState.JwtTokenService.Inspect(token);
+        if (info.IsValid && !string.IsNullOrWhiteSpace(info.SteamId))
+        {
+            steamId = info.SteamId;
+            return true;
+        }
+
+        AppState.ShowStatus(
+            Loc.Tf("Login_Error_StatusCannotAction_Format", info.Status, Loc.T(actionName)),
+            InfoBarSeverity.Error);
+        return false;
+    }
+
+    /// <summary>一键装配：用配装页预设 + 当前账号令牌，走与黑号登录页相同的装配服务。</summary>
+    private async void LegacyApplyLoadoutButton_Click(object sender, RoutedEventArgs e)
+    {
+        var account = GetActionTargetAccount();
+        if (account is null)
+        {
+            AppState.ShowStatus(Loc.T("Legacy_Status_NoSelection"), InfoBarSeverity.Warning);
+            return;
+        }
+
+        var preset = AppState.SettingsService.Load().Loadout;
+        if (preset.T.Count == 0 && preset.Ct.Count == 0)
+        {
+            AppState.ShowStatus(Loc.T("Login_Loadout_EmptyPreset"), InfoBarSeverity.Warning);
+            return;
+        }
+
+        if (!TryGetActionToken(account, "Login_Action_ApplyLoadout", out var token, out var steamId))
+        {
+            return;
+        }
+
+        var cancellationToken = AppState.BeginBusyOperation();
+        try
+        {
+            AppState.ShowStatus(Loc.T("Login_Status_ApplyingLoadout"), InfoBarSeverity.Informational);
+            var result = await AppState.LoadoutService.ApplyPresetAsync(preset, token, steamId, cancellationToken);
+            if (result.IsSuccess)
+            {
+                AppState.ShowStatus(
+                    Loc.Tf("Login_Status_LoadoutApplied_Format", result.Confirmed), InfoBarSeverity.Success);
+                return;
+            }
+
+            var failures = string.Join("、", result.Failures.Take(6));
+            if (result.Failures.Count > 6)
+            {
+                failures += "…";
+            }
+
+            AppState.ShowStatus(
+                Loc.Tf("Login_Status_LoadoutPartial_Format", result.Confirmed, result.Requested, failures),
+                InfoBarSeverity.Warning);
+        }
+        catch (OperationCanceledException)
+        {
+            AppState.ShowStatus(Loc.T("Login_Status_LoadoutCancelled"), InfoBarSeverity.Informational);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("一键装配失败。", ex);
+            AppState.ShowStatus(ex.Message, InfoBarSeverity.Error);
+        }
+        finally
+        {
+            AppState.EndBusyOperation();
+        }
+    }
+
+    /// <summary>一键个性化：用个性化页保存的昵称/简介/头像/清曾用名，走与黑号登录页相同的资料服务。</summary>
+    private async void LegacyPersonalizeButton_Click(object sender, RoutedEventArgs e)
+    {
+        var account = GetActionTargetAccount();
+        if (account is null)
+        {
+            AppState.ShowStatus(Loc.T("Legacy_Status_NoSelection"), InfoBarSeverity.Warning);
+            return;
+        }
+
+        var settings = AppState.SettingsService.Load();
+        var personaName = settings.PersonaName;
+        var avatarPath = AppState.SettingsService.PersonalizationAvatarPath;
+        var hasName = !string.IsNullOrWhiteSpace(personaName);
+        var hasRealName = !string.IsNullOrWhiteSpace(settings.ProfileRealName);
+        var hasSummary = !string.IsNullOrWhiteSpace(settings.ProfileSummary);
+        var hasAvatar = File.Exists(avatarPath);
+        var clearAliases = settings.ClearAliasHistoryOnPersonalize;
+        if (!hasName && !hasRealName && !hasSummary && !hasAvatar && !clearAliases)
+        {
+            AppState.ShowStatus(Loc.T("Login_Personalize_Empty"), InfoBarSeverity.Warning);
+            return;
+        }
+
+        if (!TryGetActionToken(account, "Login_Action_Personalize", out var token, out _))
+        {
+            return;
+        }
+
+        var cancellationToken = AppState.BeginBusyOperation();
+        var progress = new Progress<string>(message =>
+            AppState.ShowStatus(message, InfoBarSeverity.Informational));
+        try
+        {
+            var result = await AppState.ProfileService.ApplyAsync(
+                token,
+                new SteamProfileApplyRequest(
+                    hasName ? personaName : null,
+                    hasRealName ? settings.ProfileRealName : null,
+                    hasSummary ? settings.ProfileSummary : null,
+                    hasAvatar ? avatarPath : null,
+                    clearAliases),
+                progress,
+                cancellationToken);
+
+            if (result.IsFullSuccess)
+            {
+                AppState.ShowStatus(Loc.T("Login_Status_Personalized"), InfoBarSeverity.Success);
+                return;
+            }
+
+            var failures = new List<string>();
+            if (result.ProfileRequested && !result.ProfileApplied)
+            {
+                failures.Add(result.ProfileError ?? Loc.T("Profile_Error_Unknown"));
+            }
+
+            if (result.AvatarRequested && !result.AvatarApplied)
+            {
+                failures.Add(result.AvatarError ?? Loc.T("Profile_Error_Unknown"));
+            }
+
+            if (result.AliasClearRequested && !result.AliasesCleared)
+            {
+                failures.Add(result.AliasClearError ?? Loc.T("Profile_Error_Unknown"));
+            }
+
+            AppState.ShowStatus(
+                Loc.Tf("Login_Status_PersonalizePartial_Format", string.Join("; ", failures)),
+                InfoBarSeverity.Warning);
+        }
+        catch (OperationCanceledException)
+        {
+            AppState.ShowStatus(Loc.T("Login_Status_PersonalizeCancelled"), InfoBarSeverity.Informational);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("一键个性化失败。", ex);
+            AppState.ShowStatus(ex.Message, InfoBarSeverity.Error);
+        }
+        finally
+        {
+            AppState.EndBusyOperation();
+        }
+    }
+
     // ---------- 生成 ID（合并成下拉框：点开选类型，生成后复制到剪贴板） ----------
 
     /// <summary>菜单项文案键 → 生成规则标记。</summary>

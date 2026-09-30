@@ -7,7 +7,7 @@ using SteamEyaWinUI.Localization;
 namespace SteamEyaWinUI.Services;
 
 /// <summary>
-/// 奶味平台上号器的新版卡密接口客户端（服务端 111.170.18.37:9095）：
+/// 「新版取名」接口客户端：奶味（111.170.18.37:9095）与小谢（111.170.18.31:9095）共用这一套协议，只有主机/端口不同——
 ///   · GET /api/v1/health              —— 可用性与公告（纯 JSON）
 ///   · GET /api/v1/redeem?key=&lt;卡密&gt; —— 取名（Server-Sent Events 流）
 ///
@@ -18,7 +18,17 @@ namespace SteamEyaWinUI.Services;
 /// </summary>
 internal sealed class NaiweiRedeemClient
 {
-    internal const string BaseUrl = "http://111.170.18.37:9095";
+    /// <summary>默认上游：奶味（111.170.18.37:9095）。</summary>
+    internal const string DefaultBaseUrl = "http://111.170.18.37:9095";
+
+    private readonly string _baseUrl;
+
+    /// <summary>
+    /// 不传 <paramref name="baseUrl"/> 就用奶味。小谢这类「只有新版接口」的上游，
+    /// 直接把 SteamLicenseClient.Xiaoxie 的基址传进来即可（协议相同，只换主机与端口）。
+    /// </summary>
+    public NaiweiRedeemClient(string? baseUrl = null) =>
+        _baseUrl = string.IsNullOrWhiteSpace(baseUrl) ? DefaultBaseUrl : baseUrl.TrimEnd('/');
 
     internal const string SuccessCode = "OK";
 
@@ -44,7 +54,7 @@ internal sealed class NaiweiRedeemClient
 
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
-            $"{BaseUrl}/api/v1/redeem?key={Uri.EscapeDataString(key)}");
+            $"{_baseUrl}/api/v1/redeem?key={Uri.EscapeDataString(key)}");
         request.Headers.Accept.ParseAdd("text/event-stream");
 
         using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
@@ -99,7 +109,7 @@ internal sealed class NaiweiRedeemClient
     {
         try
         {
-            using var response = await Client.GetAsync($"{BaseUrl}/api/v1/health", cancellationToken);
+            using var response = await Client.GetAsync($"{_baseUrl}/api/v1/health", cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
                 return null;
