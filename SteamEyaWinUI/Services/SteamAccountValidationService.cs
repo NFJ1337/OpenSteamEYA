@@ -174,6 +174,30 @@ internal sealed class SteamAccountValidationService
             }
 
             var vacHtml = await GetHtmlAsync(VacUrl, session, cancellationToken);
+
+            // Steam 对疑似被盗账号会显示“资料被强制设为私密”的红锁提示；
+            // 页面直接返回“账号锁定”时也按同一状态处理，避免被误判成“未发现 CS2 限制”。
+            var redLockPermanentVac =
+                vacHtml.Contains("暂时强制将您的个人资料设置为私密状态", StringComparison.Ordinal) ||
+                vacHtml.Contains("怀疑您的帐户被他人登录过", StringComparison.Ordinal) ||
+                vacHtml.Contains("暫時強制將您的個人資料設定為私密狀態", StringComparison.Ordinal) ||
+                vacHtml.Contains("懷疑您的帳戶被他人登入過", StringComparison.Ordinal) ||
+                vacHtml.Contains("账号锁定", StringComparison.Ordinal) ||
+                vacHtml.Contains("帐号锁定", StringComparison.Ordinal) ||
+                vacHtml.Contains("账户锁定", StringComparison.Ordinal) ||
+                vacHtml.Contains("帳號鎖定", StringComparison.Ordinal) ||
+                vacHtml.Contains("帳戶鎖定", StringComparison.Ordinal) ||
+                vacHtml.Contains("account locked", StringComparison.OrdinalIgnoreCase);
+            if (redLockPermanentVac)
+            {
+                return new SteamAccountValidationResult(
+                    steamId,
+                    0,
+                    true,
+                    Loc.T("Format_RedLockPermanentVac"),
+                    refreshToken);
+            }
+
             var vacBanned = vacHtml.Contains("Counter-Strike 2", StringComparison.OrdinalIgnoreCase);
             return new SteamAccountValidationResult(
                 steamId,

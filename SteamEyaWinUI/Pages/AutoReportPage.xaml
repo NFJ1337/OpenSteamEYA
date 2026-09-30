@@ -183,7 +183,7 @@
 
                     <!-- 操作 -->
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <!-- 等待计时器：限流冷却 / 轮间隔期间，在「开始举报」左侧按秒倒数。
+                        <!-- 等待计时器：轮间隔期间，在「开始举报」左侧按秒倒数。
                              刻意做成页内元素而不是底部提示条 —— 长时间任务里弹提示条太打扰。 -->
                         <Border
                             x:Name="WaitTimerBadge"

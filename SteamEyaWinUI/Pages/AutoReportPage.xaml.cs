@@ -68,11 +68,6 @@ public sealed partial class AutoReportPage : Page, INotifyPropertyChanged
     private const int MinRoundWaitMs = 5000;
     private const int MaxRoundWaitMs = 8000;
 
-    /// <summary>
-    /// 被 Steam 限流后的冷却时长：等满再试。限流按账号一段时间内的累计行为算，
-    /// 已经在冷却窗口里就不叠加等待（详见 <see cref="CoolDownForRateLimitAsync"/>）。
-    /// </summary>
-    private static readonly TimeSpan RateLimitCooldown = TimeSpan.FromSeconds(60);
     private const int DefaultGameAppId = 730;   // Counter-Strike 2
 
     private readonly DispatcherQueue _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
@@ -85,9 +80,6 @@ public sealed partial class AutoReportPage : Page, INotifyPropertyChanged
     private GameOption _game = new(DefaultGameAppId, "Counter-Strike 2");
     private SteamWebSession? _session;
     private bool _running;
-
-    /// <summary>当前限流冷却的结束时刻；窗口内再被限流时共用这一次等待。</summary>
-    private DateTimeOffset _rateLimitCooldownEndsAt;
 
     public AutoReportPage()
     {
@@ -507,30 +499,13 @@ public sealed partial class AutoReportPage : Page, INotifyPropertyChanged
                         ReportPhraseBank.NextCheatDescription(),
                         cancellationToken);
 
-                    // 限流：冷一分钟再重试这一条。冷却完还是被限流，说明这个账号这会儿别再打了 —— 收工。
+                    // 限流：不再额外等待一分钟；直接停止本次队列，避免继续撞 Steam 的限流。
                     if (!result.Ok && SteamReportService.IsRateLimited(result))
                     {
-                        target.Status = Loc.T("AutoReport_Status_RateLimitedCooling");
-                        await CoolDownForRateLimitAsync(cancellationToken);
-
-                        target.Status = Loc.T("AutoReport_Status_Sending");
-                        ShowProgress(round, index);
-                        // 重试也换一条新的描述（同一条文字连着发两次更容易被当成重复提交）。
-                        result = await SteamReportService.ReportAsync(
-                            _session,
-                            target.SteamId64,
-                            _game.AppId,
-                            SteamReportService.AbuseTypeCheating,
-                            ReportPhraseBank.NextCheatDescription(),
-                            cancellationToken);
-
-                        if (SteamReportService.IsRateLimited(result))
-                        {
-                            target.Status = Loc.T("AutoReport_Status_RateLimited_Fail");
-                            AppLog.Warn($"举报 {target.SteamId64}：冷却后仍被 Steam 限流，本次举报停止。");
-                            stoppedByRateLimit = true;
-                            break;
-                        }
+                        target.Status = Loc.T("AutoReport_Status_RateLimited_Fail");
+                        AppLog.Warn($"举报 {target.SteamId64}：Steam 返回限流，本次举报停止。");
+                        stoppedByRateLimit = true;
+                        break;
                     }
 
                     ApplyResult(target, result);
@@ -616,25 +591,6 @@ public sealed partial class AutoReportPage : Page, INotifyPropertyChanged
     {
         WaitTimerText.Text = string.Empty;
         WaitTimerBadge.Visibility = Visibility.Collapsed;
-    }
-    /// <summary>
-    /// 限流冷却：等满 <see cref="RateLimitCooldown"/> 再继续。
-    /// 已经在冷却窗口里（例如同一批里连着两条都被限流）就只等剩下的那点时间，不重复叠加。
-    /// </summary>
-    private async Task CoolDownForRateLimitAsync(CancellationToken cancellationToken)
-    {
-        var now = DateTimeOffset.UtcNow;
-        var endsAt = _rateLimitCooldownEndsAt > now ? _rateLimitCooldownEndsAt : now + RateLimitCooldown;
-        _rateLimitCooldownEndsAt = endsAt;
-
-        var remaining = endsAt - now;
-        AppLog.Warn($"被 Steam 限流：冷却 {remaining.TotalSeconds:0} 秒后重试。");
-
-        // 状态栏上每秒跳一次剩余秒数（忙碌期间提示常驻，不会被 3 秒自动收起）。
-        await CountdownAsync(
-            seconds => Loc.Tf("AutoReport_Timer_Cooling_Format", seconds),
-            remaining,
-            cancellationToken);
     }
     private void StopButton_Click(object sender, RoutedEventArgs e)
     {

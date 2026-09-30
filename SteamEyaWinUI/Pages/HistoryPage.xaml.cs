@@ -2451,6 +2451,7 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
 
         // 取消按钮仅忙碌时出现且保持可用，让用户中断本页发起的一键查询。
         CancelHistoryQueryButton.Visibility = isBusy ? Visibility.Visible : Visibility.Collapsed;
+        ToolbarCancelHistoryQueryButton.Visibility = isBusy ? Visibility.Visible : Visibility.Collapsed;
         UpdateWhiteBatchQueryButtonState();
     }
 

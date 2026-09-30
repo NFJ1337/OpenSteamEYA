@@ -77,6 +77,7 @@ internal sealed class SteamLoginService
         }
 
         var paths = SteamPathCoordinator.ResolvePathsOrThrow();
+        targetSteamId = ResolveTargetSteamId(paths, accountName, targetSteamId);
         _steamProcessService.EnsureCs2Stopped();
         _steamProcessService.EnsureSteamStopped(paths, progress);
         if (!string.IsNullOrWhiteSpace(targetSteamId))
@@ -89,8 +90,95 @@ internal sealed class SteamLoginService
         if (!string.IsNullOrWhiteSpace(targetSteamId))
         {
             TryPushCs2Cloud(paths, targetSteamId, progress);
+            return;
+        }
+
+        // 账号库里没有 SteamID，且本机记录里也查不到：等 Steam 用这次输入的账号登录后，
+        // 从 loginusers.vdf 补出 SteamID，再推 CS2 云端设置（登录失败则超时退出，绝不推错账号）。
+        _ = Task.Run(() => ResolveTargetAndPushAfterPasswordLoginAsync(paths, accountName, progress));
+    }
+
+    /// <summary>
+    /// 账密登录时账号库/本机缓存都没有目标 SteamID 的兜底：密码登录成功后 Steam 会把账号写进
+    /// loginusers.vdf，这里轮询解析出 SteamID 再执行 CS2 云推送。全程失败只记日志，不影响登录本身。
+    /// </summary>
+    private async Task ResolveTargetAndPushAfterPasswordLoginAsync(
+        SteamPaths paths, string accountName, IProgress<string>? progress)
+    {
+        try
+        {
+            for (var attempt = 0; attempt < 90; attempt++)
+            {
+                var matched = _steamConfigService.GetLoginAccounts(paths)
+                    .FirstOrDefault(account => IsSameCachedAccount(account, accountName));
+                if (matched is not null)
+                {
+                    AppLog.Info($"账号密码登录：Steam 登录后解析到 SteamID={matched.SteamId}（{accountName}），开始 CS2 云推送。");
+                    TryPushCs2Cloud(paths, matched.SteamId, progress);
+                    return;
+                }
+
+                await Task.Delay(TimeSpan.FromSeconds(2));
+            }
+
+            AppLog.Warn($"账号密码登录：等待 {accountName} 登录后解析 SteamID 超时，未能推送 CS2 设置。");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"账号密码登录：登录后解析 SteamID 或推送 CS2 设置失败（{accountName}）：{ex.Message}");
         }
     }
+
+    /// <summary>
+    /// 账号管理页右键「登录」等账密登录路径可能只带账号名，账号库里的 SteamID 为空。
+    /// 这里按账号名从 Steam 本机记录（loginusers.vdf / config.vdf）和本地登录缓存补齐 SteamID；
+    /// 补不到就明确记日志，避免登录后静默跳过 CS2 同步与云推送。
+    /// </summary>
+    private string? ResolveTargetSteamId(SteamPaths paths, string accountName, string? targetSteamId)
+    {
+        if (!string.IsNullOrWhiteSpace(targetSteamId))
+        {
+            return targetSteamId;
+        }
+
+        // 很多白号库条目直接把 SteamID64 当账号名存（token 流程遗留），可直接复用。
+        if (ulong.TryParse(accountName, out var numericId) && numericId > 76561197960265728UL)
+        {
+            AppLog.Info($"账号密码登录：账号名即 SteamID64，使用 {accountName} 作为 CS2 同步目标。");
+            return accountName;
+        }
+
+        try
+        {
+            var matched = _steamConfigService.GetLoginAccounts(paths)
+                .FirstOrDefault(account => IsSameCachedAccount(account, accountName));
+            if (matched is not null)
+            {
+                AppLog.Info($"账号密码登录：按账号名从 Steam 记录解析到 SteamID={matched.SteamId}（{accountName}）。");
+                return matched.SteamId;
+            }
+
+            matched = _loginCacheService.LoadAll()
+                .FirstOrDefault(account => IsSameCachedAccount(account, accountName));
+            if (matched is not null)
+            {
+                AppLog.Info($"账号密码登录：按账号名从本地登录缓存解析到 SteamID={matched.SteamId}（{accountName}）。");
+                return matched.SteamId;
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"账号密码登录：解析 SteamID 失败，CS2 同步/推送将跳过（{accountName}）：{ex.Message}");
+            return targetSteamId;
+        }
+
+        AppLog.Warn($"账号密码登录：账号 {accountName} 没有现成 SteamID，等待 Steam 登录成功后再解析并推送 CS2 设置。");
+        return targetSteamId;
+    }
+
+    private static bool IsSameCachedAccount(CachedSteamLoginAccount account, string accountName) =>
+        string.Equals(account.AccountName, accountName, StringComparison.OrdinalIgnoreCase) &&
+        !string.IsNullOrWhiteSpace(account.SteamId);
 
     public IReadOnlyList<CachedSteamLoginAccount> GetCachedLoginAccounts()
     {

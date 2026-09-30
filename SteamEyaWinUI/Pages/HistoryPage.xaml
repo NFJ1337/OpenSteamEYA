@@ -87,6 +87,17 @@
                             <TextBlock x:Name="WhiteBatchQueryText" Text="{x:Bind Strings.Get('Common_OneClickQuery'), Mode=OneWay}" />
                         </StackPanel>
                     </Button>
+                    <!-- 查询/清理期间在顶部工具栏提供取消入口，避免右侧详情卡的取消按钮不在可视区域。 -->
+                    <Button
+                        x:Name="ToolbarCancelHistoryQueryButton"
+                        Visibility="Collapsed"
+                        Click="CancelHistoryQueryButton_Click"
+                        ToolTipService.ToolTip="{x:Bind Strings.Get('History_CancelQuery_Tooltip'), Mode=OneWay}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE711;" FontSize="16" />
+                            <TextBlock Text="{x:Bind Strings.Get('Common_Cancel'), Mode=OneWay}" />
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
 
                 <Button x:Name="ClearInvalidAccountsButton" Grid.Row="0" Grid.Column="1" Click="ClearInvalidAccountsButton_Click" ToolTipService.ToolTip="{x:Bind Strings.Get('History_ClearInvalid_Tooltip'), Mode=OneWay}">
@@ -271,11 +282,40 @@
                                                 Style="{StaticResource CaptionTextBlockStyle}"
                                                 Foreground="{ThemeResource AuroraTextMutedBrush}"
                                                 TextTrimming="CharacterEllipsis" />
-                                            <TextBlock
-                                                Text="{x:Bind LastLoginCaptionText}"
-                                                Style="{StaticResource CaptionTextBlockStyle}"
-                                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                                TextTrimming="CharacterEllipsis" />
+                                            <Grid ColumnSpacing="10">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock
+                                                    Text="{x:Bind LastLoginCaptionText}"
+                                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                    TextTrimming="CharacterEllipsis" />
+                                                <Grid
+                                                    Grid.Column="1"
+                                                    ColumnSpacing="6"
+                                                    VerticalAlignment="Center"
+                                                    Visibility="{x:Bind NoteIndicatorVisibility, Mode=OneWay}">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock
+                                                        Text="{loc:Localize Key=History_Detail_Label_Note}"
+                                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                                        FontWeight="SemiBold"
+                                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                                    <TextBlock
+                                                        Grid.Column="1"
+                                                        Text="{x:Bind Note, Mode=OneWay}"
+                                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                        TextTrimming="CharacterEllipsis"
+                                                        VerticalAlignment="Center"
+                                                        ToolTipService.ToolTip="{x:Bind Note, Mode=OneWay}" />
+                                                </Grid>
+                                            </Grid>
                                         </StackPanel>
 
                                         <StackPanel
@@ -447,11 +487,40 @@
                                                 Style="{StaticResource CaptionTextBlockStyle}"
                                                 Foreground="{ThemeResource AuroraTextMutedBrush}"
                                                 TextTrimming="CharacterEllipsis" />
-                                            <TextBlock
-                                                Text="{x:Bind LastLoginCaptionText}"
-                                                Style="{StaticResource CaptionTextBlockStyle}"
-                                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                                TextTrimming="CharacterEllipsis" />
+                                            <Grid ColumnSpacing="10">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock
+                                                    Text="{x:Bind LastLoginCaptionText}"
+                                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                    TextTrimming="CharacterEllipsis" />
+                                                <Grid
+                                                    Grid.Column="1"
+                                                    ColumnSpacing="6"
+                                                    VerticalAlignment="Center"
+                                                    Visibility="{x:Bind NoteIndicatorVisibility, Mode=OneWay}">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock
+                                                        Text="{loc:Localize Key=History_Detail_Label_Note}"
+                                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                                        FontWeight="SemiBold"
+                                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                                    <TextBlock
+                                                        Grid.Column="1"
+                                                        Text="{x:Bind Note, Mode=OneWay}"
+                                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                        TextTrimming="CharacterEllipsis"
+                                                        VerticalAlignment="Center"
+                                                        ToolTipService.ToolTip="{x:Bind Note, Mode=OneWay}" />
+                                                </Grid>
+                                            </Grid>
                                         </StackPanel>
 
                                         <StackPanel

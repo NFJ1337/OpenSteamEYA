@@ -62,8 +62,10 @@ internal static class FormatHelper
     public static string DescribePenaltyReason(uint? reason) => reason switch
     {
         null => "",
+        6 => Loc.T("Format_Penalty_CompetitiveCooldown"),
         7 => Loc.T("Format_Penalty_Abandon"),
         22 => "vaclive",
+        23 => Loc.T("Format_Penalty_VacNet"),
         _ => Loc.Tf("Format_Penalty_Reason_Format", reason.Value)
     };
 

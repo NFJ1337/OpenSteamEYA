@@ -14,12 +14,12 @@ namespace SteamEyaWinUI.Services;
 ///   · 先写 .partial 再改名成正式包：半途退出不会留下看起来像正常备份的残缺 ZIP；
 ///   · 跳过备份包自身与更早的备份包（否则每天的包里套着所有历史包，体积指数增长），
 ///     以及读不了 / 被占用（WebView2 正在用）的文件 —— 跳过数会写进日志；
-///   · 只保留最近 RetentionCount 份，更早的自动删除。
+///   · 只保留最近一次的备份，更早的自动删除。
 /// </summary>
 internal static class DailyBackupService
 {
-    /// <summary>保留份数：多出来的按文件名（含 yyyy-MM-dd）倒序删最早的。</summary>
-    private const int RetentionCount = 7;
+    /// <summary>保留份数：只留最近一次，多出来的按文件名（含 yyyy-MM-dd）倒序删除。</summary>
+    private const int RetentionCount = 1;
 
     private const string FileNamePrefix = "SteamEYA-数据备份-";
     private const string FileNameSuffix = ".zip";
@@ -64,6 +64,7 @@ internal static class DailyBackupService
         var today = DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         if (IsBackedUpToday(today))
         {
+            CleanupOldBackupsIfPresent();
             return;
         }
 
@@ -72,6 +73,7 @@ internal static class DailyBackupService
         // 等启动那阵忙完再确认一次：这期间用户可能已经手动备份过，或另一个实例先做完了。
         if (IsBackedUpToday(today))
         {
+            CleanupOldBackupsIfPresent();
             return;
         }
 
@@ -147,6 +149,15 @@ internal static class DailyBackupService
         {
             AppLog.Warn($"读取每日备份日期失败：{ex.Message}");
             return false;
+        }
+    }
+
+    private static void CleanupOldBackupsIfPresent()
+    {
+        var root = AppPaths.DataRoot;
+        if (Directory.Exists(root))
+        {
+            CleanupOldBackups(root);
         }
     }
 

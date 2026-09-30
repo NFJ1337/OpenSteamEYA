@@ -103,7 +103,7 @@ internal static class SteamReportService
         [84] = "RateLimitExceeded",
     };
 
-    /// <summary>限流文案特征：只收明确表达「太频繁 / 限流」的，避免把普通报错也当成限流去白等一分钟。</summary>
+    /// <summary>限流文案特征：只收明确表达「太频繁 / 限流」的，避免把普通报错也当成限流而提前停止。</summary>
     private static readonly string[] RateLimitMarkers =
     [
         "rate limit", "rate-limit", "ratelimit",
