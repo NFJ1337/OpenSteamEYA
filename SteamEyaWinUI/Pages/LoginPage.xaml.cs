@@ -35,6 +35,9 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
     /// <summary>小谢平台的新版取名客户端（服务端 111.170.18.31:9095，协议与奶味新版接口相同）。</summary>
     private static readonly NaiweiRedeemClient XiaoxieRedeemClient = new(SteamLicenseClient.Xiaoxie.BaseUrl);
 
+    /// <summary>小泽平台的新版取名客户端（服务端 111.170.18.37:9095，与奶味同平台；用作小泽 /keygettoken 失败后的回退）。</summary>
+    private static readonly NaiweiRedeemClient XiaozheRedeemClient = new(SteamLicenseClient.Xiaozhe.BaseUrl);
+
     // 历史账号保存是否失败：SaveLoginHistoryAsync 置位，登录消息据此决定 Warning/Success 严重度
     // （本地化后历史后缀文案不再含固定中文前缀，故改用此标志替代原先的字符串前缀判断）。
     private bool _lastLoginHistorySaveFailed;
@@ -1081,8 +1084,9 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 			return xiaoxieAccount;
 		}
 
-		// 小泽：上游记录取自 SteamEYAToolNew 的「小泽」那条（BaseUrl http://111.170.18.37:9095 + 路径 /keygettoken），
-		// 正文是纯文本 SteamID----Token；与奶味同一个主机但路由不同，同样不做事后回退。
+		// 小泽：上游记录取自 SteamEYATool 的「小泽」那条（BaseUrl http://111.170.18.37:9095 + 路径 /keygettoken），
+		// 与奶味是同一个平台上号器。先走参考程序那条 /keygettoken（正文是纯文本 SteamID----Token），
+		// 失败再回退同主机的新版取名接口（/api/v1/redeem，SSE）——两条路都只产出 SteamID + JWT。
 		if (Equals(upstream, SteamLicenseClient.Xiaozhe))
 		{
 			if (_tokenUpstreamCachedAccount is not null &&
@@ -1091,7 +1095,21 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 				return _tokenUpstreamCachedAccount;
 			}
 
-			var xiaozheAccount = await AppState.LicenseClient.GetAccountDataViaKeyTokenAsync(key, upstream, cancellationToken);
+			SteamAccountData xiaozheAccount;
+			try
+			{
+				xiaozheAccount = await AppState.LicenseClient.GetAccountDataViaKeyTokenAsync(key, upstream, cancellationToken);
+			}
+			catch (OperationCanceledException)
+			{
+				throw;
+			}
+			catch (Exception ex)
+			{
+				AppLog.Warn($"小泽 /keygettoken 取名失败（{ex.Message}），回退新版取名接口。");
+				xiaozheAccount = await RedeemNewKeyAsync(XiaozheRedeemClient, key, cancellationToken);
+			}
+
 			_tokenUpstreamCachedAccount = xiaozheAccount;
 			_tokenUpstreamCachedKey = key;
 			return xiaozheAccount;
@@ -1312,10 +1330,24 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		var parts = new List<string>();
 		if (entry.IsUsed)
 		{
+			// 已经用这张卡密登录过：显示登录结果（账号/SteamID + 时间），不再回退成「未登录」。
 			parts.Add(Loc.T("CardStore_Status_Used"));
-		}
+			var usedAccount = string.IsNullOrWhiteSpace(entry.AccountName) ? entry.SteamId ?? string.Empty : entry.AccountName;
+			parts.Add(usedAccount.Length > 0
+				? Loc.Tf("CardStore_Status_LoggedIn_Format", usedAccount)
+				: Loc.T("CardStore_Status_LoggedIn"));
+			if (entry.UsedAt is DateTimeOffset usedAt)
+			{
+				parts.Add(FormatHelper.FormatDateTime(usedAt));
+			}
 
-		if (entry.CheckedAt is null)
+			// 登录前若验过号，核验摘要一并保留（VAC / 冷却 / 优先 / 等级）。
+			if (entry.CheckOk == true)
+			{
+				parts.AddRange(BuildCardKeyVerifySummary(entry));
+			}
+		}
+		else if (entry.CheckedAt is null)
 		{
 			parts.Add(Loc.T("CardStore_Status_Unchecked"));
 		}

@@ -476,6 +476,8 @@
     "CardStore_Import_Button": "导入",
     "CardStore_Import_Hint": "按上面选的来源去对应上游取名（奶味 / 小谢 / 伊万/小岛 / 路飞 / 小泽 / Apex杨小美）；选错来源会取不到卡密，换个来源再试一次。",
     "CardStore_Status_Used": "已用",
+    "CardStore_Status_LoggedIn": "已登录",
+    "CardStore_Status_LoggedIn_Format": "已登录：{0}",
     "CardStore_Verify_VacOk": "VAC 正常",
     "CardStore_Verify_VacBanned_Format": "VAC 封禁 {0} 次",
     "CardStore_Verify_GameOk": "游戏封禁正常",

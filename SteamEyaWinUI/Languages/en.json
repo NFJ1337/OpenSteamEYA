@@ -478,6 +478,8 @@
     "CardStore_Import_Button": "Import",
     "CardStore_Import_Hint": "Keys are resolved at the upstream of the selected source (Naiwei / Xiaoxie / Ivan-Island / Luffy / Xiaozhe / Apex YangXiaomei). If the source is wrong the upstream returns nothing - switch the source and try again.",
     "CardStore_Status_Used": "Used",
+    "CardStore_Status_LoggedIn": "Logged in",
+    "CardStore_Status_LoggedIn_Format": "Logged in: {0}",
     "CardStore_Verify_VacOk": "VAC clean",
     "CardStore_Verify_VacBanned_Format": "VAC bans: {0}",
     "CardStore_Verify_GameOk": "no game bans",

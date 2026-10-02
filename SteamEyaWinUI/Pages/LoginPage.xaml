@@ -403,9 +403,9 @@
                                 BorderThickness="0,0,0,1"
                                 BorderBrush="{ThemeResource AuroraGlassBorderBrush}">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="3*" MinWidth="240" />
-                                    <ColumnDefinition Width="110" />
-                                    <ColumnDefinition Width="2*" MinWidth="200" />
+                                    <ColumnDefinition Width="5*" MinWidth="320" />
+                                    <ColumnDefinition Width="130" />
+                                    <ColumnDefinition Width="2*" MinWidth="180" />
                                     <ColumnDefinition Width="250" />
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{x:Bind Strings.Get('CardStore_Col_Key'), Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource AuroraTextMutedBrush}" />
@@ -439,9 +439,9 @@
                                     <DataTemplate x:DataType="models:CardKeyEntry">
                                         <Grid ColumnSpacing="14">
                                             <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="3*" MinWidth="240" />
-                                                <ColumnDefinition Width="110" />
-                                                <ColumnDefinition Width="2*" MinWidth="200" />
+                                                <ColumnDefinition Width="5*" MinWidth="320" />
+                                                <ColumnDefinition Width="130" />
+                                                <ColumnDefinition Width="2*" MinWidth="180" />
                                                 <ColumnDefinition Width="250" />
                                             </Grid.ColumnDefinitions>
 
