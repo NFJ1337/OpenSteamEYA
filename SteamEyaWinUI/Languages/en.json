@@ -21,6 +21,8 @@
     "Settings_Cs2Sync_PushNow_Tooltip": "Force-push the source account's CS2 settings to the currently logged-in account's cloud now",
     "Settings_Cs2Sync_Note": "Uses the Steamworks Cloud API to force-push cfg. Requires: the current account owns CS2, Steam is running, steam_api64.dll sits next to the app, and Steam Cloud is enabled for the account (Steam Settings → Cloud). Steam then delivers the files.",
     "Cs2Cloud_Progress_Pushing": "Force-pushing CS2 settings to the cloud…",
+    "Cs2Push_Button": "Push CS2 Settings",
+    "Cs2Push_Button_Tip": "Push the CS2 settings (crosshair / sensitivity / keys) of the source account chosen on the Settings page to the currently logged-in Steam account cloud - same as Push now in Settings.",
     "Cs2Cloud_Progress_CopyingUserdata": "Syncing the source account's 7, 730, and config folders…",
     "Cs2Cloud_Progress_Done_Format": "Force-pushed {0} CS2 settings file(s) to the cloud.",
     "Cs2Cloud_Progress_DoneNoCloud_Format": "Wrote {0} file(s), but this account has Steam Cloud disabled — enable it in Steam Settings → Cloud for it to actually sync.",

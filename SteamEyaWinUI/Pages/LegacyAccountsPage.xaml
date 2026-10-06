@@ -140,6 +140,17 @@
                                         <TextBlock Text="{x:Bind Strings.Get('Login_Btn_Personalize'), Mode=OneWay}" />
                                     </StackPanel>
                                 </Button>
+                                <!-- 推送CS2配置：等同设置页「CS2 设置同步 → 立即推送」。 -->
+                                <Button
+                                    x:Name="LegacyPushCs2ConfigButton"
+                                    Style="{StaticResource AuroraGlassButtonStyle}"
+                                    Click="LegacyPushCs2ConfigButton_Click"
+                                    ToolTipService.ToolTip="{x:Bind Strings.Get('Cs2Push_Button_Tip'), Mode=OneWay}">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <FontIcon Glyph="&#xE753;" FontSize="14" />
+                                            <TextBlock Text="{x:Bind Strings.Get('Cs2Push_Button'), Mode=OneWay}" />
+                                        </StackPanel>
+                                </Button>
                             </StackPanel>
                         </Grid>
                     </StackPanel>
