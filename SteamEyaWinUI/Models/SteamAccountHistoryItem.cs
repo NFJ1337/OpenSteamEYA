@@ -234,6 +234,22 @@ public sealed partial class SteamAccountHistoryItem : INotifyPropertyChanged
         RemainingCooldownText,
         FormatHelper.FormatGcVacText(GcVacBannedAsInt, Loc.T("Account_Pending")));
 
+    /// <summary>
+    /// 冷却结束的绝对时间（本地）：按 <see cref="RemainingCooldownSeconds"/>（查询锚点扣掉已流逝时间）折算，
+    /// 没有剩余冷却（含「未知 / 大到不可能是秒数的哨兵值」）时为 null。
+    /// 账号管理页与账号查询页都读这里，保证同一账号两边显示的是同一个结束时间。
+    /// </summary>
+    [JsonIgnore]
+    public DateTimeOffset? CooldownEndTime =>
+        RemainingCooldownSeconds is > 0 and <= int.MaxValue
+            ? DateTimeOffset.Now.AddSeconds(RemainingCooldownSeconds.Value)
+            : null;
+
+    /// <summary>冷却结束时间文案（本地 yyyy-MM-dd HH:mm）；没有冷却时为空串。</summary>
+    [JsonIgnore]
+    public string CooldownEndText =>
+        CooldownEndTime?.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
+
     [JsonIgnore]
     public bool HasNote => !string.IsNullOrWhiteSpace(Note);
 

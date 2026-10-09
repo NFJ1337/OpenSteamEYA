@@ -26,6 +26,12 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
 {
     private readonly DispatcherQueue _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
 
+    /// <summary>冷却到期轮询（30 秒一次）：只原地刷有冷却的行，不整表重建。</summary>
+    private readonly DispatcherQueueTimer _cooldownTimer;
+
+    /// <summary>上一轮是否还有活着的冷却，用于判断「刚刚全部到期」需要重建一次列表。</summary>
+    private bool _lastTickHadLiveCooldown;
+
     public LegacyAccountsPage()
     {
         InitializeComponent();
@@ -44,6 +50,10 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             new PointerEventHandler(LegacyAccountList_PointerReleased),
             handledEventsToo: true);
         Loc.LanguageChanged += OnLanguageChanged;
+
+        _cooldownTimer = _dispatcherQueue.CreateTimer();
+        _cooldownTimer.Interval = TimeSpan.FromSeconds(30);
+        _cooldownTimer.Tick += OnCooldownTick;
     }
 
 
@@ -63,7 +73,70 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         UpdateBatchButtonsState();
         RebuildRows();
 
+        // 白号库是全程序共用的一份（账号管理 / 账号查询 都读写它）：订阅变化事件后，
+        // 另一个页面改了备注 / 冷却 / 查询结果，本页会立刻跟着重建，两边状态不再各显示各的。
+        AppState.WhiteAccountsChanged -= OnWhiteAccountsChanged;
+        AppState.WhiteAccountsChanged += OnWhiteAccountsChanged;
+        _cooldownTimer.Start();
+    }
 
+    protected override void OnNavigatedFrom(NavigationEventArgs e)
+    {
+        base.OnNavigatedFrom(e);
+        AppState.WhiteAccountsChanged -= OnWhiteAccountsChanged;
+        _cooldownTimer.Stop();
+    }
+
+    /// <summary>
+    /// 白号库变化 → 重建表格（保留原高亮行）。本页的查询 / 备注 / 冷却，或「账号查询」页对同一份库的改动，
+    /// 都会走到这里，保证两个页面的冷却 / 可用状态一致。
+    /// </summary>
+    private void OnWhiteAccountsChanged(string? selectSteamId) =>
+        _dispatcherQueue.TryEnqueue(() =>
+        {
+            // 事件带 SteamID 就以它为准；没带（例如本页自己刚查完、随后又显式定位过）就沿用当前高亮行，
+            // 免得这次重建把刚定位好的高亮清掉。
+            var focusSteamId = string.IsNullOrWhiteSpace(selectSteamId)
+                ? _highlightedRow?.Item.SteamId
+                : selectSteamId;
+            RebuildRows(highlightFirst: false);
+            if (!string.IsNullOrWhiteSpace(focusSteamId))
+            {
+                var account = AppState.WhiteAccounts.FirstOrDefault(item =>
+                    string.Equals(item.SteamId, focusSteamId, StringComparison.Ordinal));
+                if (account is not null)
+                {
+                    FocusRowForAccount(account);
+                }
+            }
+        });
+
+    /// <summary>
+    /// 冷却到期轮询：查询回来的冷却是带锚点的，随时间自然减少；这里每 30 秒把「有冷却 / VAC」的行
+    /// 原地刷一遍（不整表重建），冷却结束时本页也会自己变成「可用」——与「账号查询」页表现一致。
+    /// </summary>
+    private void OnCooldownTick(DispatcherQueueTimer sender, object args)
+    {
+        var anyLiveCooldown = false;
+        foreach (var row in Rows)
+        {
+            var item = row.Item;
+            if (item.GcVacBanned != true && (item.CooldownSeconds ?? 0) == 0)
+            {
+                continue;
+            }
+
+            row.RefreshStateFromItem();
+            anyLiveCooldown |= item.HasLiveCooldown;
+        }
+
+        // 上一轮还有冷却、这一轮全到期：状态与「显示可用」筛选结果都变了，重建一次。
+        if (_lastTickHadLiveCooldown && !anyLiveCooldown)
+        {
+            RebuildRows(highlightFirst: false);
+        }
+
+        _lastTickHadLiveCooldown = anyLiveCooldown;
     }
 
     private void OnLanguageChanged() => _dispatcherQueue.TryEnqueue(() =>
@@ -203,9 +276,13 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         (account.SteamId?.Contains(keyword, StringComparison.OrdinalIgnoreCase) ?? false) ||
         (account.Note?.Contains(keyword, StringComparison.OrdinalIgnoreCase) ?? false);
 
-    /// <summary>老版「显示可用」= 既没在冷却、也没有 VAC 标记。</summary>
+    /// <summary>
+    /// 老版「显示可用」= 既没在冷却、也没有 VAC 标记。冷却按「剩余秒数」算（与「账号查询」页同一口径），
+    /// 不能只看快照秒数，否则冷却早就到期了这里还显示冷却中。
+    /// </summary>
     private static bool IsAvailable(SteamAccountHistoryItem account) =>
-        account.GcVacBanned != true && (account.CooldownSeconds ?? 0) == 0;
+        account.GcVacBanned != true && (account.RemainingCooldownSeconds ?? 0) == 0;
+
 
     /// <summary>
     /// 重建列表后把视图定位回刚才操作的那一行：重新选中（高亮）并滚动到可见，
@@ -1021,7 +1098,10 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         account.CooldownSeconds = seconds;
         account.CooldownReason = null;
         account.CsStatusUpdatedAt = DateTimeOffset.Now;
-        row.RefreshStateFromItem();
+
+        // 统一走一次重载：事件会把本页（重建 + 回到原高亮行）和「账号查询」页一起刷新，
+        // 两边看到的冷却 / 可用立刻一致（不再只刷本行、让另一页拿着旧值）。
+        AppState.ReloadWhiteAccounts(account.SteamId);
     }
 
     private async Task PromptCustomCooldownAsync(LegacyAccountRow row)
@@ -1613,25 +1693,24 @@ public sealed partial class LegacyAccountRow : INotifyPropertyChanged
         Password = item.Password;
         PasswordText = revealHiddenContent ? item.Password : Mask;
         Note = item.Note ?? string.Empty;
+        // 冷却按「剩余秒数」判定（与账号查询页同口径）：快照冷却早已到期时本页也要显示「可用」。
+        var hasCooldown = item.GcVacBanned != true && (item.RemainingCooldownSeconds ?? 0) > 0;
         StatusText = item.GcVacBanned == true
             ? Loc.T("Legacy_Status_Vac")
-            : (item.CooldownSeconds ?? 0) > 0 ? Loc.T("Legacy_Status_Cooldown") : Loc.T("Legacy_Status_Available");
+            : hasCooldown ? Loc.T("Legacy_Status_Cooldown") : Loc.T("Legacy_Status_Available");
 
         // 状态列按状态上色：可用=绿、冷却中=橙、VAC 封禁=红。
         // 画刷走 FormatHelper 的主题感知取法，深浅色模式下都取得到对应变体。
         StatusBrush = item.GcVacBanned == true
             ? FormatHelper.GetStatusBrush(InfoBarSeverity.Error)
-            : (item.CooldownSeconds ?? 0) > 0
+            : hasCooldown
                 ? FormatHelper.GetWarningBrush()
                 : FormatHelper.GetStatusBrush(InfoBarSeverity.Success);
 
-        // 老版「可用时间」：VAC 封禁直接显示 VAC，冷却中显示剩余时间，否则留空。
-        // 冷却时间列：冷却结束的绝对时间（本地时间）；VAC 直接写 VAC。
+        // 冷却时间列：冷却结束的绝对时间（本地时间，按查询锚点折算）；VAC 直接写 VAC。
         CooldownEndText = item.GcVacBanned == true
             ? "VAC"
-            : (item.CooldownSeconds ?? 0) > 0
-                ? DateTimeOffset.Now.AddSeconds(item.CooldownSeconds!.Value).ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture)
-                : string.Empty;
+            : item.CooldownEndText;
 
         // 老版「其他」列放邮箱信息：邮箱----邮箱密码。
         Others = string.IsNullOrWhiteSpace(item.Email)
@@ -1770,7 +1849,7 @@ public sealed partial class LegacyAccountRow : INotifyPropertyChanged
         Note = Item.Note ?? string.Empty;
 
         var isVacBanned = Item.GcVacBanned == true;
-        var hasCooldown = (Item.CooldownSeconds ?? 0) > 0;
+        var hasCooldown = !isVacBanned && (Item.RemainingCooldownSeconds ?? 0) > 0;
         StatusText = isVacBanned
             ? Loc.T("Legacy_Status_Vac")
             : hasCooldown ? Loc.T("Legacy_Status_Cooldown") : Loc.T("Legacy_Status_Available");
@@ -1779,8 +1858,6 @@ public sealed partial class LegacyAccountRow : INotifyPropertyChanged
             : hasCooldown ? FormatHelper.GetWarningBrush() : FormatHelper.GetStatusBrush(InfoBarSeverity.Success);
         CooldownEndText = isVacBanned
             ? "VAC"
-            : hasCooldown
-                ? DateTimeOffset.Now.AddSeconds(Item.CooldownSeconds!.Value).ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture)
-                : string.Empty;
+            : Item.CooldownEndText;
     }
 }
