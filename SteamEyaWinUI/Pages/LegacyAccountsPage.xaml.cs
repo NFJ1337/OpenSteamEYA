@@ -78,13 +78,40 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         AppState.WhiteAccountsChanged -= OnWhiteAccountsChanged;
         AppState.WhiteAccountsChanged += OnWhiteAccountsChanged;
         _cooldownTimer.Start();
+
+        // 取消入口：一键查询这类长流程进行中显示「取消」按钮（与历史账号 / 黑号登录页同一个通道）。
+        AppState.BusyChanged -= OnBusyChanged;
+        AppState.BusyChanged += OnBusyChanged;
+        OnBusyChanged(AppState.IsBusy);
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
     {
         base.OnNavigatedFrom(e);
         AppState.WhiteAccountsChanged -= OnWhiteAccountsChanged;
+        AppState.BusyChanged -= OnBusyChanged;
         _cooldownTimer.Stop();
+    }
+
+    /// <summary>
+    /// 忙碌状态联动：一键查询（VAC 查询）进行中显示「取消」按钮，结束后收起；
+    /// 同时刷新批量按钮可用性，避免查询途中再点一次「一键查询」。
+    /// </summary>
+    private void OnBusyChanged(bool isBusy)
+    {
+        if (LegacyCancelQueryButton is not null)
+        {
+            LegacyCancelQueryButton.Visibility = isBusy ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        UpdateBatchButtonsState();
+    }
+
+    /// <summary>取消正在进行的查询：走全局忙碌取消（AppState.CancelBusyOperation），与历史页同一套。</summary>
+    private void LegacyCancelQueryButton_Click(object sender, RoutedEventArgs e)
+    {
+        AppState.ShowStatus(Loc.T("History_Status_Canceling"), InfoBarSeverity.Informational);
+        AppState.CancelBusyOperation();
     }
 
     /// <summary>
@@ -256,7 +283,8 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         var hasChecked = Rows.Any(row => row.IsChecked);
         if (LegacyBatchQueryButton is not null)
         {
-            LegacyBatchQueryButton.IsEnabled = hasChecked;
+            // 查询进行中禁用「一键查询」，避免重复启动第二轮（取消按钮此时才可见）。
+            LegacyBatchQueryButton.IsEnabled = hasChecked && !AppState.IsBusy;
         }
 
         if (LegacyBatchNoteButton is not null)

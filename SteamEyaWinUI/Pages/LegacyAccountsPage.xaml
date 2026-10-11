@@ -75,6 +75,13 @@
                                         <TextBlock Text="{x:Bind Strings.Get('Common_OneClickQuery'), Mode=OneWay}" />
                                     </StackPanel>
                                 </Button>
+                                <!-- 一键查询进行中才出现：与历史账号 / 黑号登录页同一个取消通道（AppState.CancelBusyOperation）。 -->
+                                <Button x:Name="LegacyCancelQueryButton" Style="{StaticResource AuroraGlassButtonStyle}" Visibility="Collapsed" Click="LegacyCancelQueryButton_Click" ToolTipService.ToolTip="{x:Bind Strings.Get('History_CancelQuery_Tooltip'), Mode=OneWay}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE711;" FontSize="14" />
+                                        <TextBlock Text="{x:Bind Strings.Get('Common_Cancel'), Mode=OneWay}" />
+                                    </StackPanel>
+                                </Button>
                                 <Button x:Name="LegacyBatchNoteButton" Style="{StaticResource AuroraGlassButtonStyle}" Click="LegacyBatchNoteButton_Click">
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <FontIcon Glyph="&#xE70F;" FontSize="14" />
