@@ -706,6 +706,16 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 
 		// 「黑号存储」同样是独立页签：只在选中它时显示，并按当前内容刷一遍列表。
 		CardStorePanel.Visibility = ((!isCardStoreMode) ? Visibility.Collapsed : Visibility.Visible);
+
+		if (!isCardStoreMode)
+		{
+			// 离开黑号存储：恢复页面纵向滚动（其它页签内容更长，需要滚）。
+			PageScroll.VerticalScrollMode = ScrollMode.Enabled;
+			PageScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+		}
+
+		// 显示后再量一次面板高度（折叠状态量不到真实偏移，等这次布局完成再算）。
+		_dispatcherQueue.TryEnqueue(UpdateCardStorePanelHeight);
 		if (isCardStoreMode)
 		{
 			RefreshCardStoreList();
@@ -1330,16 +1340,8 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		var parts = new List<string>();
 		if (entry.IsUsed)
 		{
-			// 已经用这张卡密登录过：显示登录结果（账号/SteamID + 时间），不再回退成「未登录」。
-			parts.Add(Loc.T("CardStore_Status_Used"));
-			var usedAccount = string.IsNullOrWhiteSpace(entry.AccountName) ? entry.SteamId ?? string.Empty : entry.AccountName;
-			parts.Add(usedAccount.Length > 0
-				? Loc.Tf("CardStore_Status_LoggedIn_Format", usedAccount)
-				: Loc.T("CardStore_Status_LoggedIn"));
-			if (entry.UsedAt is DateTimeOffset usedAt)
-			{
-				parts.Add(FormatHelper.FormatDateTime(usedAt));
-			}
+			// 状态列只记「有没有登录过」：登录过就是「已登录」，不带 SteamID、不带登录时间（用户要求）。
+			parts.Add(Loc.T("CardStore_Status_LoggedIn"));
 
 			// 登录前若验过号，核验摘要一并保留（VAC / 冷却 / 优先 / 等级）。
 			if (entry.CheckOk == true)
@@ -1353,8 +1355,7 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		}
 		else if (entry.CheckOk == true)
 		{
-			var account = string.IsNullOrWhiteSpace(entry.AccountName) ? entry.SteamId ?? string.Empty : entry.AccountName;
-			parts.Add(Loc.Tf("CardStore_Status_Ok_Format", account, entry.SteamId ?? string.Empty));
+			parts.Add(Loc.T("CardStore_Status_Verified"));
 			parts.AddRange(BuildCardKeyVerifySummary(entry));
 		}
 		else
@@ -2535,5 +2536,59 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
         var height = e.NewSize.Height;
         VerifyRecordList.Height = Math.Clamp(height * 0.16, 110, 300);
         VerifyLibraryList.Height = Math.Clamp(height * 0.44, 180, 560);
+
+        // 黑号存储：照「账号管理」页的表格布局给面板定高（导入卡片固定 + 表格卡片占满剩余高度），
+        // 表格底部跟着主窗口高度走；装得下时顺带关掉外层页面滚动，不再多出一条外滚动条。
+        _dispatcherQueue.TryEnqueue(UpdateCardStorePanelHeight);
+    }
+
+    /// <summary>黑号存储面板装得下的最小高度：低于它就让页面滚动，而不是把内容夹在窗口里够不着。</summary>
+    private const double MinCardStorePanelHeight = 260;
+
+    /// <summary>
+    /// 黑号存储面板高度：照「账号管理」页那套表格布局 —— 面板第一行（导入卡片）固定，
+    /// 第二行（表格卡片）自动占满剩余高度，所以这里只按「页面可视高度 − 面板顶部偏移 − 页面上下内边距」
+    /// 给面板定高，表格（含表头之上固定、列表占满卡片）底部就自然跟着主窗口高度走。
+    /// 装得下时顺手关掉外层页面的纵向滚动（不要多出一条外滚动条）；窗口太矮装不下就解开滚动，
+    /// 保证下半部分还能滚到。只在黑号存储页签、且已完成布局时测量，量不到保持上次的值。
+    /// </summary>
+    private void UpdateCardStorePanelHeight()
+    {
+        if (PageScroll is null || CardStorePanel is null ||
+            CardStorePanel.Visibility != Visibility.Visible ||
+            PageScroll.ViewportHeight <= 0)
+        {
+            return;
+        }
+
+        double top;
+        try
+        {
+            top = CardStorePanel.TransformToVisual(LayoutGrid)
+                .TransformPoint(new global::Windows.Foundation.Point(0, 0)).Y;
+        }
+        catch (Exception)
+        {
+            // 还没真正挂进可视树（首次布局期间）——下一次 SizeChanged / 切页签会再来算。
+            return;
+        }
+
+        var padding = PageScroll.Padding;
+        // 再留 4px 余量，避免取整误差刚好顶出一条滚动条。
+        var available = PageScroll.ViewportHeight - padding.Top - top - padding.Bottom - 4;
+
+        if (available >= MinCardStorePanelHeight)
+        {
+            CardStorePanel.Height = available;
+            PageScroll.VerticalScrollMode = ScrollMode.Disabled;
+            PageScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
+        }
+        else
+        {
+            // 窗口太矮：撤销定高、恢复页面滚动，别把内容夹住够不着。
+            CardStorePanel.Height = double.NaN;
+            PageScroll.VerticalScrollMode = ScrollMode.Enabled;
+            PageScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+        }
     }
 }

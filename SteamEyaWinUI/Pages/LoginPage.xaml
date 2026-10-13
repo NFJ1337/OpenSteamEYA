@@ -102,6 +102,7 @@
     </Page.Resources>
 
     <ScrollViewer
+        x:Name="PageScroll"
         HorizontalScrollBarVisibility="Disabled"
         VerticalScrollBarVisibility="Auto"
         Padding="32,24,32,16">
@@ -321,8 +322,15 @@
                 </Border>
                 <!-- 黑号存储：上面一张卡片负责导入（文本框铺满，来源/导入按钮/提示在下面一行），
                      下面单独一张表格卡片放已存卡密，表格样式与「账号管理」页一致。 -->
-                <StackPanel x:Name="CardStorePanel" Spacing="12" Visibility="Collapsed">
-                    <Border Style="{StaticResource CardBorderStyle}">
+                <!-- 黑号存储：照「账号管理」页的表格布局摆——上半固定（导入卡片），下半（表格卡片）自动占满剩余高度；
+     面板整体高度由 UpdateCardStorePanelHeight() 按主窗口可视高度算，底部跟着窗口走，
+     这个页签下页面不再出现外滚动条。 -->
+<Grid x:Name="CardStorePanel" RowSpacing="12" Visibility="Collapsed">
+    <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+                    <Border Grid.Row="0" Style="{StaticResource CardBorderStyle}">
                         <StackPanel Spacing="10">
                             <TextBlock Text="{x:Bind Strings.Get('CardStore_Section'), Mode=OneWay}" Style="{StaticResource SectionTitleTextStyle}" />
                             <TextBlock
@@ -385,9 +393,9 @@
                             </Grid>
                         </StackPanel>
                     </Border>
-
-                    <!-- 已存卡密：独立表格卡片 -->
-                    <Border Style="{StaticResource CardBorderStyle}">
+                    <!-- 已存卡密：独立表格卡片。高度由外层面板的 * 行决定（面板高度见 UpdateCardStorePanelHeight），
+                         表头在卡片内固定、列表占卡片剩下的全部高度；行数超出可用高度时列表内部滚动。 -->
+                    <Border x:Name="CardStoreTableCard" Grid.Row="1" Style="{StaticResource CardBorderStyle}">
                         <Grid RowSpacing="0">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
@@ -404,7 +412,7 @@
                                 BorderBrush="{ThemeResource AuroraGlassBorderBrush}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="5*" MinWidth="320" />
-                                    <ColumnDefinition Width="130" />
+                                    <ColumnDefinition Width="Auto" MinWidth="64" />
                                     <ColumnDefinition Width="2*" MinWidth="180" />
                                     <ColumnDefinition Width="250" />
                                 </Grid.ColumnDefinitions>
@@ -423,10 +431,14 @@
                                 TextWrapping="Wrap"
                                 Visibility="Collapsed" />
 
+                            <!-- 高度交给外层卡片（CardStoreTableCard，见 UpdateCardStoreTableHeight）：
+                                 表头在这里固定，列表占卡片剩下的全部高度，整张表在默认窗口里就全显示；
+                                 行数超过可用高度时由列表内部滚动。底部留 6px，最后一行不贴边。 -->
                             <ListView
                                 x:Name="CardStoreList"
                                 Grid.Row="2"
-                                MaxHeight="380"
+                                Padding="0,0,0,6"
+                                ScrollViewer.VerticalScrollBarVisibility="Auto"
                                 SelectionMode="None">
                                 <ListView.ItemContainerStyle>
                                     <Style TargetType="ListViewItem">
@@ -440,7 +452,7 @@
                                         <Grid ColumnSpacing="14">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="5*" MinWidth="320" />
-                                                <ColumnDefinition Width="130" />
+                                                <ColumnDefinition Width="Auto" MinWidth="64" />
                                                 <ColumnDefinition Width="2*" MinWidth="180" />
                                                 <ColumnDefinition Width="250" />
                                             </Grid.ColumnDefinitions>
@@ -503,7 +515,7 @@
                             </ListView>
                         </Grid>
                     </Border>
-                </StackPanel>
+                </Grid>
                 <Border x:Name="TokenLoginPanel" Style="{StaticResource CardBorderStyle}" Visibility="Collapsed">
                     <StackPanel Spacing="14">
                         <TextBlock Text="{x:Bind Strings.Get('Login_Token_Section'), Mode=OneWay}" Style="{StaticResource SectionTitleTextStyle}" />

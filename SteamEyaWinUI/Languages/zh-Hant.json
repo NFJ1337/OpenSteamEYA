@@ -519,6 +519,7 @@
     "CardStore_Empty": "還沒存過卡密：貼到上面那個框裡，點「匯入」。",
     "CardStore_Btn_Delete": "刪除",
     "CardStore_Status_Unchecked": "未驗號",
+    "CardStore_Status_Verified": "已驗號",
     "CardStore_Status_Ok_Format": "已驗號：{0}（{1}）",
     "CardStore_Status_Fail_Format": "驗號失敗：{0}",
     "CardStore_Status_Unknown": "原因未知",

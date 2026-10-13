@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "1.8.6"
+  #define AppVersion "1.8.7"
 #endif
 
 #ifndef PublishDir
@@ -38,7 +38,9 @@ UninstallDisplayIcon={app}\SteamEyaWinUI.exe
 SetupIconFile={#PublishDir}\Assets\AppIcon.ico
 
 [Languages]
-Name: "english"; MessagesFile: "compiler:Default.isl"
+; 安装界面用简体中文（用户要求：安装包打开就是中文）。语言文件随仓库放在 build\installer\Languages 下，
+; 用 {#SourcePath} 显式定位，保证换机器 / Inno 安装目录里没有中文包时也能出中文安装包。
+Name: "chinesesimplified"; MessagesFile: "{#SourcePath}\Languages\ChineseSimplified.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked

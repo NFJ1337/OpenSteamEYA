@@ -509,6 +509,7 @@
     "CardStore_Empty": "Nothing stored yet - paste keys above and click Import.",
     "CardStore_Btn_Delete": "Delete",
     "CardStore_Status_Unchecked": "Not logged in",
+    "CardStore_Status_Verified": "Verified",
     "CardStore_Status_Ok_Format": "Verified: {0} ({1})",
     "CardStore_Status_Fail_Format": "Verification failed: {0}",
     "CardStore_Status_Unknown": "unknown reason",

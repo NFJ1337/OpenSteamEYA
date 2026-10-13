@@ -507,6 +507,7 @@
     "CardStore_Empty": "还没存过卡密：粘到上面那个框里，点「导入」。",
     "CardStore_Btn_Delete": "删除",
     "CardStore_Status_Unchecked": "未登录",
+    "CardStore_Status_Verified": "已验号",
     "CardStore_Status_Ok_Format": "已验号：{0}（{1}）",
     "CardStore_Status_Fail_Format": "验号失败：{0}",
     "CardStore_Status_Unknown": "原因未知",
