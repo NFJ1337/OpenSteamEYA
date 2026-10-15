@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Net;
 using System.Text.RegularExpressions;
 using SteamEyaWinUI.Localization;
@@ -147,20 +147,7 @@ internal sealed class SteamAccountValidationService
                 cancellationToken);
 
             var cooldownHtml = await GetHtmlAsync(CooldownUrl, session, cancellationToken);
-            var cooldownText = ExtractCooldownExpiration(cooldownHtml);
-            uint? activeCooldownSeconds = null;
-            if (!string.IsNullOrWhiteSpace(cooldownText))
-            {
-                var endsAt = ParseCooldownEnd(cooldownHtml, cooldownText);
-                if (endsAt.HasValue)
-                {
-                    var remainingSeconds = (endsAt.Value - DateTimeOffset.Now).TotalSeconds;
-                    if (remainingSeconds > 0)
-                    {
-                        activeCooldownSeconds = (uint)Math.Ceiling(remainingSeconds);
-                    }
-                }
-            }
+            var (activeCooldownSeconds, cooldownText) = ParseActiveCooldown(cooldownHtml);
 
             // VAC 冷却就只记录为 CS2 冷却状态，绝不能写成永久 VAC 封禁。
             if (activeCooldownSeconds is > 0)
@@ -393,5 +380,50 @@ internal sealed class SteamAccountValidationService
         }
 
         throw new InvalidOperationException("Steam 验证页面重定向次数过多。");
+    }
+
+    /// <summary>
+    /// 从 CS2 冷却页 HTML 算出「剩余冷却秒数」与页面文案（没有活跃冷却时秒数为 null）。纯解析，不联网。
+    /// </summary>
+    private static (uint? Seconds, string? Text) ParseActiveCooldown(string cooldownHtml)
+    {
+        var cooldownText = ExtractCooldownExpiration(cooldownHtml);
+        if (string.IsNullOrWhiteSpace(cooldownText))
+        {
+            return (null, null);
+        }
+
+        var endsAt = ParseCooldownEnd(cooldownHtml, cooldownText);
+        if (!endsAt.HasValue)
+        {
+            return (null, cooldownText);
+        }
+
+        var remainingSeconds = (endsAt.Value - DateTimeOffset.Now).TotalSeconds;
+        return remainingSeconds > 0 ? ((uint)Math.Ceiling(remainingSeconds), cooldownText) : (null, cooldownText);
+    }
+
+    /// <summary>
+    /// 兜底：GC 那条路拿不到 MatchmakingGC2ClientHello(9110) 时，直接读 help.steampowered.com 的 CS2 冷却页
+    /// —— 与「账号管理」页 VAC 查询同一来源、同一套解析。读到返回剩余秒数；读不到（无冷却/页面异常）返回 null，绝不抛。
+    /// </summary>
+    internal static async Task<uint?> TryReadCooldownSecondsFromHelpPageAsync(
+        SteamWebSession session,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var cooldownHtml = await GetHtmlAsync(CooldownUrl, session, cancellationToken);
+            return ParseActiveCooldown(cooldownHtml).Seconds;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"网页冷却读取失败（help.steampowered.com）：{ex.Message}");
+            return null;
+        }
     }
 }

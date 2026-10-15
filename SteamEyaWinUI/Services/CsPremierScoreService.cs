@@ -179,8 +179,20 @@ internal sealed class CsPremierScoreService
                     cmClient,
                     CachedHelloPollTimeout,
                     cancellationToken);
+                AppLog.Info($"[query] 9110 重连第 {cycle} 轮：{(helloData is null ? "仍未到" : "成功")}（{queryWatch.ElapsedMilliseconds} ms）");
             }
 
+            // GC 没给 9110 就拿不到冷却/惩罚：退回网页那条路补一次（help.steampowered.com 的 CS2 冷却页，
+            // 与「账号管理」页 VAC 查询同一来源、同一套解析）。读到就用；读不到仍按「未知」，不冒充「无冷却」。
+            uint? webCooldownSeconds = null;
+            if (helloData?.PenaltySeconds is null)
+            {
+                webCooldownSeconds = await SteamAccountValidationService
+                    .TryReadCooldownSecondsFromHelpPageAsync(webSession, cancellationToken);
+                AppLog.Info(webCooldownSeconds is > 0
+                    ? $"[query] 9110 未到，已用网页冷却兜底：剩余 {webCooldownSeconds} 秒（{queryWatch.ElapsedMilliseconds} ms）"
+                    : $"[query] 9110 未到，网页冷却也没读到（按未知返回，{queryWatch.ElapsedMilliseconds} ms）");
+            }
             var premier = profile.Rankings.FirstOrDefault(ranking =>
                 ranking.RankTypeId == PremierRankTypeId);
 
@@ -197,7 +209,7 @@ internal sealed class CsPremierScoreService
                 accountId,
                 premier,
                 profile.Rankings,
-                helloData?.PenaltySeconds,
+                helloData?.PenaltySeconds ?? webCooldownSeconds,   // 9110 有就用 GC 的，否则用网页兜底读到的
                 helloData?.PenaltyReason,
                 helloData?.VacBanned,
                 playerLevel,
