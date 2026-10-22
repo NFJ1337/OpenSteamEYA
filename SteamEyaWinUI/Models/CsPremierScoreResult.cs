@@ -3,8 +3,8 @@ using SteamEyaWinUI.Services;
 
 namespace SteamEyaWinUI.Models;
 
-// 冷却三字段（PenaltySeconds/PenaltyReason/VacBanned）来自 GC 的 MatchmakingGC2ClientHello(9110)，
-// null 表示 9110 未下发（冷却状态未知），与“确认无冷却”(0) 严格区分。
+// 冷却三字段（PenaltySeconds/PenaltyReason/VacBanned）优先来自 GC 的 MatchmakingGC2ClientHello(9110)；
+// 9110 未下发时用 help.steampowered.com 兜底；两路都失败才为 null（未知），0 表示明确无冷却/无 VAC。
 public sealed record CsPremierScoreResult(
     string SteamId,
     uint AccountId,

@@ -478,7 +478,7 @@
                                             <TextBlock
                                                 Grid.Column="2"
                                                 Text="{x:Bind StatusText, Mode=OneWay}"
-                                                Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                                Foreground="{x:Bind StatusBrush, Mode=OneWay}"
                                                 TextWrapping="Wrap"
                                                 ToolTipService.ToolTip="{x:Bind StatusText, Mode=OneWay}"
                                                 VerticalAlignment="Center" />

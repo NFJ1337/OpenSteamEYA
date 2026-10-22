@@ -146,7 +146,7 @@ internal sealed class SteamAccountValidationService
                 steamId,
                 cancellationToken);
 
-            var cooldownHtml = await GetHtmlAsync(CooldownUrl, session, cancellationToken);
+            var (cooldownHtml, _) = await GetHtmlAsync(CooldownUrl, session, cancellationToken);
             var (activeCooldownSeconds, cooldownText) = ParseActiveCooldown(cooldownHtml);
 
             // VAC 冷却就只记录为 CS2 冷却状态，绝不能写成永久 VAC 封禁。
@@ -160,22 +160,11 @@ internal sealed class SteamAccountValidationService
                     refreshToken);
             }
 
-            var vacHtml = await GetHtmlAsync(VacUrl, session, cancellationToken);
+            var (vacHtml, _) = await GetHtmlAsync(VacUrl, session, cancellationToken);
 
             // Steam 对疑似被盗账号会显示“资料被强制设为私密”的红锁提示；
             // 页面直接返回“账号锁定”时也按同一状态处理，避免被误判成“未发现 CS2 限制”。
-            var redLockPermanentVac =
-                vacHtml.Contains("暂时强制将您的个人资料设置为私密状态", StringComparison.Ordinal) ||
-                vacHtml.Contains("怀疑您的帐户被他人登录过", StringComparison.Ordinal) ||
-                vacHtml.Contains("暫時強制將您的個人資料設定為私密狀態", StringComparison.Ordinal) ||
-                vacHtml.Contains("懷疑您的帳戶被他人登入過", StringComparison.Ordinal) ||
-                vacHtml.Contains("账号锁定", StringComparison.Ordinal) ||
-                vacHtml.Contains("帐号锁定", StringComparison.Ordinal) ||
-                vacHtml.Contains("账户锁定", StringComparison.Ordinal) ||
-                vacHtml.Contains("帳號鎖定", StringComparison.Ordinal) ||
-                vacHtml.Contains("帳戶鎖定", StringComparison.Ordinal) ||
-                vacHtml.Contains("account locked", StringComparison.OrdinalIgnoreCase);
-            if (redLockPermanentVac)
+            if (IsRedLockPermanentVac(vacHtml))
             {
                 return new SteamAccountValidationResult(
                     steamId,
@@ -349,12 +338,12 @@ internal sealed class SteamAccountValidationService
         return best?.ToLocalTime();
     }
 
-    private static async Task<string> GetHtmlAsync(
+    private static async Task<(string Html, Uri FinalUri)> GetHtmlAsync(
         string url,
         SteamWebSession session,
         CancellationToken cancellationToken)
     {
-        var current = url;
+        var current = new Uri(url);
         for (var redirect = 0; redirect < 6; redirect++)
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, current);
@@ -370,17 +359,34 @@ internal sealed class SteamAccountValidationService
                 response.Headers.Location is not null)
             {
                 current = response.Headers.Location.IsAbsoluteUri
-                    ? response.Headers.Location.AbsoluteUri
-                    : new Uri(new Uri(current), response.Headers.Location).AbsoluteUri;
+                    ? response.Headers.Location
+                    : new Uri(current, response.Headers.Location);
                 continue;
             }
 
             response.EnsureSuccessStatusCode();
-            return await response.Content.ReadAsStringAsync(cancellationToken);
+            return (await response.Content.ReadAsStringAsync(cancellationToken), current);
         }
 
         throw new InvalidOperationException("Steam 验证页面重定向次数过多。");
     }
+
+    /// <summary>help.steampowered.com 被重定向到 /login 时说明 Web 会话没生效，不能当成“无限制”。</summary>
+    private static bool IsAuthenticatedHelpPage(Uri uri) =>
+        uri.Host.Equals("help.steampowered.com", StringComparison.OrdinalIgnoreCase) &&
+        !uri.AbsolutePath.Contains("/login", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsRedLockPermanentVac(string vacHtml) =>
+        vacHtml.Contains("暂时强制将您的个人资料设置为私密状态", StringComparison.Ordinal) ||
+        vacHtml.Contains("怀疑您的帐户被他人登录过", StringComparison.Ordinal) ||
+        vacHtml.Contains("暫時強制將您的個人資料設定為私密狀態", StringComparison.Ordinal) ||
+        vacHtml.Contains("懷疑您的帳戶被他人登入過", StringComparison.Ordinal) ||
+        vacHtml.Contains("账号锁定", StringComparison.Ordinal) ||
+        vacHtml.Contains("帐号锁定", StringComparison.Ordinal) ||
+        vacHtml.Contains("账户锁定", StringComparison.Ordinal) ||
+        vacHtml.Contains("帳號鎖定", StringComparison.Ordinal) ||
+        vacHtml.Contains("帳戶鎖定", StringComparison.Ordinal) ||
+        vacHtml.Contains("account locked", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// 从 CS2 冷却页 HTML 算出「剩余冷却秒数」与页面文案（没有活跃冷却时秒数为 null）。纯解析，不联网。
@@ -404,17 +410,62 @@ internal sealed class SteamAccountValidationService
     }
 
     /// <summary>
-    /// 兜底：GC 那条路拿不到 MatchmakingGC2ClientHello(9110) 时，直接读 help.steampowered.com 的 CS2 冷却页
-    /// —— 与「账号管理」页 VAC 查询同一来源、同一套解析。读到返回剩余秒数；读不到（无冷却/页面异常）返回 null，绝不抛。
+    /// GC 9110 未到时，用 help.steampowered.com 的冷却页 + VAC 页补一次完整状态：
+    /// 已认证且冷却页没有到期时间 = 明确无冷却(0)，不再返回 null 让界面一直「待查询」；
+    /// 被重定向到登录页或读取异常 = 未知(null)。
     /// </summary>
-    internal static async Task<uint?> TryReadCooldownSecondsFromHelpPageAsync(
+    internal static async Task<(uint? CooldownSeconds, bool? VacBanned)> TryReadRestrictionsFromHelpPageAsync(
         SteamWebSession session,
         CancellationToken cancellationToken)
     {
         try
         {
-            var cooldownHtml = await GetHtmlAsync(CooldownUrl, session, cancellationToken);
-            return ParseActiveCooldown(cooldownHtml).Seconds;
+            var (cooldownHtml, cooldownUri) = await GetHtmlAsync(CooldownUrl, session, cancellationToken);
+            if (!IsAuthenticatedHelpPage(cooldownUri))
+            {
+                AppLog.Warn($"网页冷却读取失败：被重定向到登录页（{cooldownUri.AbsoluteUri}）。");
+                return (null, null);
+            }
+
+            var cooldownText = ExtractCooldownExpiration(cooldownHtml);
+            uint? cooldownSeconds;
+            if (string.IsNullOrWhiteSpace(cooldownText))
+            {
+                // 页面能正常打开且没有冷却到期时间：明确无冷却，不能继续当“未知”。
+                cooldownSeconds = 0;
+            }
+            else
+            {
+                var endsAt = ParseCooldownEnd(cooldownHtml, cooldownText);
+                if (!endsAt.HasValue)
+                {
+                    AppLog.Warn($"网页冷却解析失败：到期时间=\"{cooldownText}\"，页面未给出 g_ServerTime。");
+                    return (null, null);
+                }
+
+                var remainingSeconds = (endsAt.Value - DateTimeOffset.Now).TotalSeconds;
+                cooldownSeconds = remainingSeconds > 0 ? (uint)Math.Ceiling(remainingSeconds) : 0;
+            }
+
+            if (cooldownSeconds is > 0)
+            {
+                return (cooldownSeconds, false);
+            }
+
+            var (vacHtml, vacUri) = await GetHtmlAsync(VacUrl, session, cancellationToken);
+            if (!IsAuthenticatedHelpPage(vacUri))
+            {
+                AppLog.Warn($"网页 VAC 读取失败：被重定向到登录页（{vacUri.AbsoluteUri}）。");
+                return (0, null);
+            }
+
+            if (IsRedLockPermanentVac(vacHtml))
+            {
+                return (0, true);
+            }
+
+            var vacBanned = vacHtml.Contains("Counter-Strike 2", StringComparison.OrdinalIgnoreCase);
+            return (0, vacBanned);
         }
         catch (OperationCanceledException)
         {
@@ -423,7 +474,7 @@ internal sealed class SteamAccountValidationService
         catch (Exception ex)
         {
             AppLog.Warn($"网页冷却读取失败（help.steampowered.com）：{ex.Message}");
-            return null;
+            return (null, null);
         }
     }
 }

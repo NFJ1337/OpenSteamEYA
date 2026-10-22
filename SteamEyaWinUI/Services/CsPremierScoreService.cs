@@ -182,16 +182,20 @@ internal sealed class CsPremierScoreService
                 AppLog.Info($"[query] 9110 重连第 {cycle} 轮：{(helloData is null ? "仍未到" : "成功")}（{queryWatch.ElapsedMilliseconds} ms）");
             }
 
-            // GC 没给 9110 就拿不到冷却/惩罚：退回网页那条路补一次（help.steampowered.com 的 CS2 冷却页，
-            // 与「账号管理」页 VAC 查询同一来源、同一套解析）。读到就用；读不到仍按「未知」，不冒充「无冷却」。
+            // GC 没给 9110 就拿不到冷却/VAC：用 help.steampowered.com 的冷却页 + VAC 页补一次。
+            // 页面已认证且没有冷却到期时间时，明确记为 0（无冷却），避免界面一直「待查询」；
+            // 只有被重定向到登录页/解析失败才保留 null（未知）。
             uint? webCooldownSeconds = null;
+            bool? webVacBanned = null;
             if (helloData?.PenaltySeconds is null)
             {
-                webCooldownSeconds = await SteamAccountValidationService
-                    .TryReadCooldownSecondsFromHelpPageAsync(webSession, cancellationToken);
-                AppLog.Info(webCooldownSeconds is > 0
-                    ? $"[query] 9110 未到，已用网页冷却兜底：剩余 {webCooldownSeconds} 秒（{queryWatch.ElapsedMilliseconds} ms）"
-                    : $"[query] 9110 未到，网页冷却也没读到（按未知返回，{queryWatch.ElapsedMilliseconds} ms）");
+                var webRestrictions = await SteamAccountValidationService
+                    .TryReadRestrictionsFromHelpPageAsync(webSession, cancellationToken);
+                webCooldownSeconds = webRestrictions.CooldownSeconds;
+                webVacBanned = webRestrictions.VacBanned;
+                AppLog.Info(webCooldownSeconds is null
+                    ? $"[query] 9110 未到，网页状态读取失败（按未知返回，{queryWatch.ElapsedMilliseconds} ms）"
+                    : $"[query] 9110 未到，网页兜底：冷却 {webCooldownSeconds} 秒，VAC {(webVacBanned is null ? "未知" : webVacBanned.Value ? "有" : "无")}（{queryWatch.ElapsedMilliseconds} ms）");
             }
             var premier = profile.Rankings.FirstOrDefault(ranking =>
                 ranking.RankTypeId == PremierRankTypeId);
@@ -211,7 +215,7 @@ internal sealed class CsPremierScoreService
                 profile.Rankings,
                 helloData?.PenaltySeconds ?? webCooldownSeconds,   // 9110 有就用 GC 的，否则用网页兜底读到的
                 helloData?.PenaltyReason,
-                helloData?.VacBanned,
+                helloData?.VacBanned ?? (webVacBanned.HasValue ? (webVacBanned.Value ? 1 : 0) : (int?)null),
                 playerLevel,
                 profile.InMatch,
                 cs2IsChina);

@@ -241,6 +241,22 @@ internal static class FormatHelper
 
         return new SolidColorBrush(Microsoft.UI.Colors.Black);
     }
+    /// <summary>主题感知的弱化正文色（AuroraTextMutedBrush）：状态列里「已验号/验号失败」这些档沿用页面原来的颜色。</summary>
+    public static Brush GetMutedTextBrush()
+    {
+        if (TryFindThemeBrush("AuroraTextMutedBrush") is { } themedBrush)
+        {
+            return themedBrush;
+        }
+
+        if (Application.Current.Resources.TryGetValue("AuroraTextMutedBrush", out var resource) &&
+            resource is Brush brush)
+        {
+            return brush;
+        }
+
+        return new SolidColorBrush(Windows.UI.Color.FromArgb(0xFF, 0x63, 0x66, 0xF1));
+    }
     /// <summary>按当前实际主题在 XamlControlsResources 的主题字典中查找画刷；找不到返回 null。</summary>
     private static Brush? TryFindThemeBrush(string key)
     {

@@ -89,6 +89,24 @@ public sealed partial class CardKeyEntry : INotifyPropertyChanged
     [JsonIgnore]
     public string SourceText { get; set; } = string.Empty;
 
+    private Microsoft.UI.Xaml.Media.Brush? _statusBrush;
+
+    /// <summary>状态列文字颜色：已登录=红、未登录=白；其余（已验号/验号失败）用弱化色。由页面按状态填。</summary>
+    [JsonIgnore]
+    public Microsoft.UI.Xaml.Media.Brush? StatusBrush
+    {
+        get => _statusBrush;
+        set
+        {
+            if (ReferenceEquals(_statusBrush, value))
+            {
+                return;
+            }
+
+            _statusBrush = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(StatusBrush)));
+        }
+    }
     /// <summary>界面上的状态文案（同上）。x:Bind OneWay，必须通知才会重绘。</summary>
     [JsonIgnore]
     public string StatusText

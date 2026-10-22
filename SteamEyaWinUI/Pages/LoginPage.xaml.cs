@@ -1327,6 +1327,7 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		{
 			entry.SourceText = Loc.T(CardStoreSourceNameKey(entry.Source));
 			entry.StatusText = BuildCardKeyStatusText(entry);
+entry.StatusBrush = ResolveCardStoreStatusBrush(entry);
 		}
 
 		// 列表是普通 List，导入/删除不会自己通知界面：重新挂一次 ItemsSource 强制重建。
@@ -1335,6 +1336,29 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		CardStoreEmptyText.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 	}
 
+    /// <summary>「已登录」用红字（本工程把 SystemFillColorCriticalBrush 重映射成粉色，这里用显式红）。</summary>
+    private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush CardStoreLoggedInBrush =
+        new(Windows.UI.Color.FromArgb(0xFF, 0xFF, 0x4D, 0x4F));
+
+    /// <summary>「未登录」用白字（用户要求）。</summary>
+    private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush CardStoreUncheckedBrush =
+        new(Microsoft.UI.Colors.White);
+
+    /// <summary>状态列文字颜色：已登录=红、未登录=白；其余（已验号/验号失败）沿用原来的弱化色。</summary>
+    private static Microsoft.UI.Xaml.Media.Brush ResolveCardStoreStatusBrush(CardKeyEntry entry)
+    {
+        if (entry.IsUsed)
+        {
+            return CardStoreLoggedInBrush;
+        }
+
+        if (entry.CheckedAt is null)
+        {
+            return CardStoreUncheckedBrush;
+        }
+
+        return FormatHelper.GetMutedTextBrush();
+    }
 	private static string BuildCardKeyStatusText(CardKeyEntry entry)
 	{
 		var parts = new List<string>();
