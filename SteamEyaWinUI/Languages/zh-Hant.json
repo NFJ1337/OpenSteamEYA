@@ -233,18 +233,18 @@
     "About_Usage_Title": "用法",
     "About_Usage_Intro": "左側選單依「帳號管理 → 帳號核驗 → 黑號登入 → 歷史帳號 → 快取帳號 → 配裝 → 個人化 → 百寶箱 → 設定」排列；可照流程走，也可直接進入對應頁面。",
     "About_Usage_Update": "自動更新｜在「關於」頁檢查新版本：版本一致直接提示，不一致就高亮「下載更新」，點一下才下載並安裝，裝好自動刪掉安裝包；網路不通時會提示掛 VPN 或到發佈頁手動下載。",
-    "About_Usage_Security": "憑證安全｜EYA 憑證、帳號密碼、手機令牌密鑰、信箱密碼皆以 AES-256-GCM + DPAPI（綁定目前使用者與本機）加密落盤，預設不需任何密碼；需要更嚴謹時可開啟一層可選密碼（第 4 層），資料目錄換機或換使用者都解不開。",
+    "About_Usage_Security": "本機憑證儲存｜EYA 憑證、帳號密碼、手機令牌密鑰和信箱密碼直接以明文 JSON 儲存，不再加密；請自行保護資料目錄，勿隨意分享或上傳。",
     "About_Usage_NaiweiNote": "★ 已適配 奶味驗號.xyz：帳號核驗模組直接用卡密查詢帳號狀態、競技記錄與遊戲庫，可一鍵取名後無縫登入。",
     "About_Usage_Loadout": "配裝｜拖曳編輯 T/CT 武器預設，依帳號儲存；登入時自動套用，也可在登入頁手動一鍵裝配。",
     "About_Usage_Login": "黑號登入｜支援 Token（SteamID + JWT）、舊版 EYA、自動、手動與帳號密碼模式；登入前可先用卡密取名，登入後可一鍵套用配裝並清理工作坊訂閱。Steam 路徑依設定頁設定。",
     "About_Usage_Workshop": "清理｜登入後可在黑號登入頁一鍵清空目前帳號的創意工坊訂閱。",
-    "About_Usage_ManagedAccounts": "帳號管理｜維護白號的帳號、密碼、狀態、備註與可用時間；支援匯入白號（帳號+密碼換 EYA 憑證，帶手機密鑰自動過碼）、搜尋、分組、批次操作與匯出。匯入的憑證會自動加密落盤。",
+    "About_Usage_ManagedAccounts": "帳號管理｜維護白號的帳號、密碼、狀態、備註與可用時間；支援匯入白號（帳號+密碼換 EYA 憑證，帶手機密鑰自動過碼）、搜尋、分組、批次操作與匯出。匯入的憑證以明文落盤。",
     "About_Usage_CachedAccounts": "快取帳號｜檢視本機 Steam 已快取的帳號，可一鍵還原到 Steam 登入介面（上號流程不會清理你的 Steam 帳號快取）。",
     "About_Usage_TreasureBox": "百寶箱｜擴充小工具與彩蛋入口：國家機密、一鍵取得 18 位 UID、官網速查（Rage / Semirage / Legit）與梯子推薦。",
     "About_Usage_Query": "帳號核驗｜對接 奶味驗號.xyz（原 xn--rpr1ku6kjs6f.xyz）：輸入卡密即可查詢優先帳戶、資料等級、服役勳章、冷卻、GC VAC 等 8 項狀態，以及競技記錄與遊戲庫；查到的一鍵取名並直接登入。",
     "About_Usage_History": "歷史帳號｜自動記錄登入或核驗過的帳號；右側詳情顯示 JWT 到期、最後登入、競技分、軍階等級、冷卻狀態與 CS2 是否國區；支援批次一鍵查詢、分組、匯出、複製憑證與快速重登。",
     "About_Usage_Personalize": "個人化｜設定暱稱、頭像與簡介，登入頁一鍵套用到目前帳號，留空欄位保持不變。",
-    "About_Usage_Settings": "設定｜語言、淺色/深色/自訂主題、主題色、圖片背景、入場動畫、視窗尺寸、Steam 安裝路徑、資料目錄、更新站點；並可為本機憑證再加一層「可選密碼」。",
+    "About_Usage_Settings": "設定｜語言、淺色/深色/自訂主題、主題色、圖片背景、入場動畫、視窗尺寸、Steam 安裝路徑、資料目錄和更新站點。",
     "About_Version_Loading": "目前版本：讀取中",
     "About_Update_AutoHint": "啟動時會自動檢查 GitHub Releases。",
     "About_Update_TagNotVersion_Format": "最新發佈：{0}（無法辨識版本號，可點「發佈頁」檢視）",
@@ -915,38 +915,30 @@
     "Format_PlayerLevel_Format": "{0} 級（{1}）",
     "Format_FileSize_Unknown": "未知大小",
     "Account_Error_AccountNameEmpty": "帳戶名稱不能為空。",
-    "Account_Error_VaultLocked": "憑證庫已鎖定或金鑰不可用（需要密碼解鎖，或檔案來自其它機器/金鑰方案），已拒絕寫入以免覆蓋資料。",
+    "LegacyMigration_Passphrase_Title": "遷移舊加密帳號",
+    "LegacyMigration_Passphrase_Desc": "偵測到舊版帳號庫設定了可選密碼。輸入舊密碼後，只會執行一次解密並改為明文；成功後不再需要密碼。",
+    "LegacyMigration_Passphrase_Button": "解密並遷移",
+    "LegacyMigration_Passphrase_Wrong": "舊密碼不正確，請重試。",
+    "LegacyMigration_Passphrase_Failed_Format": "舊帳號庫遷移失敗：{0}",
+    "LegacyMigration_Passphrase_Cancelled": "已取消遷移；舊加密資料保持未修改。",
+    "LegacyMigration_Passphrase_Done": "舊帳號庫已解密並改為明文。",
 
-    "Account_Error_VaultUnreadable": "偵測到無法解密的憑證（可能來自其它機器/使用者，或檔案被竄改），已拒絕寫入以免遺失帳號。",
 
-    "Account_Error_VaultHeaderMissing": "憑證庫缺少金鑰標頭（檔案可能被裁剪或改壞），已拒絕寫入以避免資料損毀。請從備份還原。",
-    "Settings_VaultPw_Section": "憑證加密密碼（第 4 層，可選）",
-    "Settings_VaultPw_Desc": "預設關閉。開啟後，本機保存的 EYA 憑證、帳號密碼、手機令牌密鑰會在既有三層加密之外再加一層密碼保護；密碼只保存在記憶體中、不寫入任何檔案，忘記後無法找回（只能刪除憑證庫重新匯入帳號）。密碼只在目前電腦、目前 Windows 使用者下有效，換機或換使用者後連密碼也解不開。開啟後每次啟動都需要輸入密碼才能讀出帳號。",
-    "Settings_VaultPw_Status_Off": "目前狀態：未啟用密碼（三層加密一直生效，程式自動解密）。",
-    "Settings_VaultPw_Status_On": "目前狀態：已啟用密碼，本次已解鎖。",
-    "Settings_VaultPw_Status_Locked": "目前狀態：已啟用密碼，未解鎖（帳號清單暫時讀不出）。",
-    "Settings_VaultPw_Set": "設定密碼",
-    "Settings_VaultPw_Change": "更換密碼",
-    "Settings_VaultPw_Clear": "取消密碼",
-    "Settings_VaultPw_Unlock": "輸入密碼解鎖",
-    "VaultPw_Placeholder": "憑證密碼",
-    "VaultPw_Set_Title": "設定憑證密碼",
-    "VaultPw_Set_Desc": "密碼只保存在記憶體裡，不寫入任何檔案。請務必牢記：忘記密碼將無法恢復。啟用前建議先用「開啟資料夾」備份一份帳號資料。",
-    "VaultPw_Confirm_Desc": "請再次輸入同一密碼以確認。",
-    "VaultPw_Change_Title": "更換憑證密碼",
-    "VaultPw_Change_Desc": "輸入新的密碼，舊密碼隨即失效。",
-    "VaultPw_Clear_Title": "取消憑證密碼",
-    "VaultPw_Clear_Desc": "輸入目前密碼以確認取消。取消後恢復為自動解密，原有三層加密保持不變。",
-    "VaultPw_Unlock_Title": "解鎖憑證庫",
-    "VaultPw_Unlock_Desc": "該憑證庫啟用了密碼保護，請輸入密碼以讀取帳號。取消則本次不載入帳號（可稍後在設定頁解鎖）。",
-    "VaultPw_Error_TooShort": "密碼至少 8 位。",
-    "VaultPw_Error_Mismatch": "兩次輸入的密碼不一致。",
-    "VaultPw_Error_Wrong": "密碼不正確。",
-    "VaultPw_Error_SetFailed_Format": "設定密碼失敗：{0}",
-    "VaultPw_Status_SetOk": "憑證密碼已生效（下次啟動需要輸入）。",
-    "VaultPw_Status_ClearedOk": "已取消憑證密碼，恢復為自動解密。",
-    "VaultPw_Status_UnlockedOk": "憑證庫已解鎖。",
-    "VaultPw_Status_LockedHint": "憑證庫未解鎖，帳號清單暫不可用（可在設定頁輸入密碼解鎖）。",
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     "Account_Error_EyaTokenEmpty": "EYA 憑證不能為空。",
     "Account_Error_HistoryFileUnreadable": "帳號歷史檔案暫時無法讀取（可能被防毒軟體或雲端同步占用），本次操作已取消，未變更任何資料，請稍後重試。",
     "Workshop_Progress_ValidatingToken": "正在校驗 EYA 憑證...",

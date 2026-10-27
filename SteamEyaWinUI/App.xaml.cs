@@ -45,6 +45,35 @@ public partial class App : Application
         ApplyTableSeparatorColor(settings.TableSeparatorColor, UiColorService.ResolveEffectiveTheme(settings.Theme, settings.UiColor), settings.ShowTableSeparators);
         AppState.UiColorService.Apply(settings.UiColor, settings.UiColorAnimated, settings.Theme);
 
+        // 旧加密版本升级后的首次启动：先把仍能从当前 Windows 用户/本机解开的凭据转为明文。
+        // 迁移失败时不会写文件；账号读取路径会拒绝把残留密文当明文保存。
+        foreach (var migration in LegacyCredentialMigration.MigrateAccountFiles())
+        {
+            switch (migration.Status)
+            {
+                case LegacyCredentialMigrationStatus.Migrated:
+                    AppLog.Info(
+                        $"旧账号库已迁移为明文：{Path.GetFileName(migration.FilePath)}，" +
+                        $"解密字段 {migration.DecryptedFields} 个。");
+                    break;
+
+                case LegacyCredentialMigrationStatus.NeedsPassphrase:
+                    AppLog.Warn(
+                        $"旧账号库启用了口令，未自动迁移：{Path.GetFileName(migration.FilePath)}。");
+                    break;
+
+                case LegacyCredentialMigrationStatus.WrongPassphrase:
+                    AppLog.Warn(
+                        $"旧账号库口令不正确：{Path.GetFileName(migration.FilePath)}。");
+                    break;
+
+                case LegacyCredentialMigrationStatus.Failed:
+                    AppLog.Error(
+                        $"旧账号库迁移失败：{Path.GetFileName(migration.FilePath)}：{migration.Error}");
+                    break;
+            }
+        }
+
         // 上次自动更新下载的安装包：装完之后首次启动时删掉（仍在被安装器占用则跳过）。
         AppState.UpdateInstallerService.CleanupDownloadedInstallers();
 

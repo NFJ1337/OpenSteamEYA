@@ -243,12 +243,84 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void OnRootLayoutGridLoaded(object sender, RoutedEventArgs e)
+    private async void OnRootLayoutGridLoaded(object sender, RoutedEventArgs e)
     {
         RootLayoutGrid.Loaded -= OnRootLayoutGridLoaded;
+        if (LegacyCredentialMigration.HasPassphraseProtectedAccountFiles())
+        {
+            await MigratePassphraseProtectedAccountsAsync();
+        }
+
         if (!TryStartIntroVideo())
         {
             StartStartupInitialization();
+        }
+    }
+
+    /// <summary>
+    /// 旧版可选口令仅用于首次升级迁移。成功后会移除加密头并改写为明文，之后不再提示。
+    /// </summary>
+    private async Task MigratePassphraseProtectedAccountsAsync()
+    {
+        while (LegacyCredentialMigration.HasPassphraseProtectedAccountFiles())
+        {
+            var passwordBox = new PasswordBox
+            {
+                PasswordRevealMode = PasswordRevealMode.Peek
+            };
+            var content = new StackPanel { Spacing = 10 };
+            content.Children.Add(new TextBlock
+            {
+                Text = Loc.T("LegacyMigration_Passphrase_Desc"),
+                TextWrapping = TextWrapping.Wrap
+            });
+            content.Children.Add(passwordBox);
+
+            var dialog = new ContentDialog
+            {
+                Title = Loc.T("LegacyMigration_Passphrase_Title"),
+                Content = content,
+                PrimaryButtonText = Loc.T("LegacyMigration_Passphrase_Button"),
+                CloseButtonText = Loc.T("Common_Cancel"),
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = RootLayoutGrid.XamlRoot
+            };
+
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            {
+                ShowStatus(
+                    Loc.T("LegacyMigration_Passphrase_Cancelled"),
+                    InfoBarSeverity.Warning);
+                return;
+            }
+
+            var results = LegacyCredentialMigration.MigrateAccountFiles(passwordBox.Password);
+            if (results.Any(result => result.Status == LegacyCredentialMigrationStatus.WrongPassphrase))
+            {
+                ShowStatus(
+                    Loc.T("LegacyMigration_Passphrase_Wrong"),
+                    InfoBarSeverity.Error);
+                continue;
+            }
+
+            var failure = results.FirstOrDefault(
+                result => result.Status == LegacyCredentialMigrationStatus.Failed);
+            if (failure is not null)
+            {
+                AppLog.Error(
+                    $"旧口令账号库迁移失败：{Path.GetFileName(failure.FilePath)}：{failure.Error}");
+                ShowStatus(
+                    Loc.Tf("LegacyMigration_Passphrase_Failed_Format", failure.Error ?? string.Empty),
+                    InfoBarSeverity.Error);
+                return;
+            }
+
+            AppState.ReloadHistory();
+            AppState.ReloadWhiteAccounts();
+            ShowStatus(
+                Loc.T("LegacyMigration_Passphrase_Done"),
+                InfoBarSeverity.Success);
+            return;
         }
     }
 
@@ -448,54 +520,6 @@ public sealed partial class MainWindow : Window
 
         _startupInitializationStarted = true;
         _ = ResolveSteamPathAfterStartupAsync();
-
-        // 凭据库启用了口令层（第 4 层）时，启动后提示输入口令；未启用时该方法立即返回。
-        _ = PromptVaultUnlockAfterStartupAsync();
-    }
-
-    /// <summary>
-    /// 启动时若凭据库启用了口令层（第 4 层）且本次会话还没解锁，提示输入口令。
-    /// 取消则本次不载入账号（仍可在设置页解锁）；未启用口令时不做任何事。
-    /// </summary>
-    private async Task PromptVaultUnlockAfterStartupAsync()
-    {
-        try
-        {
-            if (!CredentialVault.IsPassphraseEnabled || !CredentialVault.IsLocked)
-            {
-                return;
-            }
-
-            while (CredentialVault.IsLocked)
-            {
-                var passphrase = await VaultPassphraseDialog.AskAsync(
-                    RootLayoutGrid.XamlRoot,
-                    Loc.T("VaultPw_Unlock_Title"),
-                    Loc.T("VaultPw_Unlock_Desc"),
-                    Loc.T("Common_Confirm"));
-
-                if (passphrase is null)
-                {
-                    ShowStatus(Loc.T("VaultPw_Status_LockedHint"), InfoBarSeverity.Warning);
-                    return;
-                }
-
-                if (!CredentialVault.TryUnlock(passphrase))
-                {
-                    ShowStatus(Loc.T("VaultPw_Error_Wrong"), InfoBarSeverity.Error);
-                    continue;
-                }
-
-                AppState.ReloadHistory();
-                AppState.ReloadWhiteAccounts();
-                ShowStatus(Loc.T("VaultPw_Status_UnlockedOk"), InfoBarSeverity.Success);
-                return;
-            }
-        }
-        catch (Exception ex)
-        {
-            AppLog.Error("启动时解锁凭据库失败。", ex);
-        }
     }
 
     /// <summary>启动后台解析 Steam 安装路径（失败只记日志，不打扰用户）。</summary>

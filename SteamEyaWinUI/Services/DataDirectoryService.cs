@@ -289,9 +289,7 @@ internal static class DataDirectoryService
             return;
         }
 
-        // 这里必须把整份 JSON 原样搬、只改 avatarPath：凭据库根部除 accounts 外还有 "vault"
-        // （包着数据密钥 DEK）、以及将来可能新增的字段。旧实现用强类型文档反序列化再回写，
-        // 会把它们整段丢掉 —— 头部一没，同一份密文就再也解不开，表现为「账号全都不见了」。
+        // 这里只改 avatarPath，其余字段原样保留，避免将来新增字段在移动数据目录时丢失。
         var json = File.ReadAllText(filePath);
         if (JsonNode.Parse(json) is not JsonObject root || root["accounts"] is not JsonArray accounts)
         {
@@ -319,13 +317,6 @@ internal static class DataDirectoryService
             return;
         }
 
-        // 兜底：本来就带 vault 的文件，改完必须还在；不满足就宁可不写（避免再次把密钥头部写没）。
-        if (json.Contains("\"vault\"", StringComparison.Ordinal) && root["vault"] is null)
-        {
-            AppLog.Error($"跳过重写 {relativeFilePath}：本次写入会丢失凭据库密钥头部。");
-            return;
-        }
-
         File.WriteAllText(filePath, root.ToJsonString(JsonWriteOptions));
     }
 
@@ -337,7 +328,7 @@ internal static class DataDirectoryService
             return;
         }
 
-        // 同 RewriteAccountHistoryPaths：只改 avatarPath，其余字段（含以后可能加的密钥头部）原样保留。
+        // 同 RewriteAccountHistoryPaths：只改 avatarPath，其余字段原样保留。
         var json = File.ReadAllText(filePath);
         if (JsonNode.Parse(json) is not JsonObject root)
         {
@@ -371,12 +362,6 @@ internal static class DataDirectoryService
 
         if (!changed)
         {
-            return;
-        }
-
-        if (json.Contains("\"vault\"", StringComparison.Ordinal) && root["vault"] is null)
-        {
-            AppLog.Error("跳过重写 cached-login.json：本次写入会丢失密钥头部。");
             return;
         }
 

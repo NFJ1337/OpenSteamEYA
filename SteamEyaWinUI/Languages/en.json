@@ -223,18 +223,18 @@
     "About_Usage_Title": "How to use",
     "About_Usage_Intro": "The sidebar is ordered 账号管理 → account verification → login → history → cached accounts → loadout → personalization → toolbox → settings. Follow the flow or jump straight to a page.",
     "About_Usage_Update": "Auto update | Check for new builds on the About page: same version is reported plainly, a mismatch highlights Download Update - nothing downloads until you click it, and the installer is deleted after a successful install. Network failures tell you to use a VPN or download from the Releases page.",
-    "About_Usage_Security": "Credential security | EYA tokens, account passwords, mobile 2FA secrets and email passwords are stored with AES-256-GCM + DPAPI (bound to the current user and PC) by default, with no passphrase required; you can add an optional passphrase (layer 4). The data folder cannot be decrypted on another PC or user account.",
+    "About_Usage_Security": "Local credential storage | EYA tokens, account passwords, mobile 2FA secrets and email passwords are stored directly as plaintext JSON. Protect the data folder yourself and do not share or upload it.",
     "About_Usage_NaiweiNote": "★ Adapted to 奶味验号.xyz: the verification module takes a redeem code and shows account status, competitive records and the game library - then logs in with one click.",
     "About_Usage_Loadout": "Loadout | Drag-and-drop T/CT weapon presets saved per account; applied automatically on login or with one click on the login page.",
     "About_Usage_Login": "Login | Token (SteamID + JWT), legacy EYA, auto, manual and credentials modes; fetch a name with a redeem code first if you like, then apply a loadout and clear Workshop subscriptions after signing in. Steam path comes from Settings.",
     "About_Usage_Workshop": "Cleanup | Clear the current account's Workshop subscriptions from the Legacy EYA login page.",
-    "About_Usage_ManagedAccounts": "Accounts | Manage white accounts: name, password, status, notes and availability; import by password (exchanges account+password for an EYA token, auto-passes mobile 2FA), search, group, batch actions, export. Imported credentials are encrypted on disk automatically.",
+    "About_Usage_ManagedAccounts": "Accounts | Manage white accounts: name, password, status, notes and availability; import by password (exchanges account+password for an EYA token, auto-passes mobile 2FA), search, group, batch actions, export. Imported credentials are stored on disk as plaintext.",
     "About_Usage_CachedAccounts": "Cached accounts | Lists the accounts Steam has cached on this PC and can restore one to the Steam sign-in screen (the login flow never clears your Steam account cache).",
     "About_Usage_TreasureBox": "Toolbox | Extra tools and easter eggs: the classified card, one-click 18-digit UID, official-site lookup (Rage / Semirage / Legit) and a proxy recommendation.",
     "About_Usage_Query": "Verification | Talks to 奶味验号.xyz (formerly xn--rpr1ku6kjs6f.xyz): enter a redeem code to read 8 status fields (Prime, profile level, service medal, cooldown, GC VAC, ...), competitive records and the game library, then fetch the name and sign in directly.",
     "About_Usage_History": "History | Records every account you signed in with or checked; the detail pane shows JWT expiry, last login, competitive score, rank, cooldown and whether CS2 is the China build. Batch query, groups, export, copy token and quick re-login are supported.",
     "About_Usage_Personalize": "Personalization | Set nickname, avatar and summary, then apply them to the signed-in account with one click; empty fields stay untouched.",
-    "About_Usage_Settings": "Settings | Language, light/dark/custom theme, accent color, background image, intro video, window size, Steam path, data folder, update source - plus an optional passphrase for local credentials.",
+    "About_Usage_Settings": "Settings | Language, light/dark/custom theme, accent color, background image, intro video, window size, Steam path, data folder and update source.",
     "About_Version_Loading": "Current version: loading",
     "About_Update_AutoHint": "Checks GitHub Releases automatically at startup.",
     "About_Update_TagNotVersion_Format": "Latest release: {0} (no version number found; use Releases)",
@@ -905,38 +905,30 @@
     "Format_PlayerLevel_Format": "Level {0} ({1})",
     "Format_FileSize_Unknown": "Unknown size",
     "Account_Error_AccountNameEmpty": "Account name cannot be empty.",
-    "Account_Error_VaultLocked": "The credential vault is locked or its key is unavailable (a passphrase is required, or the file comes from another machine or key scheme). Writing was refused to avoid overwriting data.",
+    "LegacyMigration_Passphrase_Title": "Migrate legacy encrypted accounts",
+    "LegacyMigration_Passphrase_Desc": "The legacy account store uses a passphrase. Enter it once to decrypt and convert the data to plaintext; the passphrase will not be needed afterwards.",
+    "LegacyMigration_Passphrase_Button": "Decrypt and migrate",
+    "LegacyMigration_Passphrase_Wrong": "The legacy passphrase is incorrect. Try again.",
+    "LegacyMigration_Passphrase_Failed_Format": "Legacy account migration failed: {0}",
+    "LegacyMigration_Passphrase_Cancelled": "Migration canceled; the encrypted data was left unchanged.",
+    "LegacyMigration_Passphrase_Done": "The legacy account data is now decrypted plaintext.",
 
-    "Account_Error_VaultUnreadable": "Undecryptable credentials were found (from another machine/user or tampered). Writing was refused to avoid losing accounts.",
 
-    "Account_Error_VaultHeaderMissing": "The credential vault is missing its key header (file may be truncated or corrupted). Writing was refused to avoid data corruption - restore from a backup.",
-    "Settings_VaultPw_Section": "Credential passphrase (layer 4, optional)",
-    "Settings_VaultPw_Desc": "Off by default. When enabled, the locally stored EYA tokens, account passwords and mobile 2FA secrets get one more passphrase layer on top of the existing three. The passphrase stays in memory and is never written to disk; if you forget it the data cannot be recovered (you would have to delete the credential store and import the accounts again). It only works on this PC and this Windows user account - moving the data folder elsewhere makes it undecryptable even with the passphrase. Once enabled you must enter it at every launch to read accounts.",
-    "Settings_VaultPw_Status_Off": "Status: no passphrase (the three layers are always active and decryption is automatic).",
-    "Settings_VaultPw_Status_On": "Status: passphrase enabled, unlocked for this session.",
-    "Settings_VaultPw_Status_Locked": "Status: passphrase enabled, locked (the account list is not readable right now).",
-    "Settings_VaultPw_Set": "Set passphrase",
-    "Settings_VaultPw_Change": "Change passphrase",
-    "Settings_VaultPw_Clear": "Remove passphrase",
-    "Settings_VaultPw_Unlock": "Unlock",
-    "VaultPw_Placeholder": "Credential passphrase",
-    "VaultPw_Set_Title": "Set credential passphrase",
-    "VaultPw_Set_Desc": "The passphrase is kept in memory only and is never written to any file. Please memorise it: a forgotten passphrase cannot be recovered. Backing up the data folder first is recommended.",
-    "VaultPw_Confirm_Desc": "Repeat the same passphrase to confirm.",
-    "VaultPw_Change_Title": "Change credential passphrase",
-    "VaultPw_Change_Desc": "Enter the new passphrase; the old one stops working immediately.",
-    "VaultPw_Clear_Title": "Remove credential passphrase",
-    "VaultPw_Clear_Desc": "Enter the current passphrase to confirm. Removing it restores automatic decryption; the original three layers stay in place.",
-    "VaultPw_Unlock_Title": "Unlock the credential vault",
-    "VaultPw_Unlock_Desc": "This credential store is protected by a passphrase. Enter it to read the accounts. Cancel to skip loading accounts this time (you can unlock later in Settings).",
-    "VaultPw_Error_TooShort": "The passphrase must be at least 8 characters.",
-    "VaultPw_Error_Mismatch": "The two passphrases do not match.",
-    "VaultPw_Error_Wrong": "Incorrect passphrase.",
-    "VaultPw_Error_SetFailed_Format": "Could not set the passphrase: {0}",
-    "VaultPw_Status_SetOk": "The credential passphrase is now active (it will be required at the next launch).",
-    "VaultPw_Status_ClearedOk": "The credential passphrase was removed; automatic decryption is restored.",
-    "VaultPw_Status_UnlockedOk": "The credential vault is unlocked.",
-    "VaultPw_Status_LockedHint": "The credential vault is locked; the account list is unavailable (enter the passphrase in Settings).",
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     "Account_Error_EyaTokenEmpty": "EYA token cannot be empty.",
     "Account_Error_HistoryFileUnreadable": "The account history file is temporarily unavailable. It may be in use by antivirus software or cloud synchronization. This operation has been canceled, and no data has been changed. Please try again later.",
     "Workshop_Progress_ValidatingToken": "Validating EYA token...",
