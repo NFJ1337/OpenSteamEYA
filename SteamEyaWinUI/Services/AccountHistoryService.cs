@@ -429,8 +429,13 @@ internal sealed class AccountHistoryService
             {
                 item.EyaToken = refreshToken.Trim();
                 item.TokenExpiresAt = tokenExpiresAt;
+                // 本次验证已用这枚令牌成功连上 Steam，可直接确认当前可用。
+                item.JwtAvailable = true;
+                item.JwtStatus = Loc.T("Account_Jwt_Valid");
+                item.JwtValidatedAt = DateTimeOffset.Now;
             }
 
+            ApplySteamLastLogin(item, ReadSteamLastLoginMap(), steamId);
             item.CsStatusUpdatedAt = DateTimeOffset.Now;
             document.Accounts = NormalizeAccounts(document.Accounts).ToList();
             WriteDocument(document);

@@ -1583,7 +1583,7 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
             HistoryDetailLastLoginText.Text = Loc.T("History_Detail_NoRecord");
             HistoryDetailCompetitiveScoreText.Text = Loc.T("History_Detail_Pending");
             HistoryDetailCsLevelText.Text = Loc.T("History_Detail_Pending");
-            HistoryDetailCooldownStatusText.Text = Loc.T("History_Detail_Pending");
+            SetCooldownStatusPresentation(null, Loc.T("History_Detail_Pending"));
             HistoryDetailAccountStatusText.Text = Loc.T("History_Detail_Pending");
             HistoryDetailCs2IsChinaText.Text = Loc.T("History_Detail_Pending");
             HistoryDetailNoteBox.Text = string.Empty;
@@ -1600,7 +1600,7 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
         HistoryDetailLastLoginText.Text = account.LastLoginText;
         HistoryDetailCompetitiveScoreText.Text = account.CompetitiveScoreText;
         HistoryDetailCsLevelText.Text = account.CsPlayerLevelText;
-        HistoryDetailCooldownStatusText.Text = account.RemainingCooldownStatusText;
+        SetCooldownStatusPresentation(account, account.RemainingCooldownStatusText);
         HistoryDetailAccountStatusText.Text = account.JwtAvailabilityText;
         HistoryDetailCs2IsChinaText.Text = account.Cs2IsChinaText;
 
@@ -1653,13 +1653,13 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
         {
             if (selected.HasLiveCooldown)
             {
-                HistoryDetailCooldownStatusText.Text = selected.RemainingCooldownStatusText;
+                SetCooldownStatusPresentation(selected, selected.RemainingCooldownStatusText);
                 _detailCooldownLiveLastTick = true;
                 anyLive = true;
             }
             else if (_detailCooldownLiveLastTick)
             {
-                HistoryDetailCooldownStatusText.Text = selected.RemainingCooldownStatusText;
+                SetCooldownStatusPresentation(selected, selected.RemainingCooldownStatusText);
                 _detailCooldownLiveLastTick = false;
             }
         }
@@ -1668,6 +1668,14 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
         {
             _cooldownTimer.Stop();
         }
+    }
+
+    private void SetCooldownStatusPresentation(SteamAccountHistoryItem? account, string text)
+    {
+        HistoryDetailCooldownStatusText.Text = text;
+        HistoryDetailCooldownStatusText.Foreground = account?.GcVacBanned == true
+            ? FormatHelper.GetStatusBrush(InfoBarSeverity.Error)
+            : FormatHelper.GetPrimaryTextBrush();
     }
 
     private void UpdateCooldownTimer()

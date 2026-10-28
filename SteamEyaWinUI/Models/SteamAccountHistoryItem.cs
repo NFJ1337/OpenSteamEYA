@@ -179,6 +179,12 @@ public sealed partial class SteamAccountHistoryItem : INotifyPropertyChanged
     [JsonIgnore]
     public string GcVacText => FormatHelper.FormatGcVacText(GcVacBannedAsInt, Loc.T("Account_Pending"));
 
+    /// <summary>VAC 封禁账号使用独立淡红状态层。</summary>
+    [JsonIgnore]
+    public Visibility VacBanVisibility => GcVacBanned == true
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
     [JsonIgnore]
     public string CooldownStatusText =>
         FormatHelper.FormatCooldownStatusText(CooldownSeconds, CooldownReason, GcVacBannedAsInt, Loc.T("Account_Pending"), Loc.T("Account_Pending"));

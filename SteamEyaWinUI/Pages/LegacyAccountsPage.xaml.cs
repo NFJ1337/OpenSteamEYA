@@ -758,6 +758,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         var succeeded = 0;
         var failed = 0;
         var loginThrottled = false;
+        var successfulSteamIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         try
         {
@@ -799,6 +800,10 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
                         cancellationToken);
 
                     SaveValidationResult(account, result);
+                    if (!string.IsNullOrWhiteSpace(result.SteamId))
+                    {
+                        successfulSteamIds.Add(result.SteamId);
+                    }
                     succeeded++;
                 }
                 catch (OperationCanceledException)
@@ -816,6 +821,22 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
                 {
                     failed++;
                     AppLog.Warn($"一键查询失败（{account.AccountName}）：{ex.Message}");
+                }
+            }
+
+            if (successfulSteamIds.Count > 0 && !cancellationToken.IsCancellationRequested)
+            {
+                AppState.ShowStatus(
+                    Loc.T("History_Status_ProfileSyncing"),
+                    InfoBarSeverity.Informational);
+                try
+                {
+                    await AppState.WhiteAccountService.RefreshProfilesAsync(successfulSteamIds);
+                }
+                catch (Exception ex)
+                {
+                    // 资料同步失败不影响已经确认的冷却/VAC 结果。
+                    AppLog.Warn($"一键查询后同步 Steam 资料失败：{ex.Message}");
                 }
             }
         }
@@ -1267,6 +1288,17 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
                 cancellationToken);
 
             SaveValidationResult(account, result);
+            if (!string.IsNullOrWhiteSpace(result.SteamId))
+            {
+                try
+                {
+                    await AppState.WhiteAccountService.RefreshProfilesAsync([result.SteamId]);
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Warn($"VAC 查询后同步 Steam 资料失败：{ex.Message}");
+                }
+            }
 
             AppState.ReloadWhiteAccounts();
             RebuildRows(highlightFirst: false);

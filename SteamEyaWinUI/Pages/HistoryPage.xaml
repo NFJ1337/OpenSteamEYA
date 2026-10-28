@@ -357,6 +357,13 @@
                                     CornerRadius="{ThemeResource OverlayCornerRadius}"
                                     IsHitTestVisible="False"
                                     Visibility="{x:Bind CooldownHighlightVisibility, Mode=OneWay}" />
+                                <Border
+                                    BorderBrush="#FFDC2626"
+                                    BorderThickness="2"
+                                    Background="#33F87171"
+                                    CornerRadius="{ThemeResource OverlayCornerRadius}"
+                                    IsHitTestVisible="False"
+                                    Visibility="{x:Bind VacBanVisibility, Mode=OneWay}" />
                                 <!-- 选中：整卡黑框（高对比 ink 边框，参考主流多选样式） -->
                                 <Border
                                     BorderBrush="{ThemeResource TextFillColorPrimaryBrush}"
@@ -577,6 +584,13 @@
                                     CornerRadius="{ThemeResource OverlayCornerRadius}"
                                     IsHitTestVisible="False"
                                     Visibility="{x:Bind CooldownHighlightVisibility, Mode=OneWay}" />
+                                <Border
+                                    BorderBrush="#FFDC2626"
+                                    BorderThickness="2"
+                                    Background="#33F87171"
+                                    CornerRadius="{ThemeResource OverlayCornerRadius}"
+                                    IsHitTestVisible="False"
+                                    Visibility="{x:Bind VacBanVisibility, Mode=OneWay}" />
                                 <!-- 选中：整卡黑框（高对比 ink 边框，参考主流多选样式） -->
                                 <Border
                                     BorderBrush="{ThemeResource TextFillColorPrimaryBrush}"
