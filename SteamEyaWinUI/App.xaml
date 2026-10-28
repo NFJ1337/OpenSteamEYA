@@ -87,6 +87,8 @@
             <StaticResource x:Key="ComboBoxItemForegroundSelectedPressed" ResourceKey="AuroraTextHeadingBrush" />
             <StaticResource x:Key="ContentDialogBackground" ResourceKey="CustomUiDialogBrush" />
             <StaticResource x:Key="ContentDialogBorderBrush" ResourceKey="CustomUiBorderBrush" />
+            <StaticResource x:Key="ContentDialogForeground" ResourceKey="AuroraTextBodyBrush" />
+            <StaticResource x:Key="ContentDialogContentForegroundBrush" ResourceKey="AuroraTextBodyBrush" />
 
             <!-- 全局控件圆角，后续新增控件默认沿用主题 UI 的圆角。 -->
             <CornerRadius x:Key="ControlCornerRadius">12</CornerRadius>
@@ -204,12 +206,16 @@
                 <Setter Property="Margin" Value="8,4" />
             </Style>
             <Style x:Key="ThemedDialogPrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
+                <Setter Property="Background" Value="{ThemeResource CustomUiBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource CustomUiBrush}" />
+                <Setter Property="Foreground" Value="White" />
                 <Setter Property="CornerRadius" Value="10" />
                 <Setter Property="MinHeight" Value="36" />
                 <Setter Property="Padding" Value="14,7" />
                 <Setter Property="FontWeight" Value="SemiBold" />
             </Style>
             <Style x:Key="ThemedDialogCloseButtonStyle" TargetType="Button" BasedOn="{StaticResource AuroraGlassButtonStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource AuroraTextBodyBrush}" />
                 <Setter Property="CornerRadius" Value="10" />
                 <Setter Property="MinHeight" Value="36" />
                 <Setter Property="Padding" Value="14,7" />
@@ -219,7 +225,9 @@
                 <Setter Property="BorderBrush" Value="{ThemeResource CustomUiBorderBrush}" />
                 <Setter Property="BorderThickness" Value="1" />
                 <Setter Property="CornerRadius" Value="16" />
+                <Setter Property="Foreground" Value="{ThemeResource AuroraTextBodyBrush}" />
                 <Setter Property="PrimaryButtonStyle" Value="{StaticResource ThemedDialogPrimaryButtonStyle}" />
+                <Setter Property="SecondaryButtonStyle" Value="{StaticResource ThemedDialogCloseButtonStyle}" />
                 <Setter Property="CloseButtonStyle" Value="{StaticResource ThemedDialogCloseButtonStyle}" />
             </Style>
             <Style TargetType="DatePicker">

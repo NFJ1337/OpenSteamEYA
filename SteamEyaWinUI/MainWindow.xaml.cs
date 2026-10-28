@@ -691,6 +691,7 @@ public sealed partial class MainWindow : Window
         {
             root.RequestedTheme = theme;
         }
+
     }
 
     /// <summary>让背景图的布局尺寸始终跟随窗口客户区，GIF 和大图也能实时缩放。</summary>

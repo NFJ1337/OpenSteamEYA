@@ -1755,8 +1755,8 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
             Content = content,
             PrimaryButtonText = Loc.T("Common_Import"),
             CloseButtonText = Loc.T("Common_Cancel"),
-            PrimaryButtonStyle = (Style)Application.Current.Resources["AuroraGlassButtonStyle"],
-            CloseButtonStyle = (Style)Application.Current.Resources["AuroraGlassButtonStyle"],
+            PrimaryButtonStyle = (Style)Application.Current.Resources["ThemedDialogPrimaryButtonStyle"],
+            CloseButtonStyle = (Style)Application.Current.Resources["ThemedDialogCloseButtonStyle"],
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = XamlRoot
         };
@@ -1859,8 +1859,8 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
             Content = panel,
             PrimaryButtonText = Loc.T("Common_Confirm"),
             CloseButtonText = Loc.T("Common_Cancel"),
-            PrimaryButtonStyle = (Style)Application.Current.Resources["AuroraGlassButtonStyle"],
-            CloseButtonStyle = (Style)Application.Current.Resources["AuroraGlassButtonStyle"],
+            PrimaryButtonStyle = (Style)Application.Current.Resources["ThemedDialogPrimaryButtonStyle"],
+            CloseButtonStyle = (Style)Application.Current.Resources["ThemedDialogCloseButtonStyle"],
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = XamlRoot
         };
@@ -2243,8 +2243,8 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
             Content = box,
             PrimaryButtonText = Loc.T("Common_Confirm"),
             CloseButtonText = Loc.T("Common_Cancel"),
-            PrimaryButtonStyle = (Style)Application.Current.Resources["AuroraGlassButtonStyle"],
-            CloseButtonStyle = (Style)Application.Current.Resources["AuroraGlassButtonStyle"],
+            PrimaryButtonStyle = (Style)Application.Current.Resources["ThemedDialogPrimaryButtonStyle"],
+            CloseButtonStyle = (Style)Application.Current.Resources["ThemedDialogCloseButtonStyle"],
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = XamlRoot
         };
