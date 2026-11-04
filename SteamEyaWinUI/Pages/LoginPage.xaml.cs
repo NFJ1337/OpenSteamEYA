@@ -834,9 +834,32 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 				"Login_Action_Login",
 				cancellationToken,
 				passwordChangedHint: true);
+
+			// 解析成功即补齐全右侧账号资料与 CS2 状态，避免仍停留在“待查询”。
+			// 详情查询失败不回滚已解析的卡密/令牌结果。
+			string detailFailure = string.Empty;
+			try
+			{
+				await QueryAndSaveCsStatusAsync(
+					account.User,
+					account.Token,
+					cancellationToken);
+			}
+			catch (OperationCanceledException)
+			{
+				throw;
+			}
+			catch (Exception ex)
+			{
+				AppLog.Warn($"解析卡密后查询账号明细失败：{ex.Message}");
+				AccountInfoAvailabilityText.Text = Loc.T("Login_Availability_Valid");
+				AccountInfoAvailabilityText.Foreground = FormatHelper.GetStatusBrush(InfoBarSeverity.Success);
+				detailFailure = Loc.Tf("History_Status_QueryCsExtra_Fail_Format", ex.Message);
+			}
+
 			ShowStatus(
-				Loc.Tf("Login_Status_LicenseResolved_Format", account.User, account.SteamId),
-				InfoBarSeverity.Success);
+				Loc.Tf("Login_Status_LicenseResolved_Format", account.User, account.SteamId) + detailFailure,
+				detailFailure.Length == 0 ? InfoBarSeverity.Success : InfoBarSeverity.Warning);
 		}
 		catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
 		{
