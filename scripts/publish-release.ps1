@@ -106,11 +106,25 @@ if ($assetNames.Count -gt 0) {
 # 读 release 现有正文（读不到就当没有，不影响发布）。
 function Get-ReleaseBody([string]$Tag, [string]$Repository) {
     try {
-        $body = gh release view $Tag --repo $Repository --json body --jq '.body'
-        if ($null -eq $body) { return '' }
-        return ($body -join "`n")
+        # 不用 gh 文本输出：非交互 PowerShell 可能按本地代码页解码 UTF-8，
+        # 一旦再写回 GitHub 就会把全部历史日志变成乱码。REST 返回 JSON，编码稳定。
+        $headers = @{
+            Accept = 'application/vnd.github+json'
+            Authorization = "Bearer $env:GH_TOKEN"
+            'User-Agent' = 'SteamEYA-publish'
+            'X-GitHub-Api-Version' = '2022-11-28'
+        }
+        $escapedTag = [Uri]::EscapeDataString($Tag)
+        $release = Invoke-RestMethod `
+            -Uri "https://api.github.com/repos/$Repository/releases/tags/$escapedTag" `
+            -Headers $headers `
+            -TimeoutSec 60
+        return [string]$release.body
     }
-    catch { return '' }
+    catch {
+        # 读取失败必须中止，绝不能拿空正文覆盖现有历史。
+        throw "读取 Release 正文失败，已中止以避免覆盖历史日志：$($_.Exception.Message)"
+    }
 }
 
 # 把正文字符串切成「每个版本一块」：以 SteamEYA v… 开头的行为块首。
