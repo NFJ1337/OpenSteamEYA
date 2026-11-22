@@ -601,18 +601,9 @@ public sealed partial class MainWindow : Window
     /// <summary>历史页“载入到登录页”：切到登录页并在导航完成后填充账号。</summary>
     public void LoadAccountIntoLogin(SteamAccountHistoryItem account)
     {
-        RootNavigationView.SelectedItem = LoginNavItem;
+        _pendingLoginAccount = account;
         NavigateTo("login");
-        DispatcherQueue.TryEnqueue(() =>
-        {
-            if (ContentFrame.Content is LoginPage loginPage)
-            {
-                loginPage.LoadHistoryAccount(account);
-                return;
-            }
-
-            AppState.LoginPage?.LoadHistoryAccount(account);
-        });
+        RootNavigationView.SelectedItem = LoginNavItem;
     }
 
     private void EnsureLoginPageInitialized()
@@ -640,6 +631,7 @@ public sealed partial class MainWindow : Window
     }
 
     private string? _currentPageName;
+    private SteamAccountHistoryItem? _pendingLoginAccount;
 
     private void NavigateTo(string pageName)
     {
@@ -659,15 +651,30 @@ public sealed partial class MainWindow : Window
             _ => typeof(LoginPage)
         };
 
-        if (ContentFrame.CurrentSourcePageType != pageType ||
-            !string.Equals(_currentPageName, pageName, StringComparison.Ordinal))
+        var loginAccount = pageName == "login" ? _pendingLoginAccount : null;
+        var isSamePage =
+            ContentFrame.CurrentSourcePageType == pageType &&
+            string.Equals(_currentPageName, pageName, StringComparison.Ordinal);
+        if (!isSamePage)
         {
-            object? parameter = pageName == "whiteAccounts"
-                ? HistoryPageScope.WhiteAccounts
-                : null;
+            object? parameter = pageName switch
+            {
+                "login" => loginAccount,
+                "whiteAccounts" => HistoryPageScope.WhiteAccounts,
+                _ => null
+            };
             ContentFrame.Navigate(pageType, parameter, new EntranceNavigationTransitionInfo());
             ContentFrame.BackStack.Clear();
             _currentPageName = pageName;
+            if (pageName == "login")
+            {
+                _pendingLoginAccount = null;
+            }
+        }
+        else if (loginAccount is not null && ContentFrame.Content is LoginPage loginPage)
+        {
+            _pendingLoginAccount = null;
+            loginPage.LoadHistoryAccount(loginAccount);
         }
     }
 

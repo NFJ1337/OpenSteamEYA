@@ -25,6 +25,10 @@ namespace SteamEyaWinUI.Pages;
 public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
 {
     private readonly DispatcherQueue _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+    private readonly Brush _rowHoverBrush;
+    private readonly Brush _statusAvailableBrush;
+    private readonly Brush _statusCooldownBrush;
+    private readonly Brush _statusVacBrush;
 
     /// <summary>冷却到期轮询（30 秒一次）：只原地刷有冷却的行，不整表重建。</summary>
     private readonly DispatcherQueueTimer _cooldownTimer;
@@ -35,6 +39,10 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
     public LegacyAccountsPage()
     {
         InitializeComponent();
+        _rowHoverBrush = (Brush)Resources["LegacyRowHoverBrush"];
+        _statusAvailableBrush = (Brush)Resources["LegacyStatusAvailableBrush"];
+        _statusCooldownBrush = (Brush)Resources["LegacyStatusCooldownBrush"];
+        _statusVacBrush = (Brush)Resources["LegacyStatusVacBrush"];
         BuildGenIdMenu();
 
         // 行高亮统一在这里处理：行上的 Tapped 在点在复选框等自己处理指针的子控件上时收不到，
@@ -43,11 +51,23 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             UIElement.PointerPressedEvent,
             new PointerEventHandler(LegacyAccountList_PointerPressed),
             handledEventsToo: true);
+        LegacyAccountList.AddHandler(
+            UIElement.PointerMovedEvent,
+            new PointerEventHandler(LegacyAccountList_PointerMoved),
+            handledEventsToo: true);
 
         // 右键菜单在「松开」这一刻弹：框架的 RightTapped 还要等手势判定，实测慢约 110 ms。
         LegacyAccountList.AddHandler(
             UIElement.PointerReleasedEvent,
             new PointerEventHandler(LegacyAccountList_PointerReleased),
+            handledEventsToo: true);
+        LegacyAccountList.AddHandler(
+            UIElement.PointerCanceledEvent,
+            new PointerEventHandler(LegacyAccountList_PointerCanceled),
+            handledEventsToo: true);
+        LegacyAccountList.AddHandler(
+            UIElement.PointerCaptureLostEvent,
+            new PointerEventHandler(LegacyAccountList_PointerCaptureLost),
             handledEventsToo: true);
         Loc.LanguageChanged += OnLanguageChanged;
 
@@ -216,7 +236,14 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             }
 
             index++;
-            var row = new LegacyAccountRow(account, index, RevealHiddenContent);
+            var row = new LegacyAccountRow(
+                account,
+                index,
+                RevealHiddenContent,
+                _rowHoverBrush,
+                _statusAvailableBrush,
+                _statusCooldownBrush,
+                _statusVacBrush);
             row.PropertyChanged += LegacyAccountRow_PropertyChanged;
             Rows.Add(row);
         }
@@ -335,6 +362,11 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
     /// <summary>上一次由指针事件直接弹出右键菜单的时间（TickCount64）。</summary>
     private long _contextMenuShownAt;
 
+    private LegacyAccountRow? _checkboxDragAnchor;
+    private bool _checkboxDragActive;
+    private bool _checkboxDragSelectValue;
+    private uint _checkboxDragPointerId;
+
     /// <summary>
     /// 列表上的指针按下：左键、右键一视同仁，都把那行切成高亮（不滚动列表），
     /// 这样右键也能「选中」行，和左键行为一致。
@@ -349,6 +381,15 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         }
 
         var source = e.OriginalSource as DependencyObject;
+        var rootPosition = e.GetCurrentPoint(null).Position;
+
+        if (props.IsLeftButtonPressed &&
+            TryResolveCheckboxColumnRow(rootPosition, source, out var checkboxRow))
+        {
+            BeginCheckboxDrag(checkboxRow, e);
+            e.Handled = true;
+            return;
+        }
 
         // 勾选复选框时只做勾选，不切高亮（用户要求）。
         if (IsCheckBoxClick(source))
@@ -356,10 +397,133 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             return;
         }
 
-        var row = ResolveRowAt(e.GetCurrentPoint(null).Position, source);
+        var row = ResolveRowAt(rootPosition, source);
         if (row is not null)
         {
             HighlightRow(row, scrollToTop: false);
+        }
+    }
+
+    private bool TryResolveCheckboxColumnRow(
+        Windows.Foundation.Point rootPosition,
+        DependencyObject? source,
+        out LegacyAccountRow row)
+    {
+        row = null!;
+        if (!string.Equals(FindColumnTagAt(rootPosition), "checkbox", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var resolved = ResolveRowAt(rootPosition, source);
+        if (resolved is null)
+        {
+            return false;
+        }
+
+        row = resolved;
+        return true;
+    }
+
+    private void BeginCheckboxDrag(LegacyAccountRow row, PointerRoutedEventArgs e)
+    {
+        _checkboxDragAnchor = row;
+        _checkboxDragActive = true;
+        _checkboxDragSelectValue = !row.IsChecked;
+        _checkboxDragPointerId = e.Pointer.PointerId;
+        LegacyAccountList.CapturePointer(e.Pointer);
+        ApplyCheckboxDragRange(row);
+    }
+
+    private void ApplyCheckboxDragRange(LegacyAccountRow row)
+    {
+        if (!_checkboxDragActive || _checkboxDragAnchor is null)
+        {
+            return;
+        }
+
+        var startIndex = Rows.IndexOf(_checkboxDragAnchor);
+        var endIndex = Rows.IndexOf(row);
+        if (startIndex < 0 || endIndex < 0)
+        {
+            return;
+        }
+
+        var first = Math.Min(startIndex, endIndex);
+        var last = Math.Max(startIndex, endIndex);
+        for (var index = first; index <= last; index++)
+        {
+            Rows[index].IsChecked = _checkboxDragSelectValue;
+        }
+
+    }
+
+    private void EndCheckboxDrag()
+    {
+        if (!_checkboxDragActive)
+        {
+            return;
+        }
+
+        _checkboxDragActive = false;
+        _checkboxDragAnchor = null;
+        LegacyAccountList.ReleasePointerCaptures();
+        UpdateBatchButtonsState();
+    }
+
+    private void LegacyAccountRow_PointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is LegacyAccountRow row)
+        {
+            row.IsPointerOver = true;
+        }
+    }
+
+    private void LegacyAccountRow_PointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is LegacyAccountRow row)
+        {
+            row.IsPointerOver = false;
+        }
+    }
+
+    private void LegacyAccountList_PointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_checkboxDragActive || e.Pointer.PointerId != _checkboxDragPointerId)
+        {
+            return;
+        }
+
+        var point = e.GetCurrentPoint(LegacyAccountList);
+        if (!point.Properties.IsLeftButtonPressed)
+        {
+            EndCheckboxDrag();
+            return;
+        }
+
+        var source = e.OriginalSource as DependencyObject;
+        var rootPosition = e.GetCurrentPoint(null).Position;
+        if (TryResolveCheckboxColumnRow(rootPosition, source, out var row))
+        {
+            ApplyCheckboxDragRange(row);
+            e.Handled = true;
+        }
+    }
+
+    private void LegacyAccountList_PointerCanceled(object sender, PointerRoutedEventArgs e)
+    {
+        if (_checkboxDragActive && e.Pointer.PointerId == _checkboxDragPointerId)
+        {
+            EndCheckboxDrag();
+            e.Handled = true;
+        }
+    }
+
+    private void LegacyAccountList_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        if (_checkboxDragActive && e.Pointer.PointerId == _checkboxDragPointerId)
+        {
+            EndCheckboxDrag();
         }
     }
 
@@ -370,6 +534,20 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
     private void LegacyAccountList_PointerReleased(object sender, PointerRoutedEventArgs e)
     {
         var point = e.GetCurrentPoint(LegacyAccountList);
+        if (_checkboxDragActive && e.Pointer.PointerId == _checkboxDragPointerId)
+        {
+            var dragSource = e.OriginalSource as DependencyObject;
+            var dragPosition = e.GetCurrentPoint(null).Position;
+            if (TryResolveCheckboxColumnRow(dragPosition, dragSource, out var dragRow))
+            {
+                ApplyCheckboxDragRange(dragRow);
+            }
+
+            EndCheckboxDrag();
+            e.Handled = true;
+            return;
+        }
+
         if (point.Properties.PointerUpdateKind != Microsoft.UI.Input.PointerUpdateKind.RightButtonReleased)
         {
             return;
@@ -539,6 +717,10 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
 
             case "cooldownEnd":
                 AddCooldownMenuItems(flyout, row);
+                break;
+
+            case "cooldownRecord":
+                AddCooldownRecordMenuItems(flyout, row);
                 break;
 
             default:
@@ -1054,6 +1236,30 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         flyout.Items.Add(custom);
     }
 
+    private void AddCooldownRecordMenuItems(MenuFlyout flyout, LegacyAccountRow row)
+    {
+        var clear = new MenuFlyoutItem
+        {
+            Text = Loc.T("Common_Clear"),
+            Icon = new FontIcon { Glyph = "\uE75C" }
+        };
+        clear.Click += (_, _) => ClearCooldownRecord(row);
+        flyout.Items.Add(clear);
+    }
+
+    private void ClearCooldownRecord(LegacyAccountRow row)
+    {
+        var account = row.Item;
+        if (!AppState.WhiteAccountService.ClearCooldownRecord(account))
+        {
+            return;
+        }
+
+        account.LastCooldownAt = null;
+        account.IsCooldownRecordCleared = true;
+        row.RefreshStateFromItem();
+    }
+
     private void ApplyNote(LegacyAccountRow row, string? note)
     {
         var account = row.Item;
@@ -1143,14 +1349,20 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             account.AccountName,
             account.SteamId,
             seconds,
-            account.GcVacBanned);
+            account.GcVacBanned,
+            recordCooldownAsNew: true);
+        var updatedAt = DateTimeOffset.Now;
         account.CooldownSeconds = seconds;
         account.CooldownReason = null;
-        account.CsStatusUpdatedAt = DateTimeOffset.Now;
+        account.CsStatusUpdatedAt = updatedAt;
+        if (seconds > 0)
+        {
+            account.LastCooldownAt = updatedAt;
+            account.IsCooldownRecordCleared = false;
+        }
 
-        // 统一走一次重载：事件会把本页（重建 + 回到原高亮行）和「账号查询」页一起刷新，
-        // 两边看到的冷却 / 可用立刻一致（不再只刷本行、让另一页拿着旧值）。
-        AppState.ReloadWhiteAccounts(account.SteamId);
+        // JSON 已在上方写入；这里只刷新当前行的绑定，不重建页面或滚动列表。
+        row.RefreshStateFromItem();
     }
 
     private async Task PromptCustomCooldownAsync(LegacyAccountRow row)
@@ -1292,7 +1504,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             {
                 try
                 {
-                    await AppState.WhiteAccountService.RefreshProfilesAsync([result.SteamId]);
+                    await AppState.WhiteAccountService.RefreshProfilesAsync(new[] { result.SteamId });
                 }
                 catch (Exception ex)
                 {
@@ -1740,14 +1952,30 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
 public sealed partial class LegacyAccountRow : INotifyPropertyChanged
 {
     private bool _isChecked;
+    private bool _isPointerOver;
+    private readonly Brush _rowHoverBrush;
+    private readonly Brush _statusAvailableBrush;
+    private readonly Brush _statusCooldownBrush;
+    private readonly Brush _statusVacBrush;
 
     /// <summary>遮住内容时统一用 8 个星号（列本身始终显示）。</summary>
     private const string Mask = "********";
 
-    internal LegacyAccountRow(SteamAccountHistoryItem item, int index, bool revealHiddenContent)
+    internal LegacyAccountRow(
+        SteamAccountHistoryItem item,
+        int index,
+        bool revealHiddenContent,
+        Brush rowHoverBrush,
+        Brush statusAvailableBrush,
+        Brush statusCooldownBrush,
+        Brush statusVacBrush)
     {
         Item = item;
         IndexText = index.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        _rowHoverBrush = rowHoverBrush;
+        _statusAvailableBrush = statusAvailableBrush;
+        _statusCooldownBrush = statusCooldownBrush;
+        _statusVacBrush = statusVacBrush;
 
         AccountName = item.AccountName;
         Password = item.Password;
@@ -1759,18 +1987,14 @@ public sealed partial class LegacyAccountRow : INotifyPropertyChanged
             ? Loc.T("Legacy_Status_Vac")
             : hasCooldown ? Loc.T("Legacy_Status_Cooldown") : Loc.T("Legacy_Status_Available");
 
-        // 状态列按状态上色：可用=绿、冷却中=橙、VAC 封禁=红。
-        // 画刷走 FormatHelper 的主题感知取法，深浅色模式下都取得到对应变体。
-        StatusBrush = item.GcVacBanned == true
-            ? FormatHelper.GetStatusBrush(InfoBarSeverity.Error)
-            : hasCooldown
-                ? FormatHelper.GetWarningBrush()
-                : FormatHelper.GetStatusBrush(InfoBarSeverity.Success);
+        // 本页固定为深梅色冰态玻璃，状态色使用页面专用高亮画刷，避免跟随全局浅色主题变暗。
+        _statusBrush = ResolveStatusBrush(item.GcVacBanned == true, hasCooldown);
 
         // 冷却时间列：冷却结束的绝对时间（本地时间，按查询锚点折算）；VAC 直接写 VAC。
         CooldownEndText = item.GcVacBanned == true
             ? "VAC"
-            : item.CooldownEndText;
+            : item.CooldownTimeDisplayText;
+        CooldownRecordText = item.CooldownRecordText;
 
         // 老版「其他」列放邮箱信息：邮箱----邮箱密码。
         Others = string.IsNullOrWhiteSpace(item.Email)
@@ -1806,6 +2030,23 @@ public sealed partial class LegacyAccountRow : INotifyPropertyChanged
 
     public string IndexText { get; }
 
+    public Brush? HoverBrush => _isPointerOver ? _rowHoverBrush : null;
+
+    public bool IsPointerOver
+    {
+        get => _isPointerOver;
+        set
+        {
+            if (_isPointerOver == value)
+            {
+                return;
+            }
+
+            _isPointerOver = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HoverBrush)));
+        }
+    }
+
     public string AccountName { get; }
 
     public string Password { get; }
@@ -1831,7 +2072,7 @@ public sealed partial class LegacyAccountRow : INotifyPropertyChanged
     }
 
     /// <summary>状态列的文字颜色：可用=绿、冷却中=橙、VAC 封禁=红。</summary>
-    private Brush _statusBrush = FormatHelper.GetStatusBrush(InfoBarSeverity.Success);
+    private Brush _statusBrush;
 
     public Brush StatusBrush
     {
@@ -1883,6 +2124,23 @@ public sealed partial class LegacyAccountRow : INotifyPropertyChanged
         }
     }
 
+    private string _cooldownRecordText = string.Empty;
+
+    public string CooldownRecordText
+    {
+        get => _cooldownRecordText;
+        private set
+        {
+            if (_cooldownRecordText == value)
+            {
+                return;
+            }
+
+            _cooldownRecordText = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CooldownRecordText)));
+        }
+    }
+
     public string Others { get; }
 
     /// <summary>其他列显示内容：默认 ********，勾选后是「邮箱----邮箱密码」。</summary>
@@ -1913,11 +2171,15 @@ public sealed partial class LegacyAccountRow : INotifyPropertyChanged
         StatusText = isVacBanned
             ? Loc.T("Legacy_Status_Vac")
             : hasCooldown ? Loc.T("Legacy_Status_Cooldown") : Loc.T("Legacy_Status_Available");
-        StatusBrush = isVacBanned
-            ? FormatHelper.GetStatusBrush(InfoBarSeverity.Error)
-            : hasCooldown ? FormatHelper.GetWarningBrush() : FormatHelper.GetStatusBrush(InfoBarSeverity.Success);
+        StatusBrush = ResolveStatusBrush(isVacBanned, hasCooldown);
         CooldownEndText = isVacBanned
             ? "VAC"
-            : Item.CooldownEndText;
+            : Item.CooldownTimeDisplayText;
+        CooldownRecordText = Item.CooldownRecordText;
     }
+
+    private Brush ResolveStatusBrush(bool isVacBanned, bool hasCooldown) =>
+        isVacBanned
+            ? _statusVacBrush
+            : hasCooldown ? _statusCooldownBrush : _statusAvailableBrush;
 }

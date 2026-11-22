@@ -103,8 +103,8 @@ internal sealed class CsPremierScoreService
             // 并下发 9110。只发一次「进入」时，若 Steam 端认为该账号上一会话还挂着 730，
             // 就不会重跑初始化 —— 日志里就是首轮 10 秒都等不到 9110，反而要等重连循环
             // （那轮正是先退出再进入）才拿到，白白多花十几秒。
-            await cmClient.SetGamesPlayedAsync([], cancellationToken);
-            await cmClient.SetGamesPlayedAsync([CsGcSession.Cs2AppId], cancellationToken);
+            await cmClient.SetGamesPlayedAsync(Array.Empty<uint>(), cancellationToken);
+            await cmClient.SetGamesPlayedAsync(new[] { CsGcSession.Cs2AppId }, cancellationToken);
             await CsGcSession.ConnectAsync(cmClient, cancellationToken);
             AppLog.Info($"[query] 总耗时里程碑：进入 CS2 GC {queryWatch.ElapsedMilliseconds} ms");
 
@@ -157,10 +157,10 @@ internal sealed class CsPremierScoreService
 
                 try
                 {
-                    await cmClient.SetGamesPlayedAsync([], cancellationToken);
+                    await cmClient.SetGamesPlayedAsync(Array.Empty<uint>(), cancellationToken);
                     await Task.Delay(GcReconnectDelay, cancellationToken);
                     helloTask = WaitForMatchmakingHelloAsync(cmClient, cancellationToken);
-                    await cmClient.SetGamesPlayedAsync([CsGcSession.Cs2AppId], cancellationToken);
+                    await cmClient.SetGamesPlayedAsync(new[] { CsGcSession.Cs2AppId }, cancellationToken);
                     await CsGcSession.ConnectAsync(cmClient, cancellationToken);
                 }
                 catch (TimeoutException)

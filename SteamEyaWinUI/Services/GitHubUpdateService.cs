@@ -20,13 +20,14 @@ internal sealed class GitHubUpdateService
     private static readonly HttpClient HttpClient = CreateHttpClient();
 
     private static readonly IReadOnlyList<GitHubProxySite> ProxySites =
-    [
+    new GitHubProxySite[]
+    {
         new("direct", "Direct", null),
         new("gh-proxy.org", "gh-proxy.org", "https://gh-proxy.org/"),
         new("v4.gh-proxy.org", "v4.gh-proxy.org", "https://v4.gh-proxy.org/"),
         new("v6.gh-proxy.org", "v6.gh-proxy.org", "https://v6.gh-proxy.org/"),
         new("cdn.gh-proxy.org", "cdn.gh-proxy.org", "https://cdn.gh-proxy.org/")
-    ];
+    };
 
     private string _selectedProxyCode = "direct";
 

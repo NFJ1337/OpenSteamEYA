@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Navigation;
 using SteamEyaWinUI.Localization;
 using SteamEyaWinUI.Models;
 using SteamEyaWinUI.Services;
@@ -42,6 +43,8 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
     // （本地化后历史后缀文案不再含固定中文前缀，故改用此标志替代原先的字符串前缀判断）。
     private bool _lastLoginHistorySaveFailed;
     private bool _pendingTokenLoginSelection;
+    private SteamAccountHistoryItem? _pendingNavigatedHistoryAccount;
+    private bool _pendingNavigatedHistoryAccountQueued;
     private string? _accountInfoPanelSteamId;
     private GridLength _sideColumnWidth = new(340);
     // ---------- 账号核验（卡密）模块状态 ----------
@@ -212,14 +215,47 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
             InfoBarSeverity.Informational);
     }
 
+    protected override void OnNavigatedTo(NavigationEventArgs e)
+    {
+        base.OnNavigatedTo(e);
+        if (e.Parameter is SteamAccountHistoryItem account)
+        {
+            _pendingNavigatedHistoryAccount = account;
+            if (IsLoaded && !_pendingNavigatedHistoryAccountQueued)
+            {
+                _pendingNavigatedHistoryAccountQueued = true;
+                _dispatcherQueue.TryEnqueue(() =>
+                {
+                    _pendingNavigatedHistoryAccountQueued = false;
+                    ApplyPendingNavigatedHistoryAccount();
+                });
+            }
+        }
+    }
+
     private void LoginPage_Loaded(object sender, RoutedEventArgs e)
     {
+        ApplyPendingNavigatedHistoryAccount();
         if (!_pendingTokenLoginSelection)
         {
             return;
         }
 
         ApplyTokenLoginSelection();
+        _pendingTokenLoginSelection = false;
+    }
+
+    private void ApplyPendingNavigatedHistoryAccount()
+    {
+        var account = _pendingNavigatedHistoryAccount;
+        if (account is null)
+        {
+            return;
+        }
+
+        _pendingNavigatedHistoryAccount = null;
+        LoadHistoryAccount(account);
+        // LoadHistoryAccount 已立即切到 Token 模式；不要让 Loaded 再重复切换一次。
         _pendingTokenLoginSelection = false;
     }
 

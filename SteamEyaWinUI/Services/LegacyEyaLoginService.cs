@@ -120,20 +120,23 @@ internal sealed class LegacyEyaLoginService
 
         foreach (var user in users.Values.OfType<Dictionary<string, object>>())
         {
-            user["MostRecent"] = "0";
+            SteamConfigService.ApplyLoginUserSelectionState(user, isSelected: false);
         }
 
-        users[steamId] = new Dictionary<string, object>
+        var cachedUser = new Dictionary<string, object>
         {
             ["AccountName"] = accountName,
             ["PersonaName"] = accountName,
             ["RememberPassword"] = "1",
             ["WantsOfflineMode"] = "0",
             ["SkipOfflineModeWarning"] = "0",
-            ["AllowAutoLogin"] = "1",
-            ["MostRecent"] = "1",
-            ["Timestamp"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString()
+            ["AllowAutoLogin"] = "1"
         };
+        SteamConfigService.ApplyLoginUserSelectionState(
+            cachedUser,
+            isSelected: true,
+            DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        users[steamId] = cachedUser;
         SteamConfigService.BackupBeforeWrite(path);
         VdfDocument.Save(path, loginUsers);
     }

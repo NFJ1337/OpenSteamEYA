@@ -392,7 +392,8 @@ internal sealed class AccountHistoryService
         uint cooldownSeconds,
         bool? vacBanned,
         string? refreshToken = null,
-        DateTimeOffset? tokenExpiresAt = null)
+        DateTimeOffset? tokenExpiresAt = null,
+        bool recordCooldownAsNew = false)
     {
         accountName = accountName.Trim();
         steamId = steamId.Trim();
@@ -418,6 +419,8 @@ internal sealed class AccountHistoryService
 
             item.AccountName = accountName;
             item.SteamId = steamId;
+            var updatedAt = DateTimeOffset.Now;
+            CaptureCooldownStart(item, cooldownSeconds, recordCooldownAsNew, updatedAt);
             item.CooldownSeconds = cooldownSeconds;
             item.CooldownReason = null;
             if (vacBanned.HasValue)
@@ -436,7 +439,7 @@ internal sealed class AccountHistoryService
             }
 
             ApplySteamLastLogin(item, ReadSteamLastLoginMap(), steamId);
-            item.CsStatusUpdatedAt = DateTimeOffset.Now;
+            item.CsStatusUpdatedAt = updatedAt;
             document.Accounts = NormalizeAccounts(document.Accounts).ToList();
             WriteDocument(document);
         }
@@ -542,18 +545,47 @@ internal sealed class AccountHistoryService
     /// </summary>
     private static void ApplyCsStatus(SteamAccountHistoryItem item, CsPremierScoreResult score)
     {
+        var updatedAt = DateTimeOffset.Now;
+        CaptureCooldownStart(item, score.PenaltySeconds, force: false, updatedAt: updatedAt);
         item.CompetitiveScore = score.DisplayText;
         item.AccountStatus = score.StatusText;
         item.PremierScore = score.PremierRanking is null ? null : checked((int)score.PremierRanking.RankId);
         item.PremierWins = score.PremierRanking is null ? null : checked((int)score.PremierRanking.Wins);
-        item.PremierScoreUpdatedAt = DateTimeOffset.Now;
+        item.PremierScoreUpdatedAt = updatedAt;
         item.CooldownSeconds = score.PenaltySeconds;
         item.CooldownReason = score.PenaltyReason;
         item.GcVacBanned = score.GcVacBannedOrUnknown;
         item.CsPlayerLevel = score.PlayerLevel;
         item.InCsMatch = score.InMatch;
         item.Cs2IsChina = score.Cs2IsChina;
-        item.CsStatusUpdatedAt = DateTimeOffset.Now;
+        item.CsStatusUpdatedAt = updatedAt;
+    }
+
+    /// <summary>
+    /// 只在冷却刚开始、旧记录缺少历史时间，或用户手动设置冷却时更新“上次冷却时间”；
+    /// 查询同一段仍在进行的冷却不会把距今天数重置为 0。
+    /// </summary>
+    private static void CaptureCooldownStart(
+        SteamAccountHistoryItem item,
+        uint? cooldownSeconds,
+        bool force,
+        DateTimeOffset updatedAt)
+    {
+        if (!(cooldownSeconds is > 0 and <= int.MaxValue))
+        {
+            return;
+        }
+
+        if (force || !item.HasLiveCooldown)
+        {
+            item.LastCooldownAt = updatedAt;
+            item.IsCooldownRecordCleared = false;
+        }
+        else if (item.LastCooldownAt is null && !item.IsCooldownRecordCleared)
+        {
+            item.LastCooldownAt = item.LastCooldownRecordAt ?? updatedAt;
+            item.IsCooldownRecordCleared = false;
+        }
     }
 
     /// <summary>
@@ -642,6 +674,31 @@ internal sealed class AccountHistoryService
             item.Note = normalized;
             document.Accounts = NormalizeAccounts(document.Accounts).ToList();
             WriteDocument(document);
+        }
+        finally
+        {
+            _fileGate.Release();
+        }
+    }
+
+    /// <summary>清空账号的上次冷却记录；当前冷却状态与结束时间保持不变。</summary>
+    public bool ClearCooldownRecord(SteamAccountHistoryItem account)
+    {
+        _fileGate.Wait();
+        try
+        {
+            var document = ReadDocumentForWrite();
+            var item = FindExisting(document.Accounts, account.SteamId, account.AccountName);
+            if (item is null)
+            {
+                return false;
+            }
+
+            item.LastCooldownAt = null;
+            item.IsCooldownRecordCleared = true;
+            document.Accounts = NormalizeAccounts(document.Accounts).ToList();
+            WriteDocument(document);
+            return true;
         }
         finally
         {

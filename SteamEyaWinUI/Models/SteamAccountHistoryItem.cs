@@ -92,6 +92,12 @@ public sealed partial class SteamAccountHistoryItem : INotifyPropertyChanged
 
     public uint? CooldownReason { get; set; }
 
+    /// <summary>最近一次检测到或手动设置新冷却的时间；刷新同一段冷却时保持不变。</summary>
+    public DateTimeOffset? LastCooldownAt { get; set; }
+
+    /// <summary>用户是否清空了冷却记录；避免当前冷却快照的兼容回填再次显示旧记录。</summary>
+    public bool IsCooldownRecordCleared { get; set; }
+
     public bool? GcVacBanned { get; set; }
 
     public int? CsPlayerLevel { get; set; }
@@ -194,6 +200,12 @@ public sealed partial class SteamAccountHistoryItem : INotifyPropertyChanged
     /// <summary>冷却锚点：查询写入冷却快照的时刻，用于扣除已流逝时间。</summary>
     private DateTimeOffset? CooldownAnchor => CsStatusUpdatedAt ?? PremierScoreUpdatedAt;
 
+    /// <summary>旧记录没有 LastCooldownAt 时，用当前冷却快照的写入锚点兼容显示。</summary>
+    [JsonIgnore]
+    public DateTimeOffset? LastCooldownRecordAt =>
+        LastCooldownAt ??
+        (!IsCooldownRecordCleared && CooldownSeconds is > 0 ? CooldownAnchor : null);
+
     /// <summary>
     /// 实时剩余冷却秒数。语义与 <see cref="CooldownSeconds"/> 一致：null=未知（GC 未答）/ 0=无冷却 / 正=剩余秒。
     /// 仅当快照为 (0, int.MaxValue] 且有锚点时才扣除流逝；否则原样透传，交由格式化按未知/无冷却判定。
@@ -255,6 +267,35 @@ public sealed partial class SteamAccountHistoryItem : INotifyPropertyChanged
     [JsonIgnore]
     public string CooldownEndText =>
         CooldownEndTime?.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
+
+    /// <summary>上次冷却的时间戳；没有冷却历史时为空串。</summary>
+    [JsonIgnore]
+    public string CooldownRecordText =>
+        LastCooldownRecordAt?.ToLocalTime().ToString(
+            "yyyy-MM-dd HH:mm",
+            System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
+
+    /// <summary>冷却时间列：在冷却结束时间后追加“结束时间 − 当前时间”的剩余时长。</summary>
+    [JsonIgnore]
+    public string CooldownTimeDisplayText
+    {
+        get
+        {
+            var cooldownEndTime = CooldownEndTime;
+            if (!cooldownEndTime.HasValue || DateTimeOffset.Now >= cooldownEndTime.Value)
+            {
+                return string.Empty;
+            }
+
+            var endText = cooldownEndTime.Value.ToString(
+                "yyyy-MM-dd HH:mm",
+                System.Globalization.CultureInfo.InvariantCulture);
+            var remainingText = RemainingCooldownText;
+            return string.IsNullOrWhiteSpace(remainingText)
+                ? endText
+                : $"{endText} · {remainingText}";
+        }
+    }
 
     [JsonIgnore]
     public bool HasNote => !string.IsNullOrWhiteSpace(Note);

@@ -138,6 +138,7 @@
     "Legacy_Col_Available": "可用时间",
     "Legacy_Col_Cooldown": "冷却时间",
     "Legacy_Col_CooldownEnd": "冷却结束时间",
+    "Legacy_Col_CooldownRecord": "冷却记录",
     "Legacy_Col_Others": "其他",
     "Legacy_Status_Available": "可用",
     "Legacy_Status_Cooldown": "冷却中",

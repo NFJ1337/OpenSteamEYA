@@ -90,7 +90,7 @@ internal sealed class CsLoadoutService
 
             try
             {
-                await cmClient.SetGamesPlayedAsync([CsGcSession.Cs2AppId], cancellationToken);
+                await cmClient.SetGamesPlayedAsync(new[] { CsGcSession.Cs2AppId }, cancellationToken);
                 var welcomePayload = await CsGcSession.ConnectAsync(cmClient, cancellationToken);
 
                 // 读当前配装（welcome 内嵌 SO 缓存，已放宽到全槽位）。SO 缓存只存与游戏内置默认布局不同的

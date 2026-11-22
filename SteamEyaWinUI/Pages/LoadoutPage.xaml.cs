@@ -109,7 +109,7 @@ public sealed partial class LoadoutPage : Page, INotifyPropertyChanged
         _cells.Clear();
         BuildColumn(Col0Host,
         [
-            (Loc.T("Loadout_Group_Starter"), CsLoadoutGroup.StarterPistol, [CsWeaponCatalog.StarterPistolSlot]),
+            (Loc.T("Loadout_Group_Starter"), CsLoadoutGroup.StarterPistol, new[] { CsWeaponCatalog.StarterPistolSlot }),
             (Loc.T("Loadout_Group_Other"), CsLoadoutGroup.OtherPistol, CsWeaponCatalog.OtherPistolSlots)
         ]);
         BuildColumn(Col1Host, [(Loc.T("Loadout_Group_Mid"), CsLoadoutGroup.Mid, CsWeaponCatalog.MidSlots)]);

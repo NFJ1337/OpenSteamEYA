@@ -53,7 +53,7 @@ internal static class CsWeaponCatalog
     public static readonly uint[] MidSlots = [8, 9, 10, 11, 12];
     public static readonly uint[] RifleSlots = [14, 15, 16, 17, 18];
 
-    public static readonly IReadOnlyList<CsWeapon> All =
+    public static readonly CsWeapon[] All =
     [
         // 近战刀按需求忽略（对快速上号无影响），不在目录里。
 

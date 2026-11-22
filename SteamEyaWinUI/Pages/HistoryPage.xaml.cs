@@ -694,14 +694,14 @@ public sealed partial class HistoryPage : Page, INotifyPropertyChanged
             return;
         }
 
-        ExportAccountsToClipboard([account]);
+        ExportAccountsToClipboard(new[] { account });
     }
 
     private async void CardDeleteButton_Click(object sender, RoutedEventArgs e)
     {
         if (CardItem(sender) is { } account)
         {
-            await DeleteAccountsWithConfirmAsync([account]);
+            await DeleteAccountsWithConfirmAsync(new[] { account });
         }
     }
 

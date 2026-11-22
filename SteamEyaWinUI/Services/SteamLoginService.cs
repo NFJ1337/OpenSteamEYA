@@ -83,6 +83,8 @@ internal sealed class SteamLoginService
         if (!string.IsNullOrWhiteSpace(targetSteamId))
         {
             TrySyncCs2UserdataFolders(paths, targetSteamId, progress);
+            progress?.Report(Loc.T("Steam_Progress_WritingConfig"));
+            _steamConfigService.RememberLoginAccount(paths, accountName, targetSteamId);
         }
         _steamProcessService.LaunchSteamWithPassword(paths, accountName, password);
 
@@ -114,6 +116,7 @@ internal sealed class SteamLoginService
                 if (matched is not null)
                 {
                     AppLog.Info($"账号密码登录：Steam 登录后解析到 SteamID={matched.SteamId}（{accountName}），开始 CS2 云推送。");
+                    _steamConfigService.RememberLoginAccount(paths, accountName, matched.SteamId);
                     TryPushCs2Cloud(paths, matched.SteamId, progress);
                     return;
                 }

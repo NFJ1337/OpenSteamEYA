@@ -98,6 +98,24 @@ internal sealed class SteamConfigService
         AppLog.Info($"已写入 local.vdf（{FileLength(paths.LocalVdfPath)} 字节）：\"{paths.LocalVdfPath}\"");
     }
 
+    /// <summary>
+    /// 密码登录不会经过 EYA 的 ConnectCache 写入流程，Steam 新版本又不再可靠地把
+    /// <c>-login &lt;账号&gt; &lt;密码&gt; -RememberPassword</c> 自动补进登录列表。
+    /// 因此在启动 Steam 前先写入 config.vdf 与 loginusers.vdf，让账号出现在选择列表；
+    /// 这里不伪造 ConnectCache，真正的免密连接令牌仍由 Steam 登录成功后自行保存。
+    /// </summary>
+    public void RememberLoginAccount(SteamPaths paths, string accountName, string steamId)
+    {
+        Directory.CreateDirectory(paths.ConfigPath);
+
+        var configPath = Path.Combine(paths.ConfigPath, "config.vdf");
+        var loginUsersPath = Path.Combine(paths.ConfigPath, "loginusers.vdf");
+
+        UpdateConfigVdf(configPath, accountName, steamId);
+        UpdateLoginUsersVdf(loginUsersPath, accountName, steamId);
+        AppLog.Info($"已预写账号缓存（config.vdf/loginusers.vdf）：{accountName} / {steamId}");
+    }
+
     public void RestoreLoginFiles(SteamPaths paths, CachedSteamLoginAccount account)
     {
         Directory.CreateDirectory(paths.ConfigPath);
@@ -186,7 +204,7 @@ internal sealed class SteamConfigService
             if (users.TryGetValue(steamId, out var currentValue) &&
                 currentValue is Dictionary<string, object> currentUser)
             {
-                foreach (var key in new[] { "AccountName", "RememberPassword", "AllowAutoLogin", "WantsOfflineMode", "SkipOfflineModeWarning" })
+                foreach (var key in new[] { "AccountName", "RememberPassword", "AutoLogin", "WantsOfflineMode", "SkipOfflineModeWarning" })
                 {
                     if (savedUser.TryGetValue(key, out var savedValue))
                     {
@@ -194,12 +212,12 @@ internal sealed class SteamConfigService
                     }
                 }
 
-                currentUser["MostRecent"] = "0";
+                ApplyLoginUserSelectionState(currentUser, isSelected: false);
             }
             else
             {
                 var restored = (Dictionary<string, object>)CloneVdfValue(savedUser);
-                restored["MostRecent"] = "0";
+                ApplyLoginUserSelectionState(restored, isSelected: false);
                 users[steamId] = restored;
             }
         }
@@ -355,20 +373,23 @@ internal sealed class SteamConfigService
 
         foreach (var user in users.Values.OfType<Dictionary<string, object>>())
         {
-            user["MostRecent"] = "0";
+            ApplyLoginUserSelectionState(user, isSelected: false);
         }
 
-        users[steamId] = new Dictionary<string, object>
+        var cachedUser = new Dictionary<string, object>
         {
             ["AccountName"] = accountName,
             ["PersonaName"] = accountName,
             ["RememberPassword"] = "1",
             ["WantsOfflineMode"] = "0",
             ["SkipOfflineModeWarning"] = "0",
-            ["AllowAutoLogin"] = "1",
-            ["MostRecent"] = "1",
-            ["Timestamp"] = DateTimeOffset.Now.ToUnixTimeSeconds().ToString()
+            ["AllowAutoLogin"] = "1"
         };
+        ApplyLoginUserSelectionState(
+            cachedUser,
+            isSelected: true,
+            DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        users[steamId] = cachedUser;
 
         BackupBeforeWrite(path);
         VdfDocument.Save(path, loginUsers);
@@ -380,7 +401,7 @@ internal sealed class SteamConfigService
 
         foreach (var user in users.Values.OfType<Dictionary<string, object>>())
         {
-            user["MostRecent"] = "0";
+            ApplyLoginUserSelectionState(user, isSelected: false);
         }
 
         var restoredUser = EnsureObject(users, account.SteamId);
@@ -396,8 +417,10 @@ internal sealed class SteamConfigService
         restoredUser["WantsOfflineMode"] = "0";
         restoredUser["SkipOfflineModeWarning"] = "0";
         restoredUser["AllowAutoLogin"] = "1";
-        restoredUser["MostRecent"] = "1";
-        restoredUser["Timestamp"] = DateTimeOffset.Now.ToUnixTimeSeconds().ToString();
+        ApplyLoginUserSelectionState(
+            restoredUser,
+            isSelected: true,
+            DateTimeOffset.UtcNow.ToUnixTimeSeconds());
 
         BackupBeforeWrite(path);
         VdfDocument.Save(path, loginUsers);
@@ -442,6 +465,49 @@ internal sealed class SteamConfigService
         var created = new Dictionary<string, object>(StringComparer.Ordinal);
         parent[key] = created;
         return created;
+    }
+
+    /// <summary>
+    /// Steam 2026-11 新客户端使用 AutoLogin + 小写 timestamp；旧客户端使用
+    /// AllowAutoLogin + MostRecent + Timestamp。写入时兼容两代字段，避免任一端忽略条目。
+    /// </summary>
+    internal static void ApplyLoginUserSelectionState(
+        Dictionary<string, object> user,
+        bool isSelected,
+        long? unixTimestamp = null)
+    {
+        var selectedValue = isSelected ? "1" : "0";
+        SetCaseInsensitiveValue(user, "AutoLogin", selectedValue);
+        SetCaseInsensitiveValue(user, "MostRecent", selectedValue);
+
+        if (VdfDocument.GetValue(user, "AllowAutoLogin") is not null)
+        {
+            SetCaseInsensitiveValue(user, "AllowAutoLogin", selectedValue);
+        }
+
+        if (isSelected && unixTimestamp.HasValue)
+        {
+            SetCaseInsensitiveValue(
+                user,
+                "timestamp",
+                unixTimestamp.Value.ToString(CultureInfo.InvariantCulture));
+        }
+    }
+
+    private static void SetCaseInsensitiveValue(
+        Dictionary<string, object> values,
+        string key,
+        string value)
+    {
+        var existingKey = values.Keys.FirstOrDefault(candidate =>
+            string.Equals(candidate, key, StringComparison.OrdinalIgnoreCase));
+        if (existingKey is not null &&
+            !string.Equals(existingKey, key, StringComparison.Ordinal))
+        {
+            values.Remove(existingKey);
+        }
+
+        values[key] = value;
     }
 
     private static CachedSteamLoginAccount? GetActiveLoginAccount(
