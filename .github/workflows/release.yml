@@ -1,14 +1,15 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
       version:
         description: "Release version without leading v (example: 0.1.42)"
-        required: false
+        required: true
+        type: string
+      notes:
+        description: "Release notes, one item per line"
+        required: true
         type: string
 
 concurrency:
@@ -39,31 +40,23 @@ jobs:
         shell: pwsh
         # 通过 env 传入不可信 / 上下文输入，避免 ${{ }} 直接插值进脚本导致命令注入。
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          REF_TYPE: ${{ github.ref_type }}
-          REF_NAME: ${{ github.ref_name }}
           INPUT_VERSION: ${{ github.event.inputs.version }}
-          RUN_NUMBER: ${{ github.run_number }}
+          INPUT_NOTES: ${{ github.event.inputs.notes }}
         run: |
           New-Item -ItemType Directory -Force -Path .\artifacts | Out-Null
 
-          $eventName = $env:EVENT_NAME
-          $refType = $env:REF_TYPE
-          $refName = $env:REF_NAME
           $inputVersion = $env:INPUT_VERSION
+          $inputNotes = $env:INPUT_NOTES
 
-          if ($eventName -eq "push" -and $refType -eq "tag" -and $refName.StartsWith("v")) {
-            $tag = $refName
-            $version = $refName.Substring(1)
+          if ([string]::IsNullOrWhiteSpace($inputVersion)) {
+            throw "version input is required."
           }
-          elseif (-not [string]::IsNullOrWhiteSpace($inputVersion)) {
-            $version = ($inputVersion.Trim() -replace '^[vV]', '')
-            $tag = "v$version"
+          if ([string]::IsNullOrWhiteSpace($inputNotes)) {
+            throw "Release notes are required. Commit subjects are not used as release notes."
           }
-          else {
-            $version = "0.1.$($env:RUN_NUMBER)"
-            $tag = "v$version"
-          }
+
+          $version = ($inputVersion.Trim() -replace '^[vV]', '')
+          $tag = "v$version"
 
           # 版本号必须是 X.Y.Z：非法值（预发布 tag、四段号、拼写错误）在此立即失败，
           # 而不是深入到 AOT publish 才因 AssemblyVersion 非法而报 CS7034。
@@ -71,20 +64,16 @@ jobs:
             throw "Version must be X.Y.Z (e.g. 0.1.42), got '$version' from ref/input."
           }
 
-          $shortSha = "${{ github.sha }}".Substring(0, 7)
-          # 排除正在发布的这个 tag：tag-push 时 checkout 已带上该 tag，否则它会被选成「上一个 tag」，
-          # 使 previousTag..HEAD 为空、changelog 永远退化成占位符。
-          $previousTag = git tag --list "v*" --sort=-v:refname | Where-Object { $_ -ne $tag } | Select-Object -First 1
-
-          if ([string]::IsNullOrWhiteSpace($previousTag)) {
-            $logRange = "HEAD"
-          } else {
-            $logRange = "$previousTag..HEAD"
-          }
-
-          $changes = @(git log $logRange --pretty=format:"- %s (%h)" --no-merges)
+          $changes = @(
+            $inputNotes -split "\r?\n" |
+              ForEach-Object { $_.Trim() } |
+              Where-Object { $_ } |
+              ForEach-Object {
+                if ($_ -match '^[-*]') { $_ } else { "- $_" }
+              }
+          )
           if ($changes.Count -eq 0) {
-            $changes = @("- 内部维护更新。")
+            throw "Release notes did not contain any non-empty lines."
           }
 
           $changelogPath = Join-Path $PWD "artifacts\changelog.txt"
@@ -92,24 +81,13 @@ jobs:
 
           $changes | Set-Content -LiteralPath $changelogPath -Encoding UTF8
           @(
-            "# SteamEYA $tag"
+            "SteamEYA v$version"
             ""
-            "版本号：``$tag``"
-            "平台：``Windows x64``（Native AOT 原生编译 + 自包含）"
-            "提交：``$shortSha``"
-            ""
-            "## 更新日志"
             $changes
-            ""
-            "## 运行依赖"
-            "- Windows 10 1809 / Windows 11，x64。"
-            "- 无需安装任何运行时：Native AOT 原生编译 + Windows App SDK 自包含。"
-            "- 推荐直接下载并运行安装包（Setup.exe）。"
           ) | Set-Content -LiteralPath $notesPath -Encoding UTF8
 
           "version=$version" >> $env:GITHUB_OUTPUT
           "tag=$tag" >> $env:GITHUB_OUTPUT
-          "short_sha=$shortSha" >> $env:GITHUB_OUTPUT
           "notes_path=$notesPath" >> $env:GITHUB_OUTPUT
           "changelog_path=$changelogPath" >> $env:GITHUB_OUTPUT
 
@@ -200,20 +178,6 @@ jobs:
 
           $sha256 = (Get-FileHash -LiteralPath $artifactPath -Algorithm SHA256).Hash.ToLowerInvariant()
 
-          # 把 SHA-256 附到 Release 说明（说明经 github.com 官方 TLS 展示，可信）。
-          # 经代理站下载安装包的用户可据此手动核验，抵御代理投毒。
-          Add-Content -LiteralPath "${{ steps.meta.outputs.notes_path }}" -Encoding UTF8 -Value @(
-            ""
-            "## 文件校验 (SHA-256)"
-            "下载后建议核验安装包完整性（尤其是经代理站下载时）。PowerShell 运行："
-            '```'
-            "Get-FileHash .\$artifactName -Algorithm SHA256"
-            '```'
-            "应与下方一致："
-            "- ``$artifactName``"
-            "  ``$sha256``"
-          )
-
           $changelog = @(Get-Content -LiteralPath "${{ steps.meta.outputs.changelog_path }}")
           $metadata = [ordered]@{
             version = "${{ steps.meta.outputs.version }}"
@@ -260,9 +224,8 @@ jobs:
           if ($LASTEXITCODE -eq 0 -and $existing -eq $tag) { $exists = $true }
 
           if ($exists) {
-            gh release upload $tag $artifact --clobber
-            gh release upload $tag $metadata --clobber
-            gh release edit $tag --title $title --notes-file $notes --target $target --latest=$isLatest
+            Write-Host "Release $tag already exists. Skipping to preserve its notes and assets."
+            exit 0
           }
           else {
             gh release create $tag $artifact $metadata --target $target --title $title --notes-file $notes --latest=$isLatest
