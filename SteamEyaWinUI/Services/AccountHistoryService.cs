@@ -421,6 +421,11 @@ internal sealed class AccountHistoryService
             item.SteamId = steamId;
             var updatedAt = DateTimeOffset.Now;
             CaptureCooldownStart(item, cooldownSeconds, recordCooldownAsNew, updatedAt);
+            if (recordCooldownAsNew && cooldownSeconds is > 0 and <= int.MaxValue)
+            {
+                item.LastCooldownSelectionSeconds = cooldownSeconds;
+            }
+
             item.CooldownSeconds = cooldownSeconds;
             item.CooldownReason = null;
             if (vacBanned.HasValue)
@@ -480,66 +485,6 @@ internal sealed class AccountHistoryService
     }
 
     /// <summary>
-    /// 白号查询结果的一次性落盘：
-    /// · 令牌相关的永远写——令牌、过期时间（「JWT 过期」）、可用状态（「JWT 可用状态」）、Steam64；
-    /// · CS2 那几个字段只在 <paramref name="score"/> 非空时写——CS2 查询失败（例如 GC 超时）时不要把手里的旧值抹掉。
-    /// · 「上次登录」取 Steam 自己记的时间（loginusers.vdf 的 Timestamp），不是本程序的查询时间。
-    /// </summary>
-    public void SaveWhiteQueryResult(
-        string accountName,
-        string steamId,
-        string eyaToken,
-        DateTimeOffset? tokenExpiresAt,
-        bool jwtAvailable,
-        string jwtStatus,
-        CsPremierScoreResult? score)
-    {
-        accountName = accountName.Trim();
-        steamId = steamId.Trim();
-        if (string.IsNullOrWhiteSpace(accountName) || string.IsNullOrWhiteSpace(steamId))
-        {
-            return;
-        }
-
-        _fileGate.Wait();
-        try
-        {
-            var document = ReadDocumentForWrite();
-            var item = FindExisting(document.Accounts, steamId, accountName);
-            if (item is null)
-            {
-                item = new SteamAccountHistoryItem
-                {
-                    AccountName = accountName,
-                    SteamId = steamId
-                };
-                document.Accounts.Add(item);
-            }
-
-            item.AccountName = accountName;
-            item.SteamId = steamId;
-            item.EyaToken = eyaToken.Trim();
-            item.TokenExpiresAt = tokenExpiresAt;
-            item.JwtAvailable = jwtAvailable;
-            item.JwtStatus = jwtStatus;
-            item.JwtValidatedAt = DateTimeOffset.Now;
-            ApplySteamLastLogin(item, ReadSteamLastLoginMap(), steamId);
-
-            if (score is not null)
-            {
-                ApplyCsStatus(item, score);
-            }
-
-            document.Accounts = NormalizeAccounts(document.Accounts).ToList();
-            WriteDocument(document);
-        }
-        finally
-        {
-            _fileGate.Release();
-        }
-    }
-
-    /// <summary>
     /// CS2 那几个字段的统一写入（优先分/胜场、等级、冷却、VAC、国服、是否在匹配、更新时间）。
     /// 「令牌链路」与「账号密码链路」共用同一份写入，避免两边口径不一致。
     /// </summary>
@@ -579,6 +524,7 @@ internal sealed class AccountHistoryService
         if (force || !item.HasLiveCooldown)
         {
             item.LastCooldownAt = updatedAt;
+            item.LastCooldownSelectionSeconds = null;
             item.IsCooldownRecordCleared = false;
         }
         else if (item.LastCooldownAt is null && !item.IsCooldownRecordCleared)
@@ -695,6 +641,7 @@ internal sealed class AccountHistoryService
             }
 
             item.LastCooldownAt = null;
+            item.LastCooldownSelectionSeconds = null;
             item.IsCooldownRecordCleared = true;
             document.Accounts = NormalizeAccounts(document.Accounts).ToList();
             WriteDocument(document);

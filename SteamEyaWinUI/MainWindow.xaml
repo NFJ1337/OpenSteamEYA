@@ -86,13 +86,6 @@
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem
-                    x:Name="ManagedAccountsNavItem"
-                    Tag="whiteAccounts">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE716;" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem
                     x:Name="LoginNavItem"
                     Tag="login">
                     <NavigationViewItem.Icon>
@@ -106,9 +99,11 @@
                         <FontIcon Glyph="&#xE81C;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <!-- [备用页面] 缓存账号页暂时隐藏；页面、路由和数据均保留。恢复开关见 MainWindow.xaml.cs 的 CachedAccountsPageEnabled。 -->
                 <NavigationViewItem
                     x:Name="CachedAccountsNavItem"
-                    Tag="cachedAccounts">
+                    Tag="cachedAccounts"
+                    Visibility="Collapsed">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE777;" />
                     </NavigationViewItem.Icon>
@@ -125,13 +120,6 @@
                     Tag="personalization">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE779;" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem
-                    x:Name="AutoReportNavItem"
-                    Tag="autoReport">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE7BA;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>

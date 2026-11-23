@@ -95,6 +95,9 @@ public sealed partial class SteamAccountHistoryItem : INotifyPropertyChanged
     /// <summary>最近一次检测到或手动设置新冷却的时间；刷新同一段冷却时保持不变。</summary>
     public DateTimeOffset? LastCooldownAt { get; set; }
 
+    /// <summary>最近一次通过右键手动选择的冷却时长（秒）；用于冷却记录列显示原始选择。</summary>
+    public uint? LastCooldownSelectionSeconds { get; set; }
+
     /// <summary>用户是否清空了冷却记录；避免当前冷却快照的兼容回填再次显示旧记录。</summary>
     public bool IsCooldownRecordCleared { get; set; }
 
@@ -128,9 +131,6 @@ public sealed partial class SteamAccountHistoryItem : INotifyPropertyChanged
 
     /// <summary>所属分组的稳定 ID 列表（分组定义存于设置，改名不影响此处）。始终非 null。</summary>
     public List<string> GroupIds { get; set; } = [];
-
-    [JsonIgnore]
-    public Visibility CardActionVisibility => IsWhiteAccount ? Visibility.Visible : Visibility.Collapsed;
 
     [JsonIgnore]
     public string AccountTitle => string.IsNullOrWhiteSpace(AccountName) ? Loc.T("Account_Title_Unnamed") : AccountName;
@@ -255,7 +255,7 @@ public sealed partial class SteamAccountHistoryItem : INotifyPropertyChanged
     /// <summary>
     /// 冷却结束的绝对时间（本地）：按 <see cref="RemainingCooldownSeconds"/>（查询锚点扣掉已流逝时间）折算，
     /// 没有剩余冷却（含「未知 / 大到不可能是秒数的哨兵值」）时为 null。
-    /// 账号管理页与账号查询页都读这里，保证同一账号两边显示的是同一个结束时间。
+    /// 账号管理页统一读取这里，保证同一账号的冷却结束时间显示一致。
     /// </summary>
     [JsonIgnore]
     public DateTimeOffset? CooldownEndTime =>
@@ -268,12 +268,52 @@ public sealed partial class SteamAccountHistoryItem : INotifyPropertyChanged
     public string CooldownEndText =>
         CooldownEndTime?.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
 
-    /// <summary>上次冷却的时间戳；没有冷却历史时为空串。</summary>
+    /// <summary>上次手动选择冷却时长的简短文案：有时按“天 + 小时”，无小时时只显示天。</summary>
     [JsonIgnore]
-    public string CooldownRecordText =>
-        LastCooldownRecordAt?.ToLocalTime().ToString(
-            "yyyy-MM-dd HH:mm",
-            System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
+    public string LastCooldownSelectionText
+    {
+        get
+        {
+            if (LastCooldownSelectionSeconds is null or 0 ||
+                LastCooldownSelectionSeconds.Value > int.MaxValue)
+            {
+                return string.Empty;
+            }
+
+            var totalHours = LastCooldownSelectionSeconds.Value / 3600;
+            var days = totalHours / 24;
+            var hours = totalHours % 24;
+            if (days > 0 && hours > 0)
+            {
+                return Loc.Tf("Legacy_CooldownSelection_DaysHours_Format", days, hours);
+            }
+
+            return days > 0
+                ? Loc.Tf("Legacy_CooldownSelection_Days_Format", days)
+                : Loc.Tf("Legacy_CooldownSelection_Hours_Format", hours);
+        }
+    }
+
+    /// <summary>上次冷却时间戳；有手动选择时长时在末尾追加“+上次选择”。</summary>
+    [JsonIgnore]
+    public string CooldownRecordText
+    {
+        get
+        {
+            var recordAt = LastCooldownRecordAt?.ToLocalTime().ToString(
+                "yyyy-MM-dd HH:mm",
+                System.Globalization.CultureInfo.InvariantCulture);
+            if (string.IsNullOrWhiteSpace(recordAt))
+            {
+                return string.Empty;
+            }
+
+            var selection = LastCooldownSelectionText;
+            return string.IsNullOrWhiteSpace(selection)
+                ? recordAt
+                : Loc.Tf("Legacy_CooldownRecord_WithSelection_Format", recordAt, selection);
+        }
+    }
 
     /// <summary>冷却时间列：在冷却结束时间后追加“结束时间 − 当前时间”的剩余时长。</summary>
     [JsonIgnore]

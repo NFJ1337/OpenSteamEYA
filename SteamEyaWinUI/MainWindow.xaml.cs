@@ -28,6 +28,9 @@ public sealed partial class MainWindow : Window
     public const int MinimumWindowHeight = 700;
     public const int MaximumWindowWidth = 10000;
     public const int MaximumWindowHeight = 10000;
+    private const string CachedAccountsPageTag = "cachedAccounts";
+    // [备用页面] 缓存账号页暂时隐藏，页面/路由/数据全部保留；恢复时只需改回 true。
+    private const bool CachedAccountsPageEnabled = false;
     private const uint WmGetMinMaxInfo = 0x0024;
     private const nuint WindowSubclassId = 1;
     private const double IntroVideoVolume = 0.1;
@@ -154,6 +157,7 @@ public sealed partial class MainWindow : Window
                 : null;
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
+        RootLayoutGrid.ActualThemeChanged += (_, _) => UpdateTitleBarButtonColors();
         SetWindowIcon();
         TitleVersionText.Text = $"v{GitHubUpdateService.CurrentVersion}";
 
@@ -639,11 +643,9 @@ public sealed partial class MainWindow : Window
         {
             "legacyAccounts" => typeof(LegacyAccountsPage),
             "history" => typeof(HistoryPage),
-            "whiteAccounts" => typeof(HistoryPage),
-            "cachedAccounts" => typeof(CachedAccountsPage),
+            CachedAccountsPageTag => typeof(CachedAccountsPage), // [备用页面] 路由保留，入口默认隐藏。
             "loadout" => typeof(LoadoutPage),
             "personalization" => typeof(PersonalizationPage),
-            "autoReport" => typeof(AutoReportPage),
             "clash" => typeof(VpnPage),
             "treasureBox" => typeof(TreasureBoxPage),
             "settings" => typeof(SettingsPage),
@@ -657,12 +659,7 @@ public sealed partial class MainWindow : Window
             string.Equals(_currentPageName, pageName, StringComparison.Ordinal);
         if (!isSamePage)
         {
-            object? parameter = pageName switch
-            {
-                "login" => loginAccount,
-                "whiteAccounts" => HistoryPageScope.WhiteAccounts,
-                _ => null
-            };
+            object? parameter = pageName == "login" ? loginAccount : null;
             ContentFrame.Navigate(pageType, parameter, new EntranceNavigationTransitionInfo());
             ContentFrame.BackStack.Clear();
             _currentPageName = pageName;
@@ -699,6 +696,20 @@ public sealed partial class MainWindow : Window
             root.RequestedTheme = theme;
         }
 
+        UpdateTitleBarButtonColors();
+    }
+
+    /// <summary>系统标题栏按钮不随内容根主题自动换色，这里按实际明暗主题同步三枚按钮的前景色。</summary>
+    private void UpdateTitleBarButtonColors()
+    {
+        var foreground = RootLayoutGrid.ActualTheme == ElementTheme.Dark
+            ? Microsoft.UI.Colors.White
+            : Microsoft.UI.Colors.Black;
+        var titleBar = AppWindow.TitleBar;
+        titleBar.ButtonForegroundColor = foreground;
+        titleBar.ButtonHoverForegroundColor = foreground;
+        titleBar.ButtonPressedForegroundColor = foreground;
+        titleBar.ButtonInactiveForegroundColor = foreground;
     }
 
     /// <summary>让背景图的布局尺寸始终跟随窗口客户区，GIF 和大图也能实时缩放。</summary>
@@ -844,11 +855,9 @@ public sealed partial class MainWindow : Window
         LoginNavItem.Content = Loc.T("Nav_Login");
         HistoryNavItem.Content = Loc.T("Nav_History");
         LegacyAccountsNavItem.Content = Loc.T("Nav_LegacyAccounts");
-        ManagedAccountsNavItem.Content = Loc.T("Nav_ManagedAccounts");
         CachedAccountsNavItem.Content = Loc.T("Nav_CachedAccounts");
         LoadoutNavItem.Content = Loc.T("Nav_Loadout");
         PersonalizationNavItem.Content = Loc.T("Nav_Personalization");
-        AutoReportNavItem.Content = Loc.T("Nav_AutoReport");
         ClashNavItem.Content = Loc.T("Nav_Clash");
         TreasureBoxNavItem.Content = Loc.T("Nav_TreasureBox");
         SettingsNavItem.Content = Loc.T("Nav_Settings");
@@ -935,6 +944,11 @@ public sealed partial class MainWindow : Window
                 continue;
             }
 
+            if (IsReservedHiddenNavTag(tag))
+            {
+                continue;
+            }
+
             entries.Add(new NavPageEntry(tag, item.Content as string ?? tag, IsNavTagLocked(tag)));
         }
 
@@ -943,6 +957,11 @@ public sealed partial class MainWindow : Window
 
     private static bool IsNavTagLocked(string tag) =>
         string.Equals(tag, LockedNavTag, StringComparison.Ordinal);
+
+    /// <summary>[备用页面] 永久隐藏的导航项不参与设置页列表和可见性恢复。</summary>
+    private static bool IsReservedHiddenNavTag(string tag) =>
+        !CachedAccountsPageEnabled &&
+        string.Equals(tag, CachedAccountsPageTag, StringComparison.Ordinal);
 
     private IEnumerable<NavigationViewItem> EnumerateNavItems()
     {
@@ -982,11 +1001,14 @@ public sealed partial class MainWindow : Window
                 continue;
             }
 
-            var show = !hiddenTags.Contains(tag) || IsNavTagLocked(tag);
+            var show = !IsReservedHiddenNavTag(tag) &&
+                (!hiddenTags.Contains(tag) || IsNavTagLocked(tag));
             item.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        if (_currentPageName is { } current && !IsNavTagLocked(current) && hiddenTags.Contains(current))
+        if (_currentPageName is { } current &&
+            (IsReservedHiddenNavTag(current) ||
+             (!IsNavTagLocked(current) && hiddenTags.Contains(current))))
         {
             SelectFirstVisibleNavItem();
         }

@@ -20,7 +20,7 @@ public sealed partial class SteamBrowserWindow : Window
     private const string CookieDomain = ".steamcommunity.com";
 
     // 同一套会话 cookie 也往 .steampowered.com 写一份：Steam 的网页登录本来就在这两个域各存一份
-    // steamLoginSecure，help.steampowered.com（举报向导）/ store 靠的是后者。不写这份，
+    // steamLoginSecure，help.steampowered.com / store 靠的是后者。不写这份，
     // 那些页面就是「未登录」——用户还得自己登一次。
     private const string SteamPoweredCookieDomain = ".steampowered.com";
     private const string LanguageCookie = "steamLanguage";
@@ -29,29 +29,17 @@ public sealed partial class SteamBrowserWindow : Window
 
     private readonly SteamBrowserSession _session;
 
-    /// <summary>这扇窗口要打开的地址（默认 steamcommunity 的「我的页面」）。</summary>
-    private readonly string _targetUrl;
-
     /// <summary>注入中文之前 steamLanguage 的原值（null 表示原本没有这个 cookie）。</summary>
     private string? _previousLanguage;
     private bool _languageInjected;
     private bool _languageRestored;
 
     internal SteamBrowserWindow(SteamBrowserSession session)
-        : this(session, TargetUrl, null)
-    {
-    }
-
-    /// <summary>
-    /// 指定打开哪一个页面（不传就用「我的页面」）：自动举报页要用同一个窗口逐条打开官方举报向导。
-    /// </summary>
-    internal SteamBrowserWindow(SteamBrowserSession session, string targetUrl, string? title)
     {
         _session = session;
-        _targetUrl = string.IsNullOrWhiteSpace(targetUrl) ? TargetUrl : targetUrl;
         InitializeComponent();
 
-        Title = title ?? Loc.T("History_Btn_SteamBrowser");
+        Title = Loc.T("History_Btn_SteamBrowser");
         CenterOnScreen(sizePercent: 0.72);
 
         // 关窗时还原显示语言：挂在 Closing（界面树还在、WebView2 还能用），不用 Closed。
@@ -114,7 +102,7 @@ public sealed partial class SteamBrowserWindow : Window
 
             await InjectChineseLanguageAsync(cookieManager);
 
-            Browser.CoreWebView2.Navigate(_targetUrl);
+            Browser.CoreWebView2.Navigate(TargetUrl);
         }
         catch (Exception ex)
         {
@@ -145,17 +133,6 @@ public sealed partial class SteamBrowserWindow : Window
             // 拿不到 cookie 也不影响打开：URL 上的 l=schinese 仍然生效。
             AppLog.Warn($"设置 Steam 网页中文失败（不影响 l=schinese）：{ex.Message}");
         }
-    }
-
-    /// <summary>复用同一扇窗口导航到另一个地址（自动举报页的「下一个」用它）。</summary>
-    internal void NavigateTo(string url)
-    {
-        if (string.IsNullOrWhiteSpace(url))
-        {
-            return;
-        }
-
-        Browser.CoreWebView2?.Navigate(url);
     }
 
     /// <summary>关窗把语言 cookie 还原回原值（原本没有就删掉），不把改动留给下次打开。</summary>

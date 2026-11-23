@@ -21,7 +21,7 @@ namespace SteamEyaWinUI.Pages;
 public sealed partial class SettingsPage : Page, INotifyPropertyChanged
 {
     private readonly DispatcherQueue _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
-    private static readonly string[] ThemeCodes = ["Default", "Light", "Dark", "Custom"];
+    private static readonly string[] ThemeCodes = ["Default", "Light", "Dark"];
     // 自定义背景可选的文件类型：图片（含 GIF）+ 视频（静音循环播放）。
     private static readonly string[] BackgroundImageExtensions =
         [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".mp4", ".m4v", ".mov", ".wmv", ".avi", ".mkv"];
@@ -31,7 +31,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     private bool _syncing;
     private bool _languageMenuBuilt;
     private string _selectedLanguageCode = "zh-Hans";
-    private string _selectedThemeCode = "Default";
+    private string _selectedThemeCode = "Dark";
     private bool _movingDataFolder;
     private bool _pickingBackground;
     private bool _pickingIntroVideo;
@@ -142,20 +142,25 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             return;
         }
 
-        _selectedThemeCode = theme;
-        ThemeButtonText.Text = ThemeDisplayName(theme);
-
         var settings = AppState.SettingsService.Load();
-        if (string.Equals(theme, "Custom", StringComparison.OrdinalIgnoreCase) &&
-            string.IsNullOrWhiteSpace(settings.UiColor))
+        if (string.Equals(settings.Theme, theme, StringComparison.OrdinalIgnoreCase))
         {
-            var current = AppState.UiColorService.BaseColor;
-            settings.UiColor = $"#{current.A:X2}{current.R:X2}{current.G:X2}{current.B:X2}";
+            _selectedThemeCode = theme;
+            ThemeButtonText.Text = ThemeDisplayName(theme);
+            return;
         }
 
+        _selectedThemeCode = theme;
+        ThemeButtonText.Text = ThemeDisplayName(theme);
         settings.Theme = theme;
         AppState.SettingsService.Save(settings);
         ApplyThemeSettings(settings);
+
+        if (string.Equals(theme, "Light", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(theme, "Dark", StringComparison.OrdinalIgnoreCase))
+        {
+            RestartApplication();
+        }
     }
 
     private void UpdateChoiceButtonTexts()
@@ -164,9 +169,6 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             .FirstOrDefault(pack => string.Equals(pack.Code, _selectedLanguageCode, StringComparison.OrdinalIgnoreCase))
             ?.Name ?? _selectedLanguageCode;
         ThemeButtonText.Text = ThemeDisplayName(_selectedThemeCode);
-        ThemeColorButton.Visibility = string.Equals(_selectedThemeCode, "Custom", StringComparison.OrdinalIgnoreCase)
-            ? Visibility.Visible
-            : Visibility.Collapsed;
     }
 
     private void UpdateThemeMenuTexts()
@@ -184,7 +186,6 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     {
         "Light" => Loc.T("Settings_Theme_Light"),
         "Dark" => Loc.T("Settings_Theme_Dark"),
-        "Custom" => Loc.T("Settings_Theme_Custom"),
         _ => Loc.T("Settings_Theme_System")
     };
 
@@ -197,16 +198,36 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             settings.ShowTableSeparators);
         AppState.UiColorService.Apply(settings.UiColor, settings.UiColorAnimated, settings.Theme);
         TableSeparatorColorSwatch.Background = new SolidColorBrush(App.GetTableSeparatorColor());
-        UpdateThemeColorControls(settings);
     }
 
-    private void UpdateThemeColorControls(AppSettings settings)
+    /// <summary>浅色/深色切换后启动新进程，并结束当前进程以完整重建系统标题栏与窗口主题。</summary>
+    private static void RestartApplication()
     {
-        var color = AppState.UiColorService.BaseColor;
-        ThemeColorButton.Visibility = string.Equals(settings.Theme, "Custom", StringComparison.OrdinalIgnoreCase)
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-        ThemeColorSwatch.Background = new SolidColorBrush(color);
+        try
+        {
+            var exePath = Environment.ProcessPath;
+            if (string.IsNullOrWhiteSpace(exePath))
+            {
+                throw new InvalidOperationException("当前进程路径不可用。");
+            }
+
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = exePath,
+                WorkingDirectory = AppContext.BaseDirectory,
+                UseShellExecute = true
+            }) ?? throw new InvalidOperationException("系统未能创建新的应用进程。");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("切换主题后自动重启失败。", ex);
+            AppState.ShowStatus(
+                Loc.Tf("Settings_Theme_RestartFailed_Format", ex.Message),
+                InfoBarSeverity.Error);
+            return;
+        }
+
+        Environment.Exit(0);
     }
 
     /// <summary>
@@ -259,6 +280,14 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
                 ? Loc.CurrentCode
                 : Loc.AvailablePacks.FirstOrDefault()?.Code ?? "zh-Hans";
             _selectedThemeCode = ThemeCodes.Contains(settings.Theme, StringComparer.OrdinalIgnoreCase) ? settings.Theme : "Default";
+            if (!string.Equals(settings.Theme, _selectedThemeCode, StringComparison.OrdinalIgnoreCase))
+            {
+                // 「自定义」主题已从主题卡片移除；旧配置统一回落到跟随系统。
+                settings.Theme = _selectedThemeCode;
+                AppState.SettingsService.Save(settings);
+                ApplyThemeSettings(settings);
+            }
+
             UpdateChoiceButtonTexts();
 
             WindowWidthBox.Text = Math.Clamp(settings.WindowWidth ?? MainWindow.DefaultWindowWidth, MainWindow.MinimumWindowWidth, MainWindow.MaximumWindowWidth).ToString(CultureInfo.InvariantCulture);
@@ -269,8 +298,6 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             var uiColor = AppState.UiColorService.BaseColor;
             UiColorPicker.Color = uiColor;
             UiColorSwatch.Background = new SolidColorBrush(uiColor);
-            ThemeColorPicker.Color = uiColor;
-            UpdateThemeColorControls(settings);
             AnimateUiColorToggle.IsOn = settings.UiColorAnimated;
             IntroVideoToggle.IsOn = settings.IntroVideoEnabled;
             UpdateIntroVideoControls();
@@ -795,9 +822,6 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     private void UiColorPicker_ColorChanged(ColorPicker sender, ColorChangedEventArgs args) =>
         ApplyCustomUiColor(args.NewColor);
 
-    private void ThemeColorPicker_ColorChanged(ColorPicker sender, ColorChangedEventArgs args) =>
-        ApplyCustomUiColor(args.NewColor);
-
     private void ApplyCustomUiColor(Color color)
     {
         if (_syncing)
@@ -815,7 +839,6 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         try
         {
             UiColorPicker.Color = color;
-            ThemeColorPicker.Color = color;
         }
         finally
         {
@@ -823,7 +846,6 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         }
 
         UiColorSwatch.Background = new SolidColorBrush(color);
-        ThemeColorSwatch.Background = new SolidColorBrush(color);
     }
 
     private void AnimateUiColorToggle_Toggled(object sender, RoutedEventArgs e)
@@ -852,7 +874,6 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         try
         {
             UiColorPicker.Color = color;
-            ThemeColorPicker.Color = color;
             AnimateUiColorToggle.IsOn = false;
         }
         finally
@@ -861,11 +882,8 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         }
 
         UiColorSwatch.Background = new SolidColorBrush(color);
-        ThemeColorSwatch.Background = new SolidColorBrush(color);
     }
 
-    private void ResetThemeColorButton_Click(object sender, RoutedEventArgs e) =>
-        ResetUiColorButton_Click(sender, e);
     /// <summary>手动更改上号使用的 Steam 安装目录（多 Steam 时指定要用哪一个）。选择器+校验+持久化都在协调器里。</summary>
     private async void ChangeSteamPathButton_Click(object sender, RoutedEventArgs e)
     {

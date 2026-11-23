@@ -93,8 +93,8 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         UpdateBatchButtonsState();
         RebuildRows();
 
-        // 白号库是全程序共用的一份（账号管理 / 账号查询 都读写它）：订阅变化事件后，
-        // 另一个页面改了备注 / 冷却 / 查询结果，本页会立刻跟着重建，两边状态不再各显示各的。
+        // 白号库是账号管理页统一读写的账号库：订阅变化事件后，
+        // 查询 / 备注 / 冷却等改动都会让本页立即重建，避免界面停留在旧状态。
         AppState.WhiteAccountsChanged -= OnWhiteAccountsChanged;
         AppState.WhiteAccountsChanged += OnWhiteAccountsChanged;
         _cooldownTimer.Start();
@@ -135,8 +135,8 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
     }
 
     /// <summary>
-    /// 白号库变化 → 重建表格（保留原高亮行）。本页的查询 / 备注 / 冷却，或「账号查询」页对同一份库的改动，
-    /// 都会走到这里，保证两个页面的冷却 / 可用状态一致。
+    /// 白号库变化 → 重建表格（保留原高亮行）。查询 / 备注 / 冷却等改动都会走到这里，
+    /// 保证界面状态与落盘数据一致。
     /// </summary>
     private void OnWhiteAccountsChanged(string? selectSteamId) =>
         _dispatcherQueue.TryEnqueue(() =>
@@ -160,7 +160,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
 
     /// <summary>
     /// 冷却到期轮询：查询回来的冷却是带锚点的，随时间自然减少；这里每 30 秒把「有冷却 / VAC」的行
-    /// 原地刷一遍（不整表重建），冷却结束时本页也会自己变成「可用」——与「账号查询」页表现一致。
+    /// 原地刷一遍（不整表重建），冷却结束时本页也会自己变成「可用」。
     /// </summary>
     private void OnCooldownTick(DispatcherQueueTimer sender, object args)
     {
@@ -332,7 +332,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         (account.Note?.Contains(keyword, StringComparison.OrdinalIgnoreCase) ?? false);
 
     /// <summary>
-    /// 老版「显示可用」= 既没在冷却、也没有 VAC 标记。冷却按「剩余秒数」算（与「账号查询」页同一口径），
+    /// 老版「显示可用」= 既没在冷却、也没有 VAC 标记。冷却按「剩余秒数」算，
     /// 不能只看快照秒数，否则冷却早就到期了这里还显示冷却中。
     /// </summary>
     private static bool IsAvailable(SteamAccountHistoryItem account) =>
@@ -1117,7 +1117,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         AppState.ShowStatus(Loc.Tf("Legacy_Status_Deleted_Format", removed), InfoBarSeverity.Success);
     }
 
-    // ---------- 右键行：账号 + 密码登录（与「账号查询」页卡片登录按钮同一条链路） ----------
+    // ---------- 右键行：账号 + 密码登录 ----------
 
     /// <summary>右键点中的那一行（菜单项点击时用它取账号）。</summary>
     private SteamAccountHistoryItem? _contextAccount;
@@ -1256,6 +1256,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         }
 
         account.LastCooldownAt = null;
+        account.LastCooldownSelectionSeconds = null;
         account.IsCooldownRecordCleared = true;
         row.RefreshStateFromItem();
     }
@@ -1358,6 +1359,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         if (seconds > 0)
         {
             account.LastCooldownAt = updatedAt;
+            account.LastCooldownSelectionSeconds = seconds;
             account.IsCooldownRecordCleared = false;
         }
 
@@ -1981,7 +1983,7 @@ public sealed partial class LegacyAccountRow : INotifyPropertyChanged
         Password = item.Password;
         PasswordText = revealHiddenContent ? item.Password : Mask;
         Note = item.Note ?? string.Empty;
-        // 冷却按「剩余秒数」判定（与账号查询页同口径）：快照冷却早已到期时本页也要显示「可用」。
+        // 冷却按「剩余秒数」判定：快照冷却早已到期时本页也要显示「可用」。
         var hasCooldown = item.GcVacBanned != true && (item.RemainingCooldownSeconds ?? 0) > 0;
         StatusText = item.GcVacBanned == true
             ? Loc.T("Legacy_Status_Vac")

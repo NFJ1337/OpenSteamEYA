@@ -210,7 +210,7 @@
     </Page.Resources>
 
 
-    <!-- 与「账号查询」页一致：页面根直接承载内容，不使用外层卡片或白边。 -->
+    <!-- 页面根直接承载内容，不使用外层卡片或白边。 -->
     <Grid Padding="32,24,32,16" RowSpacing="12">
         <Grid RowSpacing="10">
             <Grid.RowDefinitions>
@@ -391,7 +391,7 @@
                             <ColumnDefinition Width="95" />
                             <ColumnDefinition Width="70" />
                             <ColumnDefinition Width="2*" MinWidth="224" />
-                            <ColumnDefinition Width="158" />
+                            <ColumnDefinition Width="210" />
                             <ColumnDefinition Width="70" />
                             <ColumnDefinition Width="*" MinWidth="40" />
                         </Grid.ColumnDefinitions>
@@ -400,9 +400,9 @@
                         <TextBlock Grid.Column="3" Text="{x:Bind Strings.Get('Legacy_Col_Password'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
                         <TextBlock Grid.Column="4" Text="{x:Bind Strings.Get('Legacy_Col_Status'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
                         <TextBlock Grid.Column="5" Text="{x:Bind Strings.Get('Legacy_Col_Cooldown'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
-                        <TextBlock Grid.Column="6" Margin="-6,0,0,0" Text="{x:Bind Strings.Get('Legacy_Col_CooldownRecord'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
-                        <TextBlock Grid.Column="7" Margin="-6,0,0,0" Text="{x:Bind Strings.Get('Legacy_Col_Note'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
-                        <TextBlock Grid.Column="8" Margin="-6,0,0,0" Text="{x:Bind Strings.Get('Legacy_Col_Others'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                        <TextBlock Grid.Column="6" Text="{x:Bind Strings.Get('Legacy_Col_CooldownRecord'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                        <TextBlock Grid.Column="7" Text="{x:Bind Strings.Get('Legacy_Col_Note'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                        <TextBlock Grid.Column="8" Text="{x:Bind Strings.Get('Legacy_Col_Others'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
                     </Grid>
 
                     <ListView
@@ -435,7 +435,7 @@
                                         <ColumnDefinition Width="95" />
                                         <ColumnDefinition Width="70" />
                                         <ColumnDefinition Width="2*" MinWidth="224" />
-                                        <ColumnDefinition Width="158" />
+                                        <ColumnDefinition Width="210" />
                                         <ColumnDefinition Width="70" />
                                         <ColumnDefinition Width="*" MinWidth="40" />
                                     </Grid.ColumnDefinitions>
@@ -480,7 +480,6 @@
                                         Text="{x:Bind Note, Mode=OneWay}"
                                         TextTrimming="CharacterEllipsis"
                                         Style="{StaticResource LegacyTableTextStyle}"
-                                        Margin="-6,0,0,0"
                                         Tag="note"
                                         RightTapped="LegacyAccountCell_RightTapped" HorizontalAlignment="Stretch"
                                         MinHeight="20"
@@ -490,7 +489,6 @@
                                         Text="{x:Bind OthersText}"
                                         TextTrimming="CharacterEllipsis"
                                         Style="{StaticResource LegacyTableTextStyle}"
-                                        Margin="-6,0,0,0"
                                         Tag="others"
                                         IsDoubleTapEnabled="True"
                                         DoubleTapped="LegacyAccountCell_DoubleTapped"
@@ -514,7 +512,6 @@
                                         Text="{x:Bind CooldownRecordText, Mode=OneWay}"
                                         TextTrimming="CharacterEllipsis"
                                         Style="{StaticResource LegacyTableTextStyle}"
-                                        Margin="-6,0,0,0"
                                         Tag="cooldownRecord"
                                         RightTapped="LegacyAccountCell_RightTapped"
                                         HorizontalAlignment="Stretch"

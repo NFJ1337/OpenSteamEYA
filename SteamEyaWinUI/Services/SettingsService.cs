@@ -338,8 +338,8 @@ internal sealed class AppSettings
     /// <summary>界面语言代码：zh-Hans / en / zh-Hant。null 表示尚未选择（首次启动按系统语言推断）。</summary>
     public string? Language { get; set; }
 
-    /// <summary>主题：Default（跟随系统）/ Light / Dark / Custom（自定义主题色）。</summary>
-    public string Theme { get; set; } = "Default";
+    /// <summary>主题：Default（跟随系统）/ Light / Dark；首次启动默认使用深色。</summary>
+    public string Theme { get; set; } = "Dark";
 
     /// <summary>表格行分隔线自定义颜色，格式 #AARRGGBB 或 #RRGGBB；null 表示跟随主题。</summary>
     public string? TableSeparatorColor { get; set; }
