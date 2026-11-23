@@ -124,7 +124,7 @@ internal sealed class GitHubUpdateService
             ?? [];
         var artifactName = metadata.ArtifactName;
         var artifactUrl = BuildArtifactUrl(site, latestTag, artifactName);
-        var releaseUrl = BuildReleasePageUrl();
+        var releaseUrl = BuildReleasePageUrl(latestTag);
 
         return new GitHubUpdateInfo(
             currentVersion,
@@ -204,7 +204,11 @@ internal sealed class GitHubUpdateService
         }
 
         var title = string.IsNullOrWhiteSpace(release.Name) ? version : release.Name!.Trim();
-        return new ReleaseChangelogInfo(version, title, SplitChangelog(release.Body), release.PublishedAt);
+        return new ReleaseChangelogInfo(
+            version,
+            title,
+            SplitChangelog(ExtractLatestReleaseNotes(release.Body)),
+            release.PublishedAt);
     }
 
     /// <summary>
@@ -253,13 +257,13 @@ internal sealed class GitHubUpdateService
             version,
             tag,
             isNewer,
-            BuildReleasePageUrl(),
+            BuildReleasePageUrl(tag),
             asset?.Name,
             artifactUrl,
             asset?.Size,
             asset is null ? null : "exe-installer",
             null,   // API 不提供 sha256：留空，下载完成后按大小校验即可
-            SplitChangelog(release.Body),
+            SplitChangelog(ExtractLatestReleaseNotes(release.Body)),
             DateTimeOffset.Now,
             hasVersion ? null : Loc.Tf("About_Update_TagNotVersion_Format", tag));
     }
@@ -295,6 +299,50 @@ internal sealed class GitHubUpdateService
     }
 
     /// <summary>把 release 说明按行拆成更新日志（去掉空行与 Markdown 标题符号）。</summary>
+    /// <summary>
+    /// 旧版 Release 正文曾把多个版本累积在同一块里；这里只取最近版本标题后的说明，
+    /// 避免“更新日志”卡片展示整段历史。新流程的每个 Release 本身只有一个版本块。
+    /// </summary>
+    private static string? ExtractLatestReleaseNotes(string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return body;
+        }
+
+        var lines = body.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+        var headingIndex = -1;
+        for (var index = 0; index < lines.Length; index++)
+        {
+            if (IsReleaseBodyHeading(lines[index]))
+            {
+                headingIndex = index;
+                break;
+            }
+        }
+
+        if (headingIndex < 0)
+        {
+            return body;
+        }
+
+        var endIndex = lines.Length;
+        for (var index = headingIndex + 1; index < lines.Length; index++)
+        {
+            if (IsReleaseBodyHeading(lines[index]))
+            {
+                endIndex = index;
+                break;
+            }
+        }
+
+        return string.Join('\n', lines[(headingIndex + 1)..endIndex]).Trim();
+    }
+
+    private static bool IsReleaseBodyHeading(string line) =>
+        line.TrimStart(' ', '\t', '\uFEFF')
+            .StartsWith("SteamEYA v", StringComparison.OrdinalIgnoreCase);
+
     private static string[] SplitChangelog(string? body)
     {
         if (string.IsNullOrWhiteSpace(body))
@@ -359,11 +407,14 @@ internal sealed class GitHubUpdateService
     }
 
     /// <summary>
-    /// 发布页地址（浏览器打开用）：固定指 releases 列表页 —— 这个地址永远存在，最新一版排在最上面，
-    /// 不会因为 release tag 不是版本号（例如「正式exe」）而跳到不存在的 /releases/tag/xxx 页面。
-    /// 也不套下载代理前缀：gh-proxy 这类站点只加速下载，套上去页面反而打不开。
+    /// 发布页地址（浏览器打开用）：新版本元数据带 vX.Y.Z 标签时直接打开对应 Release；
+    /// 旧元数据仍是 latest 或没有标签时退回 releases 列表页。
+    /// 不套下载代理前缀：gh-proxy 这类站点只加速下载，套上去页面反而打不开。
     /// </summary>
-    internal static string BuildReleasePageUrl() => ReleasesUrl;
+    internal static string BuildReleasePageUrl(string? tag) =>
+        string.IsNullOrWhiteSpace(tag) || string.Equals(tag, "latest", StringComparison.OrdinalIgnoreCase)
+            ? ReleasesUrl
+            : $"{RepositoryUrl}/releases/tag/{Uri.EscapeDataString(tag)}";
 
     /// <summary>
     /// 元数据地址：附带一个每次都不同的查询串，并声明不缓存。

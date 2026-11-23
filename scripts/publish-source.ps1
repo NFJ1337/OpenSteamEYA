@@ -1,11 +1,12 @@
 <#
 .SYNOPSIS
-把源码打包成 zip 上传到 GitHub Release，并把工作区改动提交、推送到远端仓库（用户说的「源码打包发送到 github」）。
+把源码打包成 zip 上传到当前版本独立的 GitHub Release，并推送工作区改动与版本标签。
 
 .DESCRIPTION
 1) 把仓库源码（任何层级都排除 .git/.vs/artifacts/bin/obj/node_modules）复制到临时目录，压成 artifacts\SteamEYANFJ-<版本>-source.zip；
 2) git add -A → 有改动就提交 → push 到指定分支；
-3) 把源码 zip 上传到 release（同名覆盖）。
+3) 确保 v<版本> 标签存在且指向当前提交，不移动旧标签；
+4) 把源码 zip 上传到该版本自己的 Release。
 
 .EXAMPLE
 pwsh -File scripts\publish-source.ps1 -Version 1.2.9
@@ -15,7 +16,7 @@ param(
     [Parameter(Mandatory = $true)][string]$Version,
     [string]$ProjectRoot = '',
     [string]$Repository = 'NFJ1337/OpenSteamEYA',
-    [string]$Tag = '正式exe',
+    [string]$Tag = '',
     [string]$Branch = 'main',
     [switch]$DryRun
 )
@@ -26,6 +27,10 @@ $ErrorActionPreference = 'Stop'
 
 if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
     $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+}
+
+if ([string]::IsNullOrWhiteSpace($Tag)) {
+    $Tag = "v$Version"
 }
 
 $zipPath = Join-Path $ProjectRoot "artifacts\SteamEYANFJ-$Version-source.zip"
@@ -111,9 +116,8 @@ if ($DryRun) {
     Write-Host "  - git add -A（当前改动 $pending 条）"
     Write-Host "  - git commit -m ""SteamEYA $Version：源码同步（含本次改动）""（无改动则跳过）"
     Write-Host "  - git push origin $Branch"
-    Write-Host "  - git tag -f $Tag HEAD + git push --force origin refs/tags/$Tag（让发布页的 Source code zip/tar.gz 也变最新）"
-    Write-Host '  - 删除 release 上旧的 SteamEYA*-source.zip（含改名前遗留的）（若有）'
-    Write-Host "  - gh release upload $Tag $zipPath --clobber（仓库 $Repository）"
+    Write-Host "  - 确保新标签 $Tag 指向当前提交并 push origin refs/tags/$Tag（不移动旧标签）"
+    Write-Host "  - gh release upload $Tag $zipPath（上传到该版本自己的 Release）"
     return
 }
 
@@ -139,29 +143,34 @@ try {
     $head = "$(git rev-parse --short HEAD)".Trim()
     Write-Host "已推送源码到 $Repository（$Branch），提交 $head"
 
-    # GitHub release 页上那两个自动生成的「Source code (zip / tar.gz)」是按 release 所在 tag 的提交
-    # 即时打包的。tag 不移动到最新提交，它们就一直是你发版那天的旧代码 —— 所以这里把 tag 跟到 HEAD。
-    git tag -f $Tag HEAD | Out-Host
-    if ($LASTEXITCODE -ne 0) { throw "git tag -f $Tag 失败（退出码 $LASTEXITCODE）。" }
-
-    if (-not (Invoke-GitPush @('--force', 'origin', "refs/tags/$Tag"))) {
-        throw "git push --force origin refs/tags/$Tag 失败：release tag 没能移到最新提交，发布页的 Source code (zip/tar.gz) 会仍是旧代码。"
+    # 每个版本使用新标签。publish-release 正常会先创建好；单独运行本脚本时在这里补建。
+    # 已存在的标签只能指向当前提交，绝不再强制移动。
+    $tagOutput = @(git rev-parse -q --verify "refs/tags/$Tag" 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $tagOutput.Count -eq 0) {
+        git tag -a $Tag -m "SteamEYA v$Version" HEAD | Out-Host
+        if ($LASTEXITCODE -ne 0) {
+            throw "创建标签 $Tag 失败（退出码 $LASTEXITCODE）。"
+        }
+    }
+    else {
+        $tagCommit = $tagOutput[0].Trim()
+        $headCommit = "$(git rev-parse HEAD)".Trim()
+        if (-not [string]::Equals($tagCommit, $headCommit, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "标签 $Tag 已存在但未指向当前提交（$tagCommit，当前 $headCommit）。请使用新的版本号。"
+        }
     }
 
-    Write-Host "已把 release tag「$Tag」移动并推送到最新提交（GitHub 源码包 zip / tar.gz 会随之更新）"
+    if (-not (Invoke-GitPush @('origin', "refs/tags/$Tag"))) {
+        throw "git push origin refs/tags/$Tag 失败：版本标签没有推送成功。"
+    }
+
+    Write-Host "版本标签「$Tag」已确认指向当前提交并推送（GitHub 自动源码包对应该版本）。"
 }
 finally {
     Pop-Location
 }
 
-# 先删掉 release 上旧的源码包，只保留这一次的（和安装包一样做「替换」而不是堆积）
-$staleZips = @(gh release view $Tag --repo $Repository --json assets --jq '.assets[].name' |
-    Where-Object { $_ -like 'SteamEYA*-source.zip' -and $_ -ne $zip.Name })
-foreach ($name in $staleZips) {
-    Write-Host "删除旧源码包：$name"
-    gh release delete-asset $Tag $name --repo $Repository --yes
-}
-
-gh release upload $Tag $zipPath --repo $Repository --clobber
+# 只向当前版本自己的 Release 上传源码包，不改旧 Release。
+gh release upload $Tag $zipPath --repo $Repository
 Write-Host 'release 现在的资产：'
 gh release view $Tag --repo $Repository --json assets --jq '.assets[] | "  - \(.name)  (\(.size) 字节)"'

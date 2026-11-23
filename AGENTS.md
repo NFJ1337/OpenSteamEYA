@@ -8,30 +8,31 @@
   `artifacts\publish\win-x64\SteamEyaWinUI.exe`。
 - 只回报这一个可点击链接；不罗列体积/哈希/目录清单，也不自动打开或运行它。
 
-## 触发词：裸回复「2」= 版本 +1 → 打包 → 精简累积日志发布 release → 推送源码（2026-09-17 用户复核）
+## 触发词：裸回复「2」= 版本 +1 → 打包 → 发布新版本 Release → 推送源码（2026-11-23 用户更新）
 - 用户消息就是单个数字 `2`（前后无其它文字）时，按顺序做完这四步：
   1. **版本号 +1**：`scripts\bump-version.ps1`（末位 0~9 递增、满 10 进位：1.6.3 → 1.6.4），
      新版本号会同时写进 csproj 与安装包信息，也作为发布正文的版本号。
   2. **打包**：`scripts\build-installer.ps1 -Version <新版本>`。
-  3. **精简更新日志并发布到 GitHub release**：把最近一轮改动浓缩成 3~6 条中文说明（用户视角、不写代码细节），
+  3. **精简更新日志并发布到新的 GitHub Release**：把最近一轮改动浓缩成 3~6 条中文说明（用户视角、不写代码细节），
      交给 `scripts\publish-release.ps1 -Version <新版本> -Commit -NotesFile <说明文件>`。
-     正文格式照旧：首行 `SteamEYA v<新版本>`，说明逐条排在它下面；**新增块放在正文最上面，
-     绝不覆盖以前的版本日志**（脚本已按块累积；同版本重复发布只替换自己那一块）。
+     每个版本创建独立标签 `v<新版本>` 和独立 Release；正文首行 `SteamEYA v<新版本>`，
+     说明逐条排在它下面。安装包、`latest.json` 只上传到该新 Release，**不再修改旧标签、旧 Release 或旧资产**。
   4. **发布源码到 GitHub**：`scripts\publish-source.ps1 -Version <新版本>`（打源码 zip → 提交 →
-     `git push origin main` → 移动 tag「正式exe」→ 上传源码包）。
+     `git push origin main` → 确认新标签 `v<新版本>` → 把源码包上传到同一个新 Release）。
 - **版本号只在收到 `2` 时 +1（2026-09-17 用户确认）**：其它任何情况——包括 `1`、用户口头说「打包 / 重新打包」、
   或没提版本号时——都**不自动改动版本号**；只有用户当次明确要求 +1（或给出目标版本号）才 bump。
   （版本号被别人手动 +1 过也属正常，不用据此推断规则。）
-- 回报：安装包链接 + 一行确认（已替换 release 附件 / 更新日志已新增未覆盖 / 源码已推送）。
+- 回报：安装包链接 + 一行确认（新 Release/标签已发布 / 安装包和 latest.json 已上传 / 源码与标签已推送）。
   只有失败或需要用户决策时才多解释几句。
 
 ## 版本号与打包脚本（用法备查；何时调用由用户当次明确说明）
 - `scripts\bump-version.ps1`：同步 `SteamEyaWinUI.csproj`（Version/FileVersion/AssemblyVersion/InformationalVersion）、
   `scripts\build-installer.ps1` 的默认 `$Version`、`build\installer\SteamEYA.iss` 的默认 AppVersion，输出 `NewVersion=x.y.z`；`-DryRun` 只算不写。
 - `scripts\build-installer.ps1 -Version <x.y.z>`：Native AOT + Inno Setup，产物在 `artifacts\`。
-- `scripts\publish-release.ps1 -Version <x.y.z> [-Commit] [-Notes …|-NotesFile …]`：覆盖发布页安装包与 latest.json，
-  并更新发布日志（正文为**新增累积**，不再覆盖历史版本）；`-Commit` 会先本地提交（不推送）。
-- `scripts\publish-source.ps1 -Version <x.y.z>`：打源码 zip → 提交 → `git push origin main` → 移动 tag「正式exe」→ 上传源码包。
+- `scripts\publish-release.ps1 -Version <x.y.z> [-Commit] [-Notes …|-NotesFile …]`：为 `v<x.y.z>` 创建全新的 Release，
+  上传当前版本的安装包与 latest.json；正文只包含本版本说明，不覆盖旧 Release；`-Commit` 会先本地提交并推送 main 与该版本标签。
+- `scripts\publish-source.ps1 -Version <x.y.z>`：打源码 zip → 提交 → `git push origin main` → 确认 `v<x.y.z>` 标签 →
+  上传源码包到该版本 Release；不移动标签、不覆盖旧源码包。
 - 以上都只在用户明确要求时执行；版本号要不要 +1 也由用户当次说明决定。
 
 ## 符号留档（用户明确要求）

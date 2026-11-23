@@ -207,6 +207,7 @@
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
@@ -257,11 +258,17 @@
                         <ScrollViewer
                             x:Name="ChangelogScroll"
                             Grid.Row="2"
-                            MaxHeight="300"
                             VerticalScrollBarVisibility="Auto"
                             Visibility="Collapsed">
                             <StackPanel x:Name="ChangelogPanel" Spacing="6" />
                         </ScrollViewer>
+                        <HyperlinkButton
+                            x:Name="MoreChangelogButton"
+                            Grid.Row="3"
+                            HorizontalAlignment="Right"
+                            Padding="0"
+                            Click="MoreChangelogButton_Click"
+                            Content="{x:Bind Strings.Get('About_Changelog_More'), Mode=OneWay}" />
                     </Grid>
                 </Border>            </Grid>
 

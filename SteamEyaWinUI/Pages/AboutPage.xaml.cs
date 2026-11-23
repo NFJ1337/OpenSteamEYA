@@ -73,6 +73,9 @@ public sealed partial class AboutPage : Page, INotifyPropertyChanged
 
     private void RefreshChangelogButton_Click(object sender, RoutedEventArgs e) => _ = LoadChangelogAsync(force: true);
 
+    private async void MoreChangelogButton_Click(object sender, RoutedEventArgs e) =>
+        await AppState.OpenUrlAsync(GitHubUpdateService.ReleasesUrl);
+
     /// <summary>读取最新 release 的更新日志（说明正文）。force=false 时已有内容就跳过。</summary>
     private async Task LoadChangelogAsync(bool force = false)
     {
