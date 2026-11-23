@@ -145,7 +145,7 @@ try {
 
     # 每个版本使用新标签。publish-release 正常会先创建好；单独运行本脚本时在这里补建。
     # 已存在的标签只能指向当前提交，绝不再强制移动。
-    $tagOutput = @(git rev-parse -q --verify "refs/tags/$Tag" 2>$null)
+    $tagOutput = @(git rev-parse -q --verify "refs/tags/$Tag^{}" 2>$null)
     if ($LASTEXITCODE -ne 0 -or $tagOutput.Count -eq 0) {
         git tag -a $Tag -m "SteamEYA v$Version" HEAD | Out-Host
         if ($LASTEXITCODE -ne 0) {

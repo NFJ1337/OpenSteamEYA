@@ -43,7 +43,7 @@ if (-not (Test-Path -LiteralPath $InstallerPath)) {
 . (Join-Path $PSScriptRoot 'github-auth.ps1')
 
 function Get-LocalTagCommit([string]$tagName) {
-    $output = @(git rev-parse -q --verify "refs/tags/$tagName" 2>$null)
+    $output = @(git rev-parse -q --verify "refs/tags/$tagName^{}" 2>$null)
     if ($LASTEXITCODE -ne 0 -or $output.Count -eq 0) {
         return $null
     }
