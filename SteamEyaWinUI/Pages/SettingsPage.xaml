@@ -532,7 +532,7 @@
                             VerticalAlignment="Center"
                             Text="{x:Bind Strings.Get('Settings_Cs2Sync_Source'), Mode=OneWay}"
                             Foreground="{ThemeResource AuroraTextMutedBrush}" />
-                        <!-- 与上方语言按钮同款：DropDownButton + MenuFlyout，候选在 code-behind 按「账号管理页 → 历史账号页」顺序生成 -->
+                        <!-- 与上方语言按钮同款：候选只读取本机 Steam 缓存中具备 CS2 配置的账号。 -->
                         <DropDownButton
                             x:Name="Cs2SyncSourceButton"
                             Grid.Column="1"
@@ -546,7 +546,22 @@
                                 <TextBlock x:Name="Cs2SyncSourceText" TextTrimming="CharacterEllipsis" />
                             </StackPanel>
                             <DropDownButton.Flyout>
-                                <MenuFlyout x:Name="Cs2SyncSourceFlyout" />
+                                <MenuFlyout x:Name="Cs2SyncSourceFlyout">
+                                    <!-- MenuFlyoutItem 高 34，加上 Presenter 内边距和边框，正好显示 10 行。 -->
+                                    <MenuFlyout.MenuFlyoutPresenterStyle>
+                                        <Style TargetType="MenuFlyoutPresenter" BasedOn="{StaticResource DefaultMenuFlyoutPresenterStyle}">
+                                            <Setter Property="Background" Value="{ThemeResource AuroraGlassStrongBrush}" />
+                                            <Setter Property="BorderBrush" Value="{ThemeResource AuroraGlassBorderBrush}" />
+                                            <Setter Property="BorderThickness" Value="1" />
+                                            <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />
+                                            <Setter Property="Padding" Value="4" />
+                                            <Setter Property="MinWidth" Value="160" />
+                                            <Setter Property="MaxHeight" Value="350" />
+                                            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+                                            <Setter Property="ScrollViewer.VerticalScrollMode" Value="Enabled" />
+                                        </Style>
+                                    </MenuFlyout.MenuFlyoutPresenterStyle>
+                                </MenuFlyout>
                             </DropDownButton.Flyout>
                         </DropDownButton>
                         <Button

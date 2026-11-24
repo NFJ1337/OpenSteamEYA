@@ -10,7 +10,7 @@
     "Settings_Cs2Sync_Source_None": "未选择",
     "Settings_Cs2Sync_PushNow": "立即推送",
     "Settings_Cs2Sync_PushNow_Tooltip": "把来源账号的 CS2 设置立即强推到当前登录账号的云端",
-    "Settings_Cs2Sync_Note": "通过 Steamworks 云 API 强推 cfg，需当前账号拥有 CS2、Steam 正在运行、程序目录放有 steam_api64.dll，并在 Steam 设置→云同步里为该账号开启云。开启后由 Steam 负责下发落地。",
+    "Settings_Cs2Sync_Note": "来源账号只列出本机 Steam 缓存中已有 CS2 配置的账号。通过 Steamworks 云 API 强推 cfg，需当前账号拥有 CS2、Steam 正在运行、程序目录放有 steam_api64.dll，并在 Steam 设置→云同步里为该账号开启云。开启后由 Steam 负责下发落地。",
     "Cs2Cloud_Progress_Pushing": "正在把 CS2 设置强推到云端…",
     "Cs2Push_Button": "推送CS2设置",
     "Cs2Push_Button_Tip": "把设置页选定的来源账号的 CS2 设置（准星/灵敏度/键位等）强推到当前登录的 Steam 账号云，等同设置页的「立即推送」。",
