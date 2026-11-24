@@ -75,7 +75,6 @@ function Invoke-GitPush([string[]]$pushArguments) {
 
     Write-Host '直连推送失败，尝试本机代理…'
     $ports = [System.Collections.Generic.List[int]]::new()
-    $ports.Add(17897)
     try {
         $systemProxy = (Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings' -ErrorAction SilentlyContinue).ProxyServer
         if ($systemProxy -match '^127\.0\.0\.1:(\d+)$') {

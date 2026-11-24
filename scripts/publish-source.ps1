@@ -49,7 +49,7 @@ function Copy-SourceTree([string]$source, [string]$target) {
     }
 }
 
-# 本机是否有人在监听这个端口（探测 Clash/V2Ray 之类的本地代理端口）
+# 本机是否有人在监听这个端口（探测常见的本地代理端口）
 function Test-LocalProxyPort([int]$port) {
     $client = New-Object System.Net.Sockets.TcpClient
     try {
@@ -67,11 +67,9 @@ function Invoke-GitPush([string[]]$pushArguments) {
 
     Write-Host '直连推送失败，尝试本机代理…'
 
-    # 候选端口：先是本程序自带 VPN 的内核端口（用户开着它时就在监听），
-    # 再是系统代理里写的那个（可能是 Clash/V2Ray 之类），最后是常见默认端口。
+    # 候选端口：先读取系统代理中配置的本地端口，再尝试常见默认端口。
     # 注意 git 不读 WinINET 系统代理，必须显式 -c http.proxy=… 指过去，否则挂着一堆代理也推不动。
     $ports = [System.Collections.Generic.List[int]]::new()
-    $ports.Add(17897)
     try {
         $sysProxy = (Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings' -ErrorAction SilentlyContinue).ProxyServer
         if ($sysProxy -match '^127\.0\.0\.1:(\d+)$') { $ports.Add([int]$Matches[1]) }
