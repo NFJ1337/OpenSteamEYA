@@ -108,6 +108,26 @@ internal static class FormatHelper
         return description.Length > 0 ? Loc.Tf("Format_Cooldown_WithReason_Format", countdown, description) : countdown;
     }
 
+    /// <summary>账号管理“冷却时间”列专用：与实时倒计时相同，但省略末尾的秒。</summary>
+    public static string FormatCooldownCountdownTextWithoutSeconds(uint? seconds, uint? reason, string unknownText)
+    {
+        if (seconds is null)
+        {
+            return unknownText;
+        }
+
+        if (seconds == 0 || seconds > int.MaxValue)
+        {
+            return Loc.T("Format_Cooldown_None");
+        }
+
+        var countdown = FormatCountdownWithoutSeconds(seconds.Value);
+        var description = DescribePenaltyReason(reason);
+        return description.Length > 0
+            ? Loc.Tf("Format_Cooldown_WithReason_Format", countdown, description)
+            : countdown;
+    }
+
     /// <summary>把秒数渲染成带秒的倒计时串（省略前导为零的高位单位，始终显示秒）。</summary>
     public static string FormatCountdown(uint seconds)
     {
@@ -129,6 +149,27 @@ internal static class FormatHelper
         return minutes > 0
             ? Loc.Tf("Format_Countdown_MS_Format", minutes, secs)
             : Loc.Tf("Format_Countdown_S_Format", secs);
+    }
+
+    private static string FormatCountdownWithoutSeconds(uint seconds)
+    {
+        var days = seconds / 86400;
+        var hours = seconds % 86400 / 3600;
+        var minutes = seconds % 3600 / 60;
+
+        if (days > 0)
+        {
+            return Loc.Tf("Format_Countdown_DHM_Format", days, hours, minutes);
+        }
+
+        if (hours > 0)
+        {
+            return Loc.Tf("Format_Countdown_HM_Format", hours, minutes);
+        }
+
+        return minutes > 0
+            ? Loc.Tf("Format_Countdown_M_Format", minutes)
+            : Loc.T("Format_Countdown_LessThanMinute");
     }
 
     /// <param name="vacBanned">GC VAC 标记：null 未知 / 0 无 / 其他 有标记。</param>

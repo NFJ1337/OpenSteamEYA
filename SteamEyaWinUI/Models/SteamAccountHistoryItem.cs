@@ -330,7 +330,10 @@ public sealed partial class SteamAccountHistoryItem : INotifyPropertyChanged
             var endText = cooldownEndTime.Value.ToString(
                 "yyyy-MM-dd HH:mm",
                 System.Globalization.CultureInfo.InvariantCulture);
-            var remainingText = RemainingCooldownText;
+            var remainingText = FormatHelper.FormatCooldownCountdownTextWithoutSeconds(
+                RemainingCooldownSeconds,
+                CooldownReason,
+                Loc.T("Account_Pending"));
             return string.IsNullOrWhiteSpace(remainingText)
                 ? endText
                 : $"{endText} · {remainingText}";
