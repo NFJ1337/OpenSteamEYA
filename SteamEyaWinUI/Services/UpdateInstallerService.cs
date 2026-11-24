@@ -216,9 +216,7 @@ internal sealed class UpdateInstallerService
 
     private static HttpClient CreateHttpClient()
     {
-        // 与更新检查同一套动态代理：开启「本程序走 VPN」后，安装包下载也走 VPN 本地端口。
         var handler = new HttpClientHandler();
-        VpnProxyService.Attach(handler);
 
         var client = new HttpClient(handler)
         {

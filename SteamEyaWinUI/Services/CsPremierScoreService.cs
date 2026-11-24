@@ -30,11 +30,9 @@ internal sealed class CsPremierScoreService
     private static readonly TimeSpan Cs2IsChinaTimeout = TimeSpan.FromSeconds(4);
     private static readonly TimeSpan HelloTotalBudget = TimeSpan.FromSeconds(100);
 
-    // 用 SteamProxyBypass：我们自己开着 VPN 时 Steam 请求直连（走节点会把登录往返拖到十几秒）。
     private static readonly HttpClient HttpClient = new(new HttpClientHandler
     {
-        UseProxy = true,
-        Proxy = new SteamProxyBypass()
+        UseProxy = true
     })
     {
         Timeout = TimeSpan.FromSeconds(30)
@@ -45,8 +43,7 @@ internal sealed class CsPremierScoreService
         AutomaticDecompression = DecompressionMethods.All,
         UseCookies = false,
         AllowAutoRedirect = false,
-        UseProxy = true,
-        Proxy = new SteamProxyBypass()
+        UseProxy = true
     })
     {
         Timeout = TimeSpan.FromSeconds(30)

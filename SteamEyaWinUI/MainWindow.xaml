@@ -86,6 +86,13 @@
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem
+                    x:Name="LegacyAccountQueryNavItem"
+                    Tag="legacyAccountQuery">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE721;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
                     x:Name="LoginNavItem"
                     Tag="login">
                     <NavigationViewItem.Icon>
@@ -124,13 +131,6 @@
                 </NavigationViewItem>
             </NavigationView.MenuItems>
             <NavigationView.FooterMenuItems>
-                <NavigationViewItem
-                    x:Name="ClashNavItem"
-                    Tag="clash">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE701;" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
                 <NavigationViewItem
                     x:Name="TreasureBoxNavItem"
                     Tag="treasureBox">

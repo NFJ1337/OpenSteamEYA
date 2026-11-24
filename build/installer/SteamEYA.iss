@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "1.9.7"
+  #define AppVersion "1.9.8"
 #endif
 
 #ifndef PublishDir
@@ -49,7 +49,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 ; 只装程序本体。订阅链接、账号数据、日志都是每个用户自己的东西，绝不随安装包分发：
 ; 这里显式排除，即使发布目录里混进了本机数据也进不了包（默认发布目录本来就不含这些）。
 Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; \
-    Excludes: "settings.json,vpn\*,logs\*,history\*,personalization\*,avatars\*,cached-avatars\*,white-avatars\*,white-accounts.json*,cached-login.json*,*.bak,crash.log"
+    Excludes: "settings.json,logs\*,history\*,personalization\*,avatars\*,cached-avatars\*,white-avatars\*,white-accounts.json*,cached-login.json*,*.bak,crash.log"
 
 [Icons]
 Name: "{autoprograms}\SteamEYANFJ"; Filename: "{app}\SteamEyaWinUI.exe"

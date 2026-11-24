@@ -5,6 +5,7 @@
 每个版本固定使用 v<Version> 标签（例如 v1.9.6），不再复用“正式exe”，
 也不会覆盖旧 Release 的安装包或正文。latest.json 仍随新 Release 上传，
 因此 /releases/latest/download/latest.json 会自动指向最新版本。
+发布成功后，本地 artifacts\release-notes-*.txt 仅保留版本号最高的 3 个。
 
 .EXAMPLE
 pwsh -File scripts\publish-release.ps1 -Version 1.9.6 -Commit -NotesFile .\artifacts\release-notes-1.9.6.txt
@@ -19,7 +20,8 @@ param(
     [switch]$DryRun,
     [switch]$Commit,
     [string[]]$Notes = @(),
-    [string]$NotesFile = ''
+    [string]$NotesFile = '',
+    [ValidateRange(1, 100)][int]$KeepReleaseNoteCount = 3
 )
 
 $ErrorActionPreference = 'Stop'
@@ -142,6 +144,48 @@ function New-ReleaseBodyBlock([string]$version, [string[]]$noteLines) {
     return (($lines -join "`n").TrimEnd())
 }
 
+function Get-VersionedReleaseNoteFiles([string]$folder) {
+    if (-not (Test-Path -LiteralPath $folder)) {
+        return @()
+    }
+
+    return @(Get-ChildItem -LiteralPath $folder -File -Filter 'release-notes-*.txt' |
+        ForEach-Object {
+            $match = [regex]::Match(
+                $_.Name,
+                '^release-notes-(?<version>\d+(?:\.\d+){1,3})\.txt$',
+                [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+            if (-not $match.Success) {
+                return
+            }
+
+            [pscustomobject]@{
+                File    = $_
+                Version = [version]$match.Groups['version'].Value
+            }
+        } |
+        Sort-Object Version -Descending)
+}
+
+function Remove-ExcessReleaseNoteFiles(
+    [string]$folder,
+    [int]$keepCount,
+    [switch]$WhatIfOnly) {
+    $files = @(Get-VersionedReleaseNoteFiles $folder)
+    $excess = @($files | Select-Object -Skip $keepCount)
+    foreach ($entry in $excess) {
+        if ($WhatIfOnly) {
+            Write-Host "[DryRun] 将删除旧发布说明：$($entry.File.FullName)"
+            continue
+        }
+
+        Remove-Item -LiteralPath $entry.File.FullName -Force
+        Write-Host "已删除超出保留数量的发布说明：$($entry.File.Name)"
+    }
+
+    return @($files | Select-Object -First $keepCount | ForEach-Object { $_.File.FullName })
+}
+
 $notesLines = @()
 if (-not [string]::IsNullOrWhiteSpace($NotesFile)) {
     if (-not (Test-Path -LiteralPath $NotesFile)) {
@@ -168,6 +212,12 @@ if ($DryRun) {
     if ($Commit) {
         Write-Host '  - 本地提交当前改动（git add -A + commit），然后推送 main 与版本标签'
     }
+    $keepFiles = @(Remove-ExcessReleaseNoteFiles `
+        -folder (Join-Path $ProjectRoot 'artifacts') `
+        -keepCount $KeepReleaseNoteCount `
+        -WhatIfOnly)
+    Write-Host "  - 发布后本地仅保留 $KeepReleaseNoteCount 个发布说明："
+    $keepFiles | ForEach-Object { Write-Host "    - $(Split-Path -Leaf $_)" }
     return
 }
 
@@ -244,6 +294,10 @@ $createArgs = @(
 if ($LASTEXITCODE -ne 0) {
     throw "创建 GitHub Release 失败（退出码 $LASTEXITCODE）。标签已推送，可在修复网络后重新上传资产。"
 }
+
+[void](Remove-ExcessReleaseNoteFiles `
+    -folder (Join-Path $ProjectRoot 'artifacts') `
+    -keepCount $KeepReleaseNoteCount)
 
 $releaseUrl = "https://github.com/$Repository/releases/tag/$([Uri]::EscapeDataString($Tag))"
 Write-Host "已创建新 Release：$releaseUrl"

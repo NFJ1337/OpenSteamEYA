@@ -171,7 +171,9 @@ internal sealed class UiColorService
             return Blend(Color.FromArgb(255, 255, 255, 255), tint, amount);
         }
 
-        var baseColor = Blend(Color.FromArgb(255, 18, 16, 34), tint, amount);
+        // 在保留深色层次的同时提亮页底，并让用户选择的界面颜色更明显地参与背景渐变。
+        var effectiveAmount = Math.Clamp(amount * 1.8, 0, 0.32);
+        var baseColor = Blend(Color.FromArgb(255, 36, 33, 52), tint, effectiveAmount);
         return Color.FromArgb(255, baseColor.R, baseColor.G, baseColor.B);
     }
 

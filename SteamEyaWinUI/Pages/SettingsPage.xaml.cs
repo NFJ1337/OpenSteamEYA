@@ -80,8 +80,6 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             // 未设置时 SteamPathText 显示的是本地化占位文案，需随语言刷新（已设置时是中性路径，刷新无副作用）。
             UpdateSteamPathText();
 
-            // VPN 卡片文案（状态/占位）也是代码设置的，语言切换后重算。
-
             // 来源账号候选/选中文本用 Settings_Cs2Sync_SourceItem_Format 拼装，跟随语言重建。
             RefreshCs2SyncSources();
         });

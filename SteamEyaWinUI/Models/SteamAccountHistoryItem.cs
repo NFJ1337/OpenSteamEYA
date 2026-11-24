@@ -27,6 +27,30 @@ public sealed partial class SteamAccountHistoryItem : INotifyPropertyChanged
 
     public string? PersonaName { get; set; }
 
+    /// <summary>账号查询页读取到的 CS:GO/CS2 资料等级（勋章等级，不是优先段位）。</summary>
+    public int? CsProfileRank { get; set; }
+
+    /// <summary>Steam 资料地区代码；账号查询页从社区资料读取。</summary>
+    public string? Region { get; set; }
+
+    /// <summary>Steam 资料页显示的 CS 最近退出时间文本，保留原页面格式。</summary>
+    public string? LastGameLoginText { get; set; }
+
+    /// <summary>账号查询页读取到的临时封禁/冷却结束时间；永久 VAC 由 GcVacBanned 表示。</summary>
+    public DateTimeOffset? BanExpiresAt { get; set; }
+
+    /// <summary>账号查询页是否成功读取过封禁/冷却状态，用于区分「未封禁」和「尚未查询」。</summary>
+    public bool AccountQueryBanChecked { get; set; }
+
+    /// <summary>账号查询页的持久化状态代码（pending/completed/partial/failed/cancelled 等）。</summary>
+    public string? AccountQueryStatus { get; set; }
+
+    /// <summary>账号查询页最近一次失败或部分失败的说明。</summary>
+    public string? AccountQueryMessage { get; set; }
+
+    /// <summary>账号查询页最近一次更新该账号结果的时间。</summary>
+    public DateTimeOffset? AccountQueryUpdatedAt { get; set; }
+
     private string? _avatarUrl;
 
     public string? AvatarUrl
@@ -91,15 +115,6 @@ public sealed partial class SteamAccountHistoryItem : INotifyPropertyChanged
     public uint? CooldownSeconds { get; set; }
 
     public uint? CooldownReason { get; set; }
-
-    /// <summary>最近一次检测到或手动设置新冷却的时间；刷新同一段冷却时保持不变。</summary>
-    public DateTimeOffset? LastCooldownAt { get; set; }
-
-    /// <summary>最近一次通过右键手动选择的冷却时长（秒）；用于冷却记录列显示原始选择。</summary>
-    public uint? LastCooldownSelectionSeconds { get; set; }
-
-    /// <summary>用户是否清空了冷却记录；避免当前冷却快照的兼容回填再次显示旧记录。</summary>
-    public bool IsCooldownRecordCleared { get; set; }
 
     public bool? GcVacBanned { get; set; }
 
@@ -200,12 +215,6 @@ public sealed partial class SteamAccountHistoryItem : INotifyPropertyChanged
     /// <summary>冷却锚点：查询写入冷却快照的时刻，用于扣除已流逝时间。</summary>
     private DateTimeOffset? CooldownAnchor => CsStatusUpdatedAt ?? PremierScoreUpdatedAt;
 
-    /// <summary>旧记录没有 LastCooldownAt 时，用当前冷却快照的写入锚点兼容显示。</summary>
-    [JsonIgnore]
-    public DateTimeOffset? LastCooldownRecordAt =>
-        LastCooldownAt ??
-        (!IsCooldownRecordCleared && CooldownSeconds is > 0 ? CooldownAnchor : null);
-
     /// <summary>
     /// 实时剩余冷却秒数。语义与 <see cref="CooldownSeconds"/> 一致：null=未知（GC 未答）/ 0=无冷却 / 正=剩余秒。
     /// 仅当快照为 (0, int.MaxValue] 且有锚点时才扣除流逝；否则原样透传，交由格式化按未知/无冷却判定。
@@ -267,53 +276,6 @@ public sealed partial class SteamAccountHistoryItem : INotifyPropertyChanged
     [JsonIgnore]
     public string CooldownEndText =>
         CooldownEndTime?.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
-
-    /// <summary>上次手动选择冷却时长的简短文案：有时按“天 + 小时”，无小时时只显示天。</summary>
-    [JsonIgnore]
-    public string LastCooldownSelectionText
-    {
-        get
-        {
-            if (LastCooldownSelectionSeconds is null or 0 ||
-                LastCooldownSelectionSeconds.Value > int.MaxValue)
-            {
-                return string.Empty;
-            }
-
-            var totalHours = LastCooldownSelectionSeconds.Value / 3600;
-            var days = totalHours / 24;
-            var hours = totalHours % 24;
-            if (days > 0 && hours > 0)
-            {
-                return Loc.Tf("Legacy_CooldownSelection_DaysHours_Format", days, hours);
-            }
-
-            return days > 0
-                ? Loc.Tf("Legacy_CooldownSelection_Days_Format", days)
-                : Loc.Tf("Legacy_CooldownSelection_Hours_Format", hours);
-        }
-    }
-
-    /// <summary>上次冷却时间戳；有手动选择时长时在末尾追加“+上次选择”。</summary>
-    [JsonIgnore]
-    public string CooldownRecordText
-    {
-        get
-        {
-            var recordAt = LastCooldownRecordAt?.ToLocalTime().ToString(
-                "yyyy-MM-dd HH:mm",
-                System.Globalization.CultureInfo.InvariantCulture);
-            if (string.IsNullOrWhiteSpace(recordAt))
-            {
-                return string.Empty;
-            }
-
-            var selection = LastCooldownSelectionText;
-            return string.IsNullOrWhiteSpace(selection)
-                ? recordAt
-                : Loc.Tf("Legacy_CooldownRecord_WithSelection_Format", recordAt, selection);
-        }
-    }
 
     /// <summary>冷却时间列：在冷却结束时间后追加“结束时间 − 当前时间”的剩余时长。</summary>
     [JsonIgnore]

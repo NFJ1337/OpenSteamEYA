@@ -24,6 +24,7 @@ internal static class AppState
     public static CsLoadoutService LoadoutService { get; } = new();
     public static SteamProfileService ProfileService { get; } = new();
     public static SteamAccountValidationService AccountValidationService { get; } = new();
+    public static SteamAccountQueryService AccountQueryService { get; } = new();
     public static SteamCredentialsAuthService CredentialsAuthService { get; } = new();
     public static GitHubUpdateService UpdateService { get; } = new();
     public static UpdateInstallerService UpdateInstallerService { get; } = new();

@@ -542,8 +542,7 @@ internal sealed class SteamCmClient : IAsyncDisposable
         _socket = new ClientWebSocket();
         _socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(30);
 
-        // CM 的 WebSocket 同样直连（我们自己接管系统代理时）：否则登录往返会被节点拖长。
-        _socket.Options.Proxy = SystemProxyService.IsApplied ? null : WebRequest.GetSystemWebProxy();
+        _socket.Options.Proxy = WebRequest.GetSystemWebProxy();
 
         // 不回包的 CM 会让 ConnectAsync 挂起数分钟，必须按单个 endpoint 限时；
         // 超时抛 TimeoutException（而非 OperationCanceledException），

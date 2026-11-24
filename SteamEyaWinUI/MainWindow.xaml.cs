@@ -56,22 +56,6 @@ public sealed partial class MainWindow : Window
     public static nint Hwnd => s_hwnd;
 
     /// <summary>
-    /// 启动时按上次状态连回 VPN：稍等一下再连，避免连接流程（TUN 还需要 UAC）挤在窗口弹出的瞬间。
-    /// </summary>
-    private static async Task RestoreVpnOnStartupAsync()
-    {
-        try
-        {
-            await Task.Delay(1500);
-            await VpnCoreService.TryRestoreOnStartupAsync();
-        }
-        catch (Exception ex)
-        {
-            AppLog.Info($"启动时自动连回 VPN 未完成：{ex.Message}");
-        }
-    }
-
-    /// <summary>
     /// 打开软件就预热 Steam 侧连接（CM 列表 / DNS / TLS），让「一键查询 / 清空无效账号」
     /// 的第一次点击也不用等冷启动。后台进行、失败只写日志，不占用窗口初始化。
     /// </summary>
@@ -104,22 +88,6 @@ public sealed partial class MainWindow : Window
 
         // 关窗口时停掉背景视频：及时释放解码器与文件句柄。
         Closed += (_, _) => StopBackgroundVideo();
-
-        // 关闭软件 = 断开 VPN：窗口真正关闭时显式收掉内核并还原系统代理。
-        // 不依赖 ProcessExit —— 它只是进程级兜底，触发时机在窗口关闭之后，被强杀时更不会跑。
-        Closed += (_, _) => VpnProxyService.SafeStopCore();
-
-        // 上次退出时 VPN 是开启状态 → 启动后自动连回来。
-        _ = RestoreVpnOnStartupAsync();
-
-        // VPN 兜底自愈：开关是「已启用」但内核不在了就自动连回（见 EnsureVpnAliveAsync）。
-        // 间隔压到 5 秒：多实例场景下，前一个窗口退出会把内核一起带走（Job 保险），
-        // 这个间隔就是「另一个窗口要等多久才把 VPN 接回来」，越短越接近无感。
-        _vpnWatchTimer = DispatcherQueue.CreateTimer();
-        _vpnWatchTimer.Interval = TimeSpan.FromSeconds(5);
-        _vpnWatchTimer.Tick += async (_, _) => await EnsureVpnAliveAsync();
-        _vpnWatchTimer.Start();
-
 
         // 后台预热 Steam 侧连接：首次点「一键查询 / 清空无效账号」不用再等冷启动。
         _ = PrewarmSteamConnectionsAsync();
@@ -198,8 +166,7 @@ public sealed partial class MainWindow : Window
 
     /// <summary>
     /// 启动时的更新检查。
-    ///   · 先等一拍再查：VPN 自动连回是「先接管系统代理、内核随后就绪」，这个窗口里发请求会直接被拒
-    ///     （日志里的「连接被拒 (127.0.0.1:17897)」就是这么来的），等内核起来再查成功率最高；
+    ///   · 先等一拍再查，避开窗口首帧与启动任务，减少对启动阶段的干扰；
     ///   · 自动检查原本只在失败时写日志、界面上完全静默，用户会误以为「没检测到新版本」——
     ///     所以这里失败会多试两轮（6 秒 / 15 秒），并把每一轮结果都记进日志，方便排查。
     /// 注意整个过程留在 UI 线程（async/await 不切上下文），UpdateStateChanged 的订阅方才能安全刷 UI。
@@ -628,7 +595,9 @@ public sealed partial class MainWindow : Window
         NavigationView sender,
         NavigationViewSelectionChangedEventArgs args)
     {
-        if (args.SelectedItemContainer?.Tag is string pageName)
+        var pageName = args.SelectedItemContainer?.Tag as string
+            ?? (args.SelectedItem as NavigationViewItem)?.Tag as string;
+        if (!string.IsNullOrWhiteSpace(pageName))
         {
             NavigateTo(pageName);
         }
@@ -642,11 +611,11 @@ public sealed partial class MainWindow : Window
         var pageType = pageName switch
         {
             "legacyAccounts" => typeof(LegacyAccountsPage),
+            "legacyAccountQuery" => typeof(LegacyAccountsPage),
             "history" => typeof(HistoryPage),
             CachedAccountsPageTag => typeof(CachedAccountsPage), // [备用页面] 路由保留，入口默认隐藏。
             "loadout" => typeof(LoadoutPage),
             "personalization" => typeof(PersonalizationPage),
-            "clash" => typeof(VpnPage),
             "treasureBox" => typeof(TreasureBoxPage),
             "settings" => typeof(SettingsPage),
             "about" => typeof(AboutPage),
@@ -654,12 +623,17 @@ public sealed partial class MainWindow : Window
         };
 
         var loginAccount = pageName == "login" ? _pendingLoginAccount : null;
+        object? parameter = pageName switch
+        {
+            "login" => loginAccount,
+            "legacyAccountQuery" => "accountQuery",
+            _ => null
+        };
         var isSamePage =
             ContentFrame.CurrentSourcePageType == pageType &&
             string.Equals(_currentPageName, pageName, StringComparison.Ordinal);
         if (!isSamePage)
         {
-            object? parameter = pageName == "login" ? loginAccount : null;
             ContentFrame.Navigate(pageType, parameter, new EntranceNavigationTransitionInfo());
             ContentFrame.BackStack.Clear();
             _currentPageName = pageName;
@@ -731,31 +705,6 @@ public sealed partial class MainWindow : Window
             AppState.SettingsService.GetCustomBackgroundImagePath(settings),
             settings.CustomBackgroundEnabled,
             settings.CustomBackgroundOpacity);
-    }
-
-    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _vpnWatchTimer;
-
-    /// <summary>
-    /// VPN 兜底自愈：开关是「已启用」但内核已经不在了（最常见的是另一个窗口退出时把内核一起带走，
-    /// 或内核自己崩了）→ 静默重新连回。开关关着、内核在跑、或正在连接时都不动手。
-    /// </summary>
-    private static async Task EnsureVpnAliveAsync()
-    {
-        try
-        {
-            var settings = AppState.SettingsService.Load();
-            if (!settings.VpnProxyEnabled || VpnCoreService.IsRunning)
-            {
-                return;
-            }
-
-            AppLog.Info("VPN 开关处于启用状态但内核不在运行，自动连回…");
-            await VpnCoreService.TryRestoreOnStartupAsync(ignoreOtherInstances: true);
-        }
-        catch (Exception ex)
-        {
-            AppLog.Warn($"VPN 自愈检查失败：{ex.Message}");
-        }
     }
 
     /// <summary>自定义背景视频的播放器（静音循环）。</summary>
@@ -855,10 +804,10 @@ public sealed partial class MainWindow : Window
         LoginNavItem.Content = Loc.T("Nav_Login");
         HistoryNavItem.Content = Loc.T("Nav_History");
         LegacyAccountsNavItem.Content = Loc.T("Nav_LegacyAccounts");
+        LegacyAccountQueryNavItem.Content = Loc.T("Legacy_Tab_AccountQuery");
         CachedAccountsNavItem.Content = Loc.T("Nav_CachedAccounts");
         LoadoutNavItem.Content = Loc.T("Nav_Loadout");
         PersonalizationNavItem.Content = Loc.T("Nav_Personalization");
-        ClashNavItem.Content = Loc.T("Nav_Clash");
         TreasureBoxNavItem.Content = Loc.T("Nav_TreasureBox");
         SettingsNavItem.Content = Loc.T("Nav_Settings");
         AboutNavItem.Content = Loc.T("Nav_About");

@@ -392,8 +392,7 @@ internal sealed class AccountHistoryService
         uint cooldownSeconds,
         bool? vacBanned,
         string? refreshToken = null,
-        DateTimeOffset? tokenExpiresAt = null,
-        bool recordCooldownAsNew = false)
+        DateTimeOffset? tokenExpiresAt = null)
     {
         accountName = accountName.Trim();
         steamId = steamId.Trim();
@@ -420,12 +419,6 @@ internal sealed class AccountHistoryService
             item.AccountName = accountName;
             item.SteamId = steamId;
             var updatedAt = DateTimeOffset.Now;
-            CaptureCooldownStart(item, cooldownSeconds, recordCooldownAsNew, updatedAt);
-            if (recordCooldownAsNew && cooldownSeconds is > 0 and <= int.MaxValue)
-            {
-                item.LastCooldownSelectionSeconds = cooldownSeconds;
-            }
-
             item.CooldownSeconds = cooldownSeconds;
             item.CooldownReason = null;
             if (vacBanned.HasValue)
@@ -445,6 +438,93 @@ internal sealed class AccountHistoryService
 
             ApplySteamLastLogin(item, ReadSteamLastLoginMap(), steamId);
             item.CsStatusUpdatedAt = updatedAt;
+            document.Accounts = NormalizeAccounts(document.Accounts).ToList();
+            WriteDocument(document);
+        }
+        finally
+        {
+            _fileGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// 保存「账号查询」结果。失败状态也落盘，便于关闭软件后用「继续执行」只补查未完成账号。
+    /// </summary>
+    public void SaveAccountQueryResult(SteamAccountHistoryItem account, SteamAccountQueryResult result)
+    {
+        _fileGate.Wait();
+        try
+        {
+            var document = ReadDocumentForWrite();
+            var item = FindExisting(document.Accounts, result.SteamId, account.AccountName);
+            if (item is null)
+            {
+                item = new SteamAccountHistoryItem
+                {
+                    AccountName = account.AccountName,
+                    Password = account.Password,
+                    SharedSecret = account.SharedSecret,
+                    Email = account.Email,
+                    EmailPassword = account.EmailPassword,
+                    IsWhiteAccount = true
+                };
+                document.Accounts.Add(item);
+            }
+
+            if (!string.IsNullOrWhiteSpace(result.SteamId))
+            {
+                item.SteamId = result.SteamId;
+            }
+
+            if (!string.IsNullOrWhiteSpace(result.RefreshToken))
+            {
+                item.EyaToken = result.RefreshToken;
+                item.TokenExpiresAt = result.TokenExpiresAt;
+                item.JwtAvailable = true;
+                item.JwtStatus = Loc.T("Account_Jwt_Valid");
+                item.JwtValidatedAt = DateTimeOffset.Now;
+            }
+
+            if (result.RankChecked)
+            {
+                item.CsProfileRank = result.CsProfileRank;
+                item.LastGameLoginText = result.LastGameLoginText;
+            }
+
+            if (result.UserInfoChecked)
+            {
+                if (!string.IsNullOrWhiteSpace(result.PersonaName))
+                {
+                    item.PersonaName = result.PersonaName;
+                }
+
+                item.Region = result.Region;
+            }
+
+            if (result.ChinaSteamChecked)
+            {
+                item.Cs2IsChina = result.HasChinaSteam;
+            }
+
+            if (result.BanChecked)
+            {
+                var updatedAt = DateTimeOffset.Now;
+                item.GcVacBanned = result.VacBanned;
+                item.BanExpiresAt = result.BanExpiresAt;
+                item.AccountQueryBanChecked = true;
+                item.CooldownSeconds = result.CooldownSeconds ?? 0;
+                item.CooldownReason = null;
+                item.CsStatusUpdatedAt = updatedAt;
+            }
+
+            if (result.NameApplied && !string.IsNullOrWhiteSpace(result.AppliedPersonaName))
+            {
+                item.PersonaName = result.AppliedPersonaName;
+            }
+
+            item.AccountQueryStatus = result.StatusCode;
+            item.AccountQueryMessage = string.IsNullOrWhiteSpace(result.Message) ? null : result.Message;
+            item.AccountQueryUpdatedAt = DateTimeOffset.Now;
             document.Accounts = NormalizeAccounts(document.Accounts).ToList();
             WriteDocument(document);
         }
@@ -491,7 +571,6 @@ internal sealed class AccountHistoryService
     private static void ApplyCsStatus(SteamAccountHistoryItem item, CsPremierScoreResult score)
     {
         var updatedAt = DateTimeOffset.Now;
-        CaptureCooldownStart(item, score.PenaltySeconds, force: false, updatedAt: updatedAt);
         item.CompetitiveScore = score.DisplayText;
         item.AccountStatus = score.StatusText;
         item.PremierScore = score.PremierRanking is null ? null : checked((int)score.PremierRanking.RankId);
@@ -504,34 +583,6 @@ internal sealed class AccountHistoryService
         item.InCsMatch = score.InMatch;
         item.Cs2IsChina = score.Cs2IsChina;
         item.CsStatusUpdatedAt = updatedAt;
-    }
-
-    /// <summary>
-    /// 只在冷却刚开始、旧记录缺少历史时间，或用户手动设置冷却时更新“上次冷却时间”；
-    /// 查询同一段仍在进行的冷却不会把距今天数重置为 0。
-    /// </summary>
-    private static void CaptureCooldownStart(
-        SteamAccountHistoryItem item,
-        uint? cooldownSeconds,
-        bool force,
-        DateTimeOffset updatedAt)
-    {
-        if (!(cooldownSeconds is > 0 and <= int.MaxValue))
-        {
-            return;
-        }
-
-        if (force || !item.HasLiveCooldown)
-        {
-            item.LastCooldownAt = updatedAt;
-            item.LastCooldownSelectionSeconds = null;
-            item.IsCooldownRecordCleared = false;
-        }
-        else if (item.LastCooldownAt is null && !item.IsCooldownRecordCleared)
-        {
-            item.LastCooldownAt = item.LastCooldownRecordAt ?? updatedAt;
-            item.IsCooldownRecordCleared = false;
-        }
     }
 
     /// <summary>
@@ -620,32 +671,6 @@ internal sealed class AccountHistoryService
             item.Note = normalized;
             document.Accounts = NormalizeAccounts(document.Accounts).ToList();
             WriteDocument(document);
-        }
-        finally
-        {
-            _fileGate.Release();
-        }
-    }
-
-    /// <summary>清空账号的上次冷却记录；当前冷却状态与结束时间保持不变。</summary>
-    public bool ClearCooldownRecord(SteamAccountHistoryItem account)
-    {
-        _fileGate.Wait();
-        try
-        {
-            var document = ReadDocumentForWrite();
-            var item = FindExisting(document.Accounts, account.SteamId, account.AccountName);
-            if (item is null)
-            {
-                return false;
-            }
-
-            item.LastCooldownAt = null;
-            item.LastCooldownSelectionSeconds = null;
-            item.IsCooldownRecordCleared = true;
-            document.Accounts = NormalizeAccounts(document.Accounts).ToList();
-            WriteDocument(document);
-            return true;
         }
         finally
         {

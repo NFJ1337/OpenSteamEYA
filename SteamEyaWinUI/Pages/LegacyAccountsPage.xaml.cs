@@ -17,9 +17,9 @@ using Windows.UI;
 namespace SteamEyaWinUI.Pages;
 
 /// <summary>
-/// 旧版（Qt「账号管理系统」）风格的账号页，两个标签：账号管理 / VAC查询。
+/// 旧版（Qt「账号管理系统」）风格的账号页；左侧「账号查询」子导航复用同一实例与账号库。
 ///   · 布局照老版来：一行工具栏（添加/导出/刷新 + 5 个 ID 生成）+ 一行筛选 + 紧凑表格；
-///   · 数据与新版共用同一份账号库（白号），查询走既有的「账号 + 密码登录 Steam 读冷却 / VAC 页」链路；
+///   · 数据与新版共用同一份账号库（白号），账号查询走批量 Steam Web 资料读取链路；
 ///   · 老版特有、而新数据模型里没有的字段（快捷方式、隐藏）不还原，避免为了外观塞进无意义的字段。
 /// </summary>
 public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
@@ -44,6 +44,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         _statusCooldownBrush = (Brush)Resources["LegacyStatusCooldownBrush"];
         _statusVacBrush = (Brush)Resources["LegacyStatusVacBrush"];
         BuildGenIdMenu();
+        InitializeAccountQueryTab();
 
         // 行高亮统一在这里处理：行上的 Tapped 在点在复选框等自己处理指针的子控件上时收不到，
         // handledEventsToo: true 才能保证「点哪一行都算」。
@@ -92,6 +93,11 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         AppState.ReloadWhiteAccounts();
         UpdateBatchButtonsState();
         RebuildRows();
+        ApplyLegacyPageMode(string.Equals(
+            e.Parameter as string,
+            "accountQuery",
+            StringComparison.Ordinal));
+        RefreshAccountQueryRows();
 
         // 白号库是账号管理页统一读写的账号库：订阅变化事件后，
         // 查询 / 备注 / 冷却等改动都会让本页立即重建，避免界面停留在旧状态。
@@ -125,6 +131,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         }
 
         UpdateBatchButtonsState();
+        UpdateAccountQueryButtonState();
     }
 
     /// <summary>取消正在进行的查询：走全局忙碌取消（AppState.CancelBusyOperation），与历史页同一套。</summary>
@@ -147,6 +154,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
                 ? _highlightedRow?.Item.SteamId
                 : selectSteamId;
             RebuildRows(highlightFirst: false);
+            RefreshAccountQueryRows();
             if (!string.IsNullOrWhiteSpace(focusSteamId))
             {
                 var account = AppState.WhiteAccounts.FirstOrDefault(item =>
@@ -191,6 +199,8 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Strings)));
         UpdateGenIdMenuTexts();
         RebuildRows();
+        RefreshAccountQueryRows();
+        UpdateAccountQueryLocalizedChrome();
     });
 
     // ---------- 视图：两个标签 / 搜索 / 筛选 ----------
@@ -719,10 +729,6 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
                 AddCooldownMenuItems(flyout, row);
                 break;
 
-            case "cooldownRecord":
-                AddCooldownRecordMenuItems(flyout, row);
-                break;
-
             default:
                 return false;
         }
@@ -1236,31 +1242,6 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         flyout.Items.Add(custom);
     }
 
-    private void AddCooldownRecordMenuItems(MenuFlyout flyout, LegacyAccountRow row)
-    {
-        var clear = new MenuFlyoutItem
-        {
-            Text = Loc.T("Common_Clear"),
-            Icon = new FontIcon { Glyph = "\uE75C" }
-        };
-        clear.Click += (_, _) => ClearCooldownRecord(row);
-        flyout.Items.Add(clear);
-    }
-
-    private void ClearCooldownRecord(LegacyAccountRow row)
-    {
-        var account = row.Item;
-        if (!AppState.WhiteAccountService.ClearCooldownRecord(account))
-        {
-            return;
-        }
-
-        account.LastCooldownAt = null;
-        account.LastCooldownSelectionSeconds = null;
-        account.IsCooldownRecordCleared = true;
-        row.RefreshStateFromItem();
-    }
-
     private void ApplyNote(LegacyAccountRow row, string? note)
     {
         var account = row.Item;
@@ -1350,18 +1331,11 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             account.AccountName,
             account.SteamId,
             seconds,
-            account.GcVacBanned,
-            recordCooldownAsNew: true);
+            account.GcVacBanned);
         var updatedAt = DateTimeOffset.Now;
         account.CooldownSeconds = seconds;
         account.CooldownReason = null;
         account.CsStatusUpdatedAt = updatedAt;
-        if (seconds > 0)
-        {
-            account.LastCooldownAt = updatedAt;
-            account.LastCooldownSelectionSeconds = seconds;
-            account.IsCooldownRecordCleared = false;
-        }
 
         // JSON 已在上方写入；这里只刷新当前行的绑定，不重建页面或滚动列表。
         row.RefreshStateFromItem();
@@ -1996,7 +1970,6 @@ public sealed partial class LegacyAccountRow : INotifyPropertyChanged
         CooldownEndText = item.GcVacBanned == true
             ? "VAC"
             : item.CooldownTimeDisplayText;
-        CooldownRecordText = item.CooldownRecordText;
 
         // 老版「其他」列放邮箱信息：邮箱----邮箱密码。
         Others = string.IsNullOrWhiteSpace(item.Email)
@@ -2126,23 +2099,6 @@ public sealed partial class LegacyAccountRow : INotifyPropertyChanged
         }
     }
 
-    private string _cooldownRecordText = string.Empty;
-
-    public string CooldownRecordText
-    {
-        get => _cooldownRecordText;
-        private set
-        {
-            if (_cooldownRecordText == value)
-            {
-                return;
-            }
-
-            _cooldownRecordText = value;
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CooldownRecordText)));
-        }
-    }
-
     public string Others { get; }
 
     /// <summary>其他列显示内容：默认 ********，勾选后是「邮箱----邮箱密码」。</summary>
@@ -2177,7 +2133,6 @@ public sealed partial class LegacyAccountRow : INotifyPropertyChanged
         CooldownEndText = isVacBanned
             ? "VAC"
             : Item.CooldownTimeDisplayText;
-        CooldownRecordText = Item.CooldownRecordText;
     }
 
     private Brush ResolveStatusBrush(bool isVacBanned, bool hasCooldown) =>

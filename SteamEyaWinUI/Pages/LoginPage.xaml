@@ -623,7 +623,7 @@
 
                         <TextBox
                             x:Name="TokenBox"
-                            Height="200"
+                            Height="170"
                             Header="{x:Bind Strings.Get('Login_Field_Token'), Mode=OneWay}"
                             PlaceholderText="{x:Bind Strings.Get('Login_Field_Token_Placeholder'), Mode=OneWay}"
                             AcceptsReturn="True"
