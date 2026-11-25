@@ -47,6 +47,9 @@ public sealed partial class Cs2TrackerPage
             : null;
         riskScore ??= GetMetricNumber(GetNode(root, "gauges", "cheating")) ??
             GetMetricNumber(GetNode(root, "gauges", "cheating_details", "percent"));
+        double? riskGaugeScore = riskScore is null
+            ? null
+            : Math.Clamp(Math.Round(riskScore.Value, MidpointRounding.AwayFromZero), 1, 99);
         var headshot = GetMetricNumber(GetNode(root, "gauges", "headshot")) ??
             GetMetricNumber(GetNode(root, "gauges", "headshot%")) ??
             GetMetricNumber(GetNode(root, "csstatsgg", "stats", "hs"));
@@ -62,9 +65,9 @@ public sealed partial class Cs2TrackerPage
         var gaugeGrid = CreateEqualGrid(3, 8);
         gaugeGrid.Children.Add(BuildGaugeCard(
             "作弊风险",
-            riskScore,
+            riskGaugeScore,
             "%",
-            riskScore,
+            riskGaugeScore,
             riskScore switch
             {
                 null => TrackerMuted,
@@ -1327,8 +1330,12 @@ public sealed partial class Cs2TrackerPage
 
     private Border BuildScopeCard(JsonObject root, string steamId)
     {
-        var display = GetNode(root, "scopegg_display") as JsonObject;
+        var display = GetNode(root, "scopegg_display") as JsonObject ??
+            GetNode(root, "scopegg_partner") as JsonObject;
         var timeToDamage = GetNode(display ?? new JsonObject(), "time_to_damage") as JsonObject;
+        var percentiles = GetNode(root, "scopegg_percentiles") as JsonObject;
+        var average = GetMetricNumber(timeToDamage?["avg_sec"]);
+        var current = GetMetricNumber(timeToDamage?["current_sec"]);
         var fastest = GetMetricNumber(timeToDamage?["fastest_sec"]) ??
             GetMetricNumber(timeToDamage?["min_sec"]);
         var fastPercent = GetMetricNumber(timeToDamage?["fast_percent"]);
@@ -1362,19 +1369,37 @@ public sealed partial class Cs2TrackerPage
         header.Children.Add(link);
         content.Children.Add(header);
 
-        var metrics = CreateEqualGrid(4, 10);
+        var metrics = CreateEqualGrid(6, 10);
         metrics.Children.Add(BuildScopeMetric(
-            "最快伤害",
-            fastest is null ? "—" : $"{fastest.Value * 1000:F0} ms"));
+            "平均 TTD",
+            ScopeDuration(average),
+            ScopeTopPercent(percentiles, "avg_ttd_sec"),
+            55));
+        metrics.Children.Add(BuildScopeMetric(
+            "当前 TTD",
+            ScopeDuration(current),
+            ScopeTopPercent(percentiles, "current_ttd_sec", "current_sec"),
+            55));
+        metrics.Children.Add(BuildScopeMetric(
+            "最快",
+            ScopeDuration(fastest),
+            ScopeTopPercent(percentiles, "fastest_ttd_sec"),
+            60));
         metrics.Children.Add(BuildScopeMetric(
             "快速回合",
-            fastPercent is null ? "—" : $"{fastPercent.Value:F1}%"));
+            fastPercent is null ? "—" : $"{fastPercent.Value:F0}%",
+            ScopeTopPercent(percentiles, "fast_ttd_percent"),
+            20));
         metrics.Children.Add(BuildScopeMetric(
             "可疑",
-            suspicious is null ? "—" : suspicious.Value.ToString("F0", CultureInfo.InvariantCulture)));
+            suspicious is null ? "—" : suspicious.Value.ToString("F0", CultureInfo.InvariantCulture),
+            null,
+            null));
         metrics.Children.Add(BuildScopeMetric(
-            "异常",
-            inhuman is null ? "—" : inhuman.Value.ToString("F0", CultureInfo.InvariantCulture)));
+            "非人类",
+            inhuman is null ? "—" : inhuman.Value.ToString("F0", CultureInfo.InvariantCulture),
+            null,
+            null));
         ArrangeColumnsInOrder(metrics);
         content.Children.Add(metrics);
         return OverviewCard(content, new Thickness(14));
@@ -1587,7 +1612,6 @@ public sealed partial class Cs2TrackerPage
         var weapons = usages.Values
             .Where(weapon => weapon.Kills > 0)
             .OrderByDescending(weapon => weapon.Kills)
-            .Take(12)
             .ToArray();
         if (weapons.Length == 0)
         {
@@ -1602,18 +1626,36 @@ public sealed partial class Cs2TrackerPage
             FontWeight = FontWeights.SemiBold,
             Foreground = ThemeBrush("AuroraTextHeadingBrush")
         });
+        var maxKills = Math.Max(1, weapons.Max(weapon => weapon.Kills));
+        var maxShots = Math.Max(1, weapons.Max(weapon => weapon.Shots ?? 0));
+        var maxHits = Math.Max(1, weapons.Max(weapon => weapon.Hits ?? 0));
         var header = BuildWeaponRow(null, "武器", "击杀", "射击", "命中", "命中率", isHeader: true);
         content.Children.Add(header);
+        var rows = new StackPanel { Spacing = 4 };
         foreach (var weapon in weapons)
         {
-            content.Children.Add(BuildWeaponRow(
+            var row = BuildWeaponRow(
                 weapon,
                 weapon.Name,
                 FormatWhole(weapon.Kills),
                 FormatWhole(weapon.Shots),
                 FormatWhole(weapon.Hits),
-                PremierPercent(weapon.Accuracy)));
+                PremierPercent(weapon.Accuracy),
+                maxKills,
+                maxShots,
+                maxHits);
+            row.Height = 40;
+            rows.Children.Add(row);
         }
+        content.Children.Add(new ScrollViewer
+        {
+            Content = rows,
+            MaxHeight = 348,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            HorizontalScrollMode = ScrollMode.Disabled,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            VerticalScrollMode = ScrollMode.Enabled
+        });
         return OverviewCard(content, new Thickness(14));
     }
 
@@ -2153,32 +2195,139 @@ public sealed partial class Cs2TrackerPage
         return new Border { Child = grid };
     }
 
-    private Border BuildScopeMetric(string label, string value)
+    private Border BuildScopeMetric(
+        string label,
+        string value,
+        double? topPercent,
+        double? thresholdPercent)
     {
-        var content = new StackPanel { Spacing = 3, HorizontalAlignment = HorizontalAlignment.Center };
+        var content = new StackPanel { Spacing = 2, HorizontalAlignment = HorizontalAlignment.Stretch };
         content.Children.Add(new TextBlock
         {
             Text = label,
-            FontSize = 9,
+            FontSize = 11,
             FontWeight = FontWeights.SemiBold,
-            Foreground = ThemeBrush("AuroraTextMutedBrush")
+            Foreground = ThemeBrush("AuroraTextHeadingBrush"),
+            HorizontalAlignment = HorizontalAlignment.Center
         });
         content.Children.Add(new TextBlock
         {
             Text = value,
-            FontSize = 17,
+            FontSize = 20,
             FontWeight = FontWeights.SemiBold,
-            Foreground = ThemeBrush("AuroraTextHeadingBrush")
+            Foreground = ThemeBrush("AuroraTextHeadingBrush"),
+            HorizontalAlignment = HorizontalAlignment.Center
         });
-        content.Children.Add(new Border
+        content.Children.Add(new TextBlock
         {
-            Height = 2,
-            Margin = new Thickness(0, 7, 0, 0),
-            Background = ThemeBrush("AuroraGlassBorderBrush"),
-            CornerRadius = new CornerRadius(1)
+            Text = topPercent is null ? " " : $"Top {FormatTopPercent(topPercent.Value)}",
+            FontSize = 10,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = ThemeBrush("AuroraTextMutedBrush"),
+            HorizontalAlignment = HorizontalAlignment.Center
         });
-        return new Border { Child = content };
+        content.Children.Add(CreateScopeRatingBar(topPercent, thresholdPercent));
+        return new Border
+        {
+            Padding = new Thickness(2, 0, 2, 0),
+            Child = content
+        };
     }
+
+    private Grid CreateScopeRatingBar(double? topPercent, double? thresholdPercent)
+    {
+        var track = new Grid
+        {
+            Height = 10,
+            Margin = new Thickness(0, 4, 0, 0)
+        };
+        track.Children.Add(new Border
+        {
+            Height = 6,
+            VerticalAlignment = VerticalAlignment.Center,
+            CornerRadius = new CornerRadius(3),
+            Background = new SolidColorBrush(ColorFrom("#1AFFFFFF"))
+        });
+        var fill = new Border
+        {
+            Height = 6,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center,
+            CornerRadius = new CornerRadius(3),
+            IsHitTestVisible = false
+        };
+        var gradient = new LinearGradientBrush
+        {
+            StartPoint = new Point(0, 0.5),
+            EndPoint = new Point(1, 0.5)
+        };
+        gradient.GradientStops.Add(new GradientStop
+        {
+            Color = ColorFrom("#3B82F6"),
+            Offset = 0
+        });
+        gradient.GradientStops.Add(new GradientStop
+        {
+            Color = ColorFrom("#1D4ED8"),
+            Offset = 0.5
+        });
+        gradient.GradientStops.Add(new GradientStop
+        {
+            Color = ColorFrom("#3B82F6"),
+            Offset = 1
+        });
+        fill.Background = gradient;
+        track.Children.Add(fill);
+
+        var threshold = new Border
+        {
+            Width = 2,
+            Height = 10,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center,
+            CornerRadius = new CornerRadius(1),
+            Background = new SolidColorBrush(ColorFrom("#99FFFFFF")),
+            IsHitTestVisible = false,
+            Visibility = thresholdPercent is null ? Visibility.Collapsed : Visibility.Visible
+        };
+        track.Children.Add(threshold);
+        track.SizeChanged += (_, args) =>
+        {
+            var width = args.NewSize.Width;
+            var fillPercent = topPercent is null
+                ? 0
+                : Math.Clamp(100 - topPercent.Value, 0, 100);
+            fill.Width = width * fillPercent / 100;
+            if (thresholdPercent is not null)
+            {
+                threshold.Margin = new Thickness(
+                    Math.Clamp(width * thresholdPercent.Value / 100 - 1, 0, Math.Max(0, width - 2)),
+                    0,
+                    0,
+                    0);
+            }
+        };
+        return track;
+    }
+
+    private static double? ScopeTopPercent(JsonObject? percentiles, params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            var value = GetMetricNumber(GetNode(percentiles ?? new JsonObject(), key, "topPercent"));
+            if (value is not null)
+            {
+                return value;
+            }
+        }
+
+        return null;
+    }
+
+    private static string ScopeDuration(double? seconds) =>
+        seconds is null
+            ? "—"
+            : $"{Math.Round(seconds.Value * 1000, MidpointRounding.AwayFromZero):F0}ms";
 
     private UIElement BuildFlickDirections(JsonObject? aimStats)
     {
@@ -2374,14 +2523,25 @@ public sealed partial class Cs2TrackerPage
         string shots,
         string hits,
         string accuracy,
+        double maxKills = 1,
+        double maxShots = 1,
+        double maxHits = 1,
         bool isHeader = false)
     {
-        var grid = new Grid { ColumnSpacing = 8, Padding = new Thickness(6, 5, 6, 5) };
-        grid.ColumnDefinitions.Add(new ColumnDefinition());
-        for (var index = 0; index < 4; index++)
+        var grid = new Grid { ColumnSpacing = 56, Padding = new Thickness(6, 5, 6, 5) };
+        grid.ColumnDefinitions.Add(new ColumnDefinition
         {
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(64) });
+            Width = new GridLength(2, GridUnitType.Star)
+        });
+        for (var index = 0; index < 3; index++)
+        {
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(92) });
         }
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(112) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition
+        {
+            Width = new GridLength(1, GridUnitType.Star)
+        });
 
         var namePanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 7 };
         if (!isHeader && weapon is not null)
@@ -2410,15 +2570,41 @@ public sealed partial class Cs2TrackerPage
             TextTrimming = TextTrimming.CharacterEllipsis
         });
         grid.Children.Add(namePanel);
-        AddWeaponValue(grid, kills, 1, isHeader);
-        AddWeaponValue(grid, shots, 2, isHeader);
-        AddWeaponValue(grid, hits, 3, isHeader);
-        AddWeaponValue(grid, accuracy, 4, isHeader);
+        AddWeaponValue(
+            grid,
+            kills,
+            1,
+            isHeader,
+            isHeader ? null : WeaponBarPercent(weapon?.Kills, maxKills));
+        AddWeaponValue(
+            grid,
+            shots,
+            2,
+            isHeader,
+            isHeader ? null : WeaponBarPercent(weapon?.Shots, maxShots));
+        AddWeaponValue(
+            grid,
+            hits,
+            3,
+            isHeader,
+            isHeader ? null : WeaponBarPercent(weapon?.Hits, maxHits));
+        AddWeaponAccuracyCell(grid, accuracy, weapon?.Accuracy, 4, isHeader);
         return grid;
     }
 
-    private void AddWeaponValue(Grid grid, string value, int column, bool isHeader)
+    private void AddWeaponValue(
+        Grid grid,
+        string value,
+        int column,
+        bool isHeader,
+        double? barPercent = null)
     {
+        var content = new StackPanel
+        {
+            Spacing = 3,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Center
+        };
         var text = new TextBlock
         {
             Text = value,
@@ -2427,11 +2613,114 @@ public sealed partial class Cs2TrackerPage
             Foreground = isHeader
                 ? ThemeBrush("AuroraTextMutedBrush")
                 : ThemeBrush("AuroraTextBodyBrush"),
-            HorizontalAlignment = HorizontalAlignment.Right
+            HorizontalAlignment = HorizontalAlignment.Left,
+            TextAlignment = TextAlignment.Left
         };
-        Grid.SetColumn(text, column);
-        grid.Children.Add(text);
+        content.Children.Add(text);
+        if (!isHeader && barPercent is not null)
+        {
+            content.Children.Add(CreateWeaponProgressBar(barPercent.Value));
+        }
+
+        Grid.SetColumn(content, column);
+        grid.Children.Add(content);
     }
+
+    private static Grid CreateWeaponProgressBar(double percent)
+    {
+        var track = new Grid { Height = 3 };
+        track.Children.Add(new Border
+        {
+            CornerRadius = new CornerRadius(1.5),
+            Background = new SolidColorBrush(ColorFrom("#14FFFFFF"))
+        });
+        var fill = new Border
+        {
+            HorizontalAlignment = HorizontalAlignment.Left,
+            CornerRadius = new CornerRadius(1.5),
+            Background = new SolidColorBrush(ColorFrom(TrackerAccentBlue))
+        };
+        track.Children.Add(fill);
+        track.SizeChanged += (_, args) =>
+        {
+            fill.Width = args.NewSize.Width * Math.Clamp(percent, 0, 100) / 100;
+        };
+        return track;
+    }
+
+    private void AddWeaponAccuracyCell(
+        Grid grid,
+        string value,
+        double? accuracy,
+        int column,
+        bool isHeader)
+    {
+        var content = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 14,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        content.Children.Add(new TextBlock
+        {
+            Text = value,
+            FontSize = isHeader ? 9 : 11,
+            FontWeight = isHeader ? FontWeights.SemiBold : FontWeights.Normal,
+            Foreground = isHeader
+                ? ThemeBrush("AuroraTextMutedBrush")
+                : ThemeBrush("AuroraTextBodyBrush"),
+            VerticalAlignment = VerticalAlignment.Center
+        });
+        if (!isHeader && accuracy is not null)
+        {
+            content.Children.Add(CreateWeaponAccuracyGauge(accuracy.Value));
+        }
+
+        Grid.SetColumn(content, column);
+        grid.Children.Add(content);
+    }
+
+    private Canvas CreateWeaponAccuracyGauge(double accuracy)
+    {
+        var canvas = new Canvas
+        {
+            Width = 30,
+            Height = 30,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        var background = new Ellipse
+        {
+            Width = 24,
+            Height = 24,
+            Stroke = new SolidColorBrush(ColorFrom("#14FFFFFF")),
+            StrokeThickness = 3
+        };
+        Canvas.SetLeft(background, 3);
+        Canvas.SetTop(background, 3);
+        canvas.Children.Add(background);
+
+        var sweep = Math.Clamp(accuracy, 0, 100) * 3.6;
+        if (sweep > 0)
+        {
+            canvas.Children.Add(CreateArc(
+                15,
+                15,
+                12,
+                -90,
+                Math.Min(359.9, sweep),
+                new SolidColorBrush(ColorFrom(TrackerAccentBlue)),
+                3));
+        }
+
+        return canvas;
+    }
+
+    private static double? WeaponBarPercent(double? value, double maximum) =>
+        value is null || maximum <= 0
+            ? null
+            : Math.Clamp(value.Value / maximum * 100, 0, 100);
 
     private static ImageSource? CreateWeaponImageSource(string id)
     {
