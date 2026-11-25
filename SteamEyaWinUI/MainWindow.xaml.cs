@@ -36,6 +36,7 @@ public sealed partial class MainWindow : Window
     private const double IntroVideoVolume = 0.1;
 
     private static nint s_hwnd;
+    private static int s_pendingExternalActivation;
 
     // 状态栏提示的自动收起时间：用户要求所有页面、所有等级（含警告/错误）统一 3 秒。
     // 详情不会丢：警告/错误同时写入 logs\steameya.log，状态栏只做即时反馈。
@@ -52,6 +53,7 @@ public sealed partial class MainWindow : Window
     private TrayIconService? _trayIconService;
     private bool _shutdownConfirmed;
     private bool _closePromptOpen;
+    private bool _externalActivationReady;
 
     public static MainWindow? Instance { get; private set; }
 
@@ -165,6 +167,7 @@ public sealed partial class MainWindow : Window
         RootLayoutGrid.Loaded += OnRootLayoutGridLoaded;
 
         _ = RunStartupUpdateCheckAsync();
+        MarkExternalActivationReady();
     }
 
     /// <summary>
@@ -687,6 +690,14 @@ public sealed partial class MainWindow : Window
         titleBar.ButtonHoverForegroundColor = foreground;
         titleBar.ButtonPressedForegroundColor = foreground;
         titleBar.ButtonInactiveForegroundColor = foreground;
+        titleBar.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
+        titleBar.ButtonInactiveBackgroundColor = Microsoft.UI.Colors.Transparent;
+        titleBar.ButtonHoverBackgroundColor = RootLayoutGrid.ActualTheme == ElementTheme.Dark
+            ? Windows.UI.Color.FromArgb(0x24, 0xFF, 0xFF, 0xFF)
+            : Windows.UI.Color.FromArgb(0x14, 0x00, 0x00, 0x00);
+        titleBar.ButtonPressedBackgroundColor = RootLayoutGrid.ActualTheme == ElementTheme.Dark
+            ? Windows.UI.Color.FromArgb(0x38, 0xFF, 0xFF, 0xFF)
+            : Windows.UI.Color.FromArgb(0x24, 0x00, 0x00, 0x00);
     }
 
     /// <summary>让背景图的布局尺寸始终跟随窗口客户区，GIF 和大图也能实时缩放。</summary>
@@ -1153,10 +1164,38 @@ public sealed partial class MainWindow : Window
         }
 
         Activate();
+        UpdateTitleBarButtonColors();
         if (ContentFrame.Content is SettingsPage settingsPage)
         {
             settingsPage.RefreshCloseBehaviorFromSettings();
         }
+    }
+
+    private static void MarkPendingExternalActivation()
+    {
+        if (Interlocked.Exchange(ref s_pendingExternalActivation, 0) == 1 &&
+            Instance is { _externalActivationReady: true } window)
+        {
+            window.DispatcherQueue.TryEnqueue(window.ShowMainWindowFromTray);
+        }
+    }
+
+    private void MarkExternalActivationReady()
+    {
+        _externalActivationReady = true;
+        MarkPendingExternalActivation();
+    }
+
+    /// <summary>第二个进程启动时调用：唤起已有实例，而不是创建重复窗口。</summary>
+    internal static void RequestExternalActivation()
+    {
+        if (Instance is { _externalActivationReady: true, _shutdownConfirmed: false } window)
+        {
+            window.DispatcherQueue.TryEnqueue(window.ShowMainWindowFromTray);
+            return;
+        }
+
+        Interlocked.Exchange(ref s_pendingExternalActivation, 1);
     }
 
     private void RequestApplicationExit()

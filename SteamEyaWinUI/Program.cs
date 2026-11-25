@@ -19,13 +19,28 @@ public static class Program
             return Cs2CloudPushWorker.Run(args);
         }
 
-        WinRT.ComWrappersSupport.InitializeComWrappers();
-        Application.Start(p =>
+        if (!SingleInstanceService.TryAcquire(
+                MainWindow.RequestExternalActivation,
+                out var singleInstance))
         {
-            var context = new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread());
-            SynchronizationContext.SetSynchronizationContext(context);
-            new App();
-        });
+            return 0;
+        }
+
+        WinRT.ComWrappersSupport.InitializeComWrappers();
+        try
+        {
+            Application.Start(p =>
+            {
+                var context = new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread());
+                SynchronizationContext.SetSynchronizationContext(context);
+                new App();
+            });
+        }
+        finally
+        {
+            singleInstance?.Dispose();
+        }
+
         return 0;
     }
 }
