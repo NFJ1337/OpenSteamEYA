@@ -13,6 +13,7 @@ internal sealed class GitHubUpdateService
     public const string RepositoryUrl = "https://github.com/NFJ1337/OpenSteamEYA";
     public const string ReleasesUrl = $"{RepositoryUrl}/releases";
     private const string LatestMetadataUrl = "https://github.com/NFJ1337/OpenSteamEYA/releases/latest/download/latest.json";
+    private const string ReleaseHistoryApiUrl = "https://api.github.com/repos/NFJ1337/OpenSteamEYA/releases";
 
     // latest.json 还没随 release 上传时的兜底数据源（GitHub Releases API，无需令牌）。
     private const string LatestReleaseApiUrl = "https://api.github.com/repos/NFJ1337/OpenSteamEYA/releases/latest";
@@ -187,6 +188,68 @@ internal sealed class GitHubUpdateService
             ?? throw new InvalidOperationException(Loc.T("Update_EmptyResponse"));
 
         // tag 不是版本号（例如「正式exe」）时退一步从安装包文件名认版本，与更新检查保持一致。
+        return ToReleaseChangelogInfo(release);
+    }
+
+    /// <summary>
+    /// 读取最近发布记录，供“更新历史”卡片展示。结果保持 GitHub 返回顺序（最新在前）。
+    /// </summary>
+    public async Task<IReadOnlyList<ReleaseChangelogInfo>> FetchReleaseHistoryAsync(
+        int count = 12,
+        CancellationToken cancellationToken = default)
+    {
+        var primary = ResolveSite(_selectedProxyCode);
+        var candidates = new List<GitHubProxySite> { primary };
+        candidates.AddRange(ProxySites.Where(site => site.Code != primary.Code));
+
+        Exception? lastError = null;
+        foreach (var site in candidates.Take(MaxSitesPerCheck))
+        {
+            try
+            {
+                return await FetchReleaseHistoryViaSiteAsync(
+                    site,
+                    Math.Clamp(count, 1, 30),
+                    cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                lastError = ex;
+                AppLog.Warn($"更新历史读取经 {site.DisplayName} 失败（{ex.Message}），换下一个站点重试。");
+            }
+        }
+
+        throw lastError ?? new InvalidOperationException(Loc.T("Update_EmptyResponse"));
+    }
+
+    private async Task<IReadOnlyList<ReleaseChangelogInfo>> FetchReleaseHistoryViaSiteAsync(
+        GitHubProxySite site,
+        int count,
+        CancellationToken cancellationToken)
+    {
+        using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        attemptCts.CancelAfter(SiteAttemptTimeout);
+
+        using var response = await HttpClient.SendAsync(
+            CreateNoCacheRequest(BuildReleaseHistoryApiUrl(site, count)),
+            HttpCompletionOption.ResponseHeadersRead,
+            attemptCts.Token);
+        response.EnsureSuccessStatusCode();
+
+        await using var stream = await response.Content.ReadAsStreamAsync(attemptCts.Token);
+        var releases = await JsonSerializer.DeserializeAsync(
+            stream,
+            GitHubUpdateJsonContext.Default.GitHubReleaseDtoArray,
+            attemptCts.Token)
+            ?? [];
+        return releases
+            .Select(ToReleaseChangelogInfo)
+            .Where(item => !string.IsNullOrWhiteSpace(item.Title))
+            .ToArray();
+    }
+
+    private static ReleaseChangelogInfo ToReleaseChangelogInfo(GitHubReleaseDto release)
+    {
         var tag = string.IsNullOrWhiteSpace(release.TagName) ? "latest" : release.TagName!;
         var version = NormalizeVersion(tag);
         if (!TryParseVersion(version, out _))
@@ -208,7 +271,8 @@ internal sealed class GitHubUpdateService
             version,
             title,
             SplitChangelog(ExtractLatestReleaseNotes(release.Body)),
-            release.PublishedAt);
+            release.PublishedAt,
+            tag);
     }
 
     /// <summary>
@@ -426,6 +490,9 @@ internal sealed class GitHubUpdateService
     private static string BuildReleaseApiUrl(GitHubProxySite site) =>
         $"{BuildUrl(site, LatestReleaseApiUrl)}?_={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
 
+    private static string BuildReleaseHistoryApiUrl(GitHubProxySite site, int count) =>
+        $"{BuildUrl(site, $"{ReleaseHistoryApiUrl}?per_page={count}")}&_={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+
     /// <summary>构造「不吃缓存」的 GET 请求（no-cache + no-store）。</summary>
     private static HttpRequestMessage CreateNoCacheRequest(string url)
     {
@@ -538,7 +605,8 @@ internal sealed class GitHubUpdateService
         string Version,
         string Title,
         IReadOnlyList<string> Lines,
-        DateTimeOffset? PublishedAt);
+        DateTimeOffset? PublishedAt,
+        string? Tag = null);
 
     internal sealed record GitHubReleaseAssetDto(
         string? Name,
@@ -555,4 +623,5 @@ internal sealed class GitHubUpdateService
 [JsonSourceGenerationOptions(JsonSerializerDefaults.Web)]
 [JsonSerializable(typeof(GitHubUpdateService.GitHubReleaseMetadataDto))]
 [JsonSerializable(typeof(GitHubUpdateService.GitHubReleaseDto))]
+[JsonSerializable(typeof(GitHubUpdateService.GitHubReleaseDto[]))]
 internal sealed partial class GitHubUpdateJsonContext : JsonSerializerContext;

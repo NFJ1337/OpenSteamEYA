@@ -26,6 +26,11 @@ public sealed partial class AboutPage : Page, INotifyPropertyChanged
     private string? _changelogError;
     private bool _changelogFailedByNetwork;
 
+    private IReadOnlyList<GitHubUpdateService.ReleaseChangelogInfo>? _releaseHistory;
+    private bool _releaseHistoryLoading;
+    private string? _releaseHistoryError;
+    private bool _releaseHistoryFailedByNetwork;
+
     public AboutPage()
     {
         InitializeComponent();
@@ -51,6 +56,7 @@ public sealed partial class AboutPage : Page, INotifyPropertyChanged
 
         // 更新日志同样按需实时拉取（已读到过就不重复请求）。
         _ = LoadChangelogAsync();
+        _ = LoadReleaseHistoryAsync();
     }
 
     private void OnLanguageChanged()
@@ -61,6 +67,7 @@ public sealed partial class AboutPage : Page, INotifyPropertyChanged
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Strings)));
             Render();
             RenderChangelog();
+            RenderReleaseHistory();
         });
     }
 
@@ -69,11 +76,15 @@ public sealed partial class AboutPage : Page, INotifyPropertyChanged
         await AppState.CheckForUpdatesAsync(isAutomatic: false);
         // 手动检查时把更新日志也拉一次，保证看到的是发布页上的最新内容。
         await LoadChangelogAsync(force: true);
+        await LoadReleaseHistoryAsync(force: true);
     }
 
     private void RefreshChangelogButton_Click(object sender, RoutedEventArgs e) => _ = LoadChangelogAsync(force: true);
 
-    private async void MoreChangelogButton_Click(object sender, RoutedEventArgs e) =>
+    private void RefreshHistoryButton_Click(object sender, RoutedEventArgs e) =>
+        _ = LoadReleaseHistoryAsync(force: true);
+
+    private async void MoreHistoryButton_Click(object sender, RoutedEventArgs e) =>
         await AppState.OpenUrlAsync(GitHubUpdateService.ReleasesUrl);
 
     /// <summary>读取最新 release 的更新日志（说明正文）。force=false 时已有内容就跳过。</summary>
@@ -101,6 +112,35 @@ public sealed partial class AboutPage : Page, INotifyPropertyChanged
         {
             _changelogLoading = false;
             RenderChangelog();
+            RenderReleaseHistory();
+        }
+    }
+
+    /// <summary>读取最近发布记录；内容来自 GitHub Releases 列表。</summary>
+    private async Task LoadReleaseHistoryAsync(bool force = false)
+    {
+        if (_releaseHistoryLoading || (!force && _releaseHistory is not null))
+        {
+            return;
+        }
+
+        _releaseHistoryLoading = true;
+        RenderReleaseHistory();
+        try
+        {
+            _releaseHistory = await AppState.UpdateService.FetchReleaseHistoryAsync();
+            _releaseHistoryError = null;
+            _releaseHistoryFailedByNetwork = false;
+        }
+        catch (Exception ex)
+        {
+            _releaseHistoryError = ex.Message;
+            _releaseHistoryFailedByNetwork = AppState.IsNetworkFailure(ex);
+        }
+        finally
+        {
+            _releaseHistoryLoading = false;
+            RenderReleaseHistory();
         }
     }
 
@@ -143,12 +183,125 @@ public sealed partial class AboutPage : Page, INotifyPropertyChanged
         ChangelogPanel.Children.Clear();
         foreach (var line in _changelog.Lines)
         {
-            AddChangelogLine(line);
+            AddChangelogLine(ChangelogPanel, line);
+        }
+    }
+
+    private void RenderReleaseHistory()
+    {
+        if (UpdateHistoryLoadingRing is null)
+        {
+            return;
+        }
+
+        UpdateHistoryLoadingRing.IsActive = _releaseHistoryLoading;
+        UpdateHistoryLoadingRing.Visibility = _releaseHistoryLoading ? Visibility.Visible : Visibility.Collapsed;
+        RefreshHistoryButton.IsEnabled = !_releaseHistoryLoading;
+
+        if (_releaseHistory is null)
+        {
+            UpdateHistoryStatusText.Text = !_releaseHistoryLoading && _releaseHistoryError is not null
+                ? (_releaseHistoryFailedByNetwork
+                    ? Loc.T("About_History_Network_Error")
+                    : Loc.Tf("About_History_Error_Format", _releaseHistoryError))
+                : Loc.T("About_History_Loading");
+            UpdateHistoryStatusText.Visibility = Visibility.Visible;
+            UpdateHistoryScroll.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var latestTag = _changelog?.Tag;
+        var latestVersion = _changelog?.Version;
+        var history = _releaseHistory
+            .Where(item =>
+                !string.Equals(item.Tag, latestTag, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(item.Version, latestVersion, StringComparison.OrdinalIgnoreCase))
+            .Take(10)
+            .ToArray();
+
+        if (history.Length == 0)
+        {
+            UpdateHistoryStatusText.Text = Loc.T("About_History_Empty");
+            UpdateHistoryStatusText.Visibility = Visibility.Visible;
+            UpdateHistoryScroll.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        UpdateHistoryStatusText.Visibility = Visibility.Collapsed;
+        UpdateHistoryScroll.Visibility = Visibility.Visible;
+        UpdateHistoryPanel.Children.Clear();
+        for (var index = 0; index < history.Length; index++)
+        {
+            var release = history[index];
+            if (index > 0)
+            {
+                UpdateHistoryPanel.Children.Add(new Border
+                {
+                    Height = 1,
+                    Margin = new Thickness(0, 4, 0, 2),
+                    Background = ThemeBrush("AuroraGlassBorderBrush")
+                });
+            }
+
+            var header = new Grid { ColumnSpacing = 8 };
+            header.ColumnDefinitions.Add(new ColumnDefinition());
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            header.Children.Add(new TextBlock
+            {
+                Text = Loc.Tf("About_History_Version_Format", release.Version),
+                FontSize = 14,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = ThemeBrush("AuroraTextHeadingBrush")
+            });
+            if (release.PublishedAt is { } publishedAt)
+            {
+                var date = new TextBlock
+                {
+                    Text = Loc.Tf(
+                        "About_History_Published_Format",
+                        publishedAt.ToLocalTime().ToString("yyyy-MM-dd")),
+                    Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+                    Foreground = ThemeBrush("AuroraTextMutedBrush")
+                };
+                Grid.SetColumn(date, 1);
+                header.Children.Add(date);
+            }
+
+            UpdateHistoryPanel.Children.Add(header);
+            if (!string.IsNullOrWhiteSpace(release.Title) &&
+                !string.Equals(release.Title, release.Version, StringComparison.OrdinalIgnoreCase))
+            {
+                UpdateHistoryPanel.Children.Add(new TextBlock
+                {
+                    Text = release.Title,
+                    FontSize = 13,
+                    FontWeight = FontWeights.SemiBold,
+                    TextWrapping = TextWrapping.Wrap,
+                    Foreground = ThemeBrush("AuroraTextBodyBrush")
+                });
+            }
+
+            if (release.Lines.Count == 0)
+            {
+                UpdateHistoryPanel.Children.Add(new TextBlock
+                {
+                    Text = Loc.T("About_Changelog_Empty"),
+                    Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+                    Foreground = ThemeBrush("AuroraTextMutedBrush"),
+                    TextWrapping = TextWrapping.Wrap
+                });
+                continue;
+            }
+
+            foreach (var line in release.Lines)
+            {
+                AddChangelogLine(UpdateHistoryPanel, line);
+            }
         }
     }
 
     /// <summary>逐行添加：去掉 Markdown 记号，标题加粗、「- 」转项目符号、--- 画成分隔线。</summary>
-    private void AddChangelogLine(string raw)
+    private static void AddChangelogLine(StackPanel target, string raw)
     {
         var text = raw.Trim();
         if (text.Length == 0)
@@ -164,7 +317,7 @@ public sealed partial class AboutPage : Page, INotifyPropertyChanged
                 Margin = new Thickness(0, 6, 0, 2),
                 Background = ThemeBrush("AuroraGlassBorderBrush")
             };
-            ChangelogPanel.Children.Add(separator);
+            target.Children.Add(separator);
             return;
         }
 
@@ -199,7 +352,7 @@ public sealed partial class AboutPage : Page, INotifyPropertyChanged
             block.Margin = new Thickness(2, 0, 0, 0);
         }
 
-        ChangelogPanel.Children.Add(block);
+        target.Children.Add(block);
     }
 
     private static Brush ThemeBrush(string key) =>

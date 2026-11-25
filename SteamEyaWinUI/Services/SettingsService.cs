@@ -330,6 +330,20 @@ internal sealed class SettingsService
         }).ToList();
 }
 
+internal static class CloseButtonBehaviors
+{
+    public const string Ask = "Ask";
+    public const string HideToTray = "HideToTray";
+    public const string Exit = "Exit";
+
+    public static string Normalize(string? value) => value switch
+    {
+        HideToTray => HideToTray,
+        Exit => Exit,
+        _ => Ask
+    };
+}
+
 internal sealed class AppSettings
 {
     /// <summary>界面语言代码：zh-Hans / en / zh-Hant。null 表示尚未选择（首次启动按系统语言推断）。</summary>
@@ -379,6 +393,11 @@ internal sealed class AppSettings
     public int? WindowHeight { get; set; }
     /// <summary>是否记住主窗口上次关闭时的屏幕位置。</summary>
     public bool RememberWindowPosition { get; set; }
+
+    /// <summary>
+    /// 点击主窗口关闭按钮时的行为：Ask（每次询问）/ HideToTray（隐藏到托盘）/ Exit（退出主程序）。
+    /// </summary>
+    public string CloseButtonBehavior { get; set; } = CloseButtonBehaviors.Ask;
 
     /// <summary>
     /// 不在左侧导航栏里显示的页面标签（对应 MainWindow 各导航项的 Tag，如 legacyAccounts）。

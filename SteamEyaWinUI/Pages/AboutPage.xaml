@@ -43,15 +43,16 @@
                 </StackPanel>
             </StackPanel>
 
-            <!-- 左：点点关注不迷路 + 自动更新（合并成一张卡，上/下两段）  右：更新日志（实时读 release 说明） -->
-            <Grid ColumnSpacing="16">
+            <!-- 左：关注与自动更新  中：最新更新日志  右：历史版本记录 -->
+            <Grid ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="360" />
+                    <ColumnDefinition Width="400" />
+                    <ColumnDefinition Width="*" MinWidth="220" />
+                    <ColumnDefinition Width="260" />
                 </Grid.ColumnDefinitions>
 
                 <!-- 合并卡：上半作者关注（点点关注不迷路），下半自动更新；整卡高度固定，更新区内容超出时卡内滚动 -->
-                <Border x:Name="FollowAndUpdateCard" Height="420" Style="{StaticResource CardBorderStyle}">
+                <Border x:Name="FollowAndUpdateCard" Grid.Column="0" Height="420" Style="{StaticResource CardBorderStyle}">
                     <Grid RowSpacing="14">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
@@ -60,7 +61,7 @@
                         </Grid.RowDefinitions>
 
                         <!-- 上：点点关注不迷路（头像 + 昵称 + UID + 访问主页） -->
-                        <StackPanel Grid.Row="0" Spacing="12">
+                        <StackPanel Grid.Row="0" Spacing="16">
                             <TextBlock
                                 Text="{x:Bind Strings.Get('About_Follow_Title'), Mode=OneWay}"
                                 Style="{StaticResource SectionTitleTextStyle}" />
@@ -75,7 +76,7 @@
                                     <Image Source="ms-appx:///Assets/bilibili-author-avatar.jpg" Stretch="UniformToFill" />
                                 </Border>
                                 <!-- 昵称与 UID：拉开行距 + 各给行高，避免两行挤在一起 -->
-                                <StackPanel Spacing="6" VerticalAlignment="Center">
+                                <StackPanel Spacing="9" VerticalAlignment="Center">
                                     <TextBlock
                                         Text="南方见TvT"
                                         FontSize="16"
@@ -89,11 +90,9 @@
                                 </StackPanel>
                             </StackPanel>
 
-                            <!-- 宽度与合并前的作者卡一致：原卡片宽 300 − 左右内边距 18×2 = 264（合并后卡片变宽，这里固定回原宽度） -->
                             <Button
                                 x:Name="OpenBilibiliButton"
-                                Width="264"
-                                HorizontalAlignment="Left"
+                                HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Center"
                                 Style="{StaticResource AccentButtonStyle}"
                                 Click="OpenBilibiliButton_Click">
@@ -117,15 +116,21 @@
                             HorizontalScrollBarVisibility="Disabled"
                             VerticalScrollBarVisibility="Auto">
                             <StackPanel Spacing="12">
-                                <Grid>
+                                <Grid ColumnSpacing="6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
                                     <TextBlock
+                                        Grid.Column="0"
                                         Text="{x:Bind Strings.Get('About_Update_Section'), Mode=OneWay}"
-                                        Style="{StaticResource SectionTitleTextStyle}" />
+                                        Style="{StaticResource SectionTitleTextStyle}"
+                                        TextWrapping="Wrap" />
                                     <ProgressRing
                                         x:Name="UpdateCheckingRing"
+                                        Grid.Column="1"
                                         Width="18"
                                         Height="18"
-                                        HorizontalAlignment="Right"
                                         IsActive="False"
                                         Visibility="Collapsed" />
                                 </Grid>
@@ -142,7 +147,7 @@
                                     Foreground="{ThemeResource AuroraTextMutedBrush}"
                                     TextWrapping="Wrap" />
 
-                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
                                     <Button x:Name="CheckUpdateButton" Click="CheckUpdateButton_Click">
                                         <StackPanel Orientation="Horizontal" Spacing="8">
                                             <FontIcon Glyph="&#xE895;" FontSize="16" />
@@ -152,6 +157,7 @@
                                     <!-- 下载按钮始终显示；只有「有新版本」时这圈描边才变主题色并轻微呼吸（平时是透明描边，不占视觉） -->
                                     <Border
                                         x:Name="UpdateDownloadHighlight"
+                                        HorizontalAlignment="Stretch"
                                         CornerRadius="8"
                                         BorderThickness="2"
                                         BorderBrush="Transparent"
@@ -201,14 +207,13 @@
                         </ScrollViewer>
                     </Grid>
                 </Border>
-                <!-- 右：更新日志；内容实时来自 GitHub Releases 的说明正文；与左卡等高 -->
+                <!-- 中：更新日志；内容实时来自 GitHub Releases 的说明正文 -->
                 <Border x:Name="ChangelogCard" Grid.Column="1" Height="420" Style="{StaticResource CardBorderStyle}">
                     <Grid RowSpacing="10">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
-                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
                         <Grid Grid.Row="0" ColumnSpacing="8">
@@ -262,15 +267,74 @@
                             Visibility="Collapsed">
                             <StackPanel x:Name="ChangelogPanel" Spacing="6" />
                         </ScrollViewer>
+                    </Grid>
+                </Border>
+
+                <!-- 右：更新历史；读取最近发布记录，与更新日志卡片同模板 -->
+                <Border x:Name="UpdateHistoryCard" Grid.Column="2" Height="420" Style="{StaticResource CardBorderStyle}">
+                    <Grid RowSpacing="10">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <Grid Grid.Row="0" ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock
+                                Text="{x:Bind Strings.Get('About_History_Title'), Mode=OneWay}"
+                                Style="{StaticResource SectionTitleTextStyle}"
+                                VerticalAlignment="Center" />
+                            <StackPanel
+                                Grid.Column="1"
+                                Orientation="Horizontal"
+                                Spacing="6"
+                                VerticalAlignment="Center">
+                                <ProgressRing
+                                    x:Name="UpdateHistoryLoadingRing"
+                                    Width="16"
+                                    Height="16"
+                                    IsActive="False"
+                                    Visibility="Collapsed" />
+                                <Button
+                                    x:Name="RefreshHistoryButton"
+                                    Padding="8,4"
+                                    Click="RefreshHistoryButton_Click"
+                                    ToolTipService.ToolTip="{x:Bind Strings.Get('About_History_Refresh_Tooltip'), Mode=OneWay}">
+                                    <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+
+                        <TextBlock
+                            x:Name="UpdateHistoryStatusText"
+                            Grid.Row="1"
+                            Foreground="{ThemeResource AuroraTextMutedBrush}"
+                            TextWrapping="Wrap"
+                            Visibility="Collapsed" />
+
+                        <ScrollViewer
+                            x:Name="UpdateHistoryScroll"
+                            Grid.Row="2"
+                            VerticalScrollBarVisibility="Auto"
+                            Visibility="Collapsed">
+                            <StackPanel x:Name="UpdateHistoryPanel" Spacing="10" />
+                        </ScrollViewer>
+
                         <HyperlinkButton
-                            x:Name="MoreChangelogButton"
+                            x:Name="MoreHistoryButton"
                             Grid.Row="3"
                             HorizontalAlignment="Right"
                             Padding="0"
-                            Click="MoreChangelogButton_Click"
+                            Click="MoreHistoryButton_Click"
                             Content="{x:Bind Strings.Get('About_Changelog_More'), Mode=OneWay}" />
                     </Grid>
-                </Border>            </Grid>
+                </Border>
+            </Grid>
 
             <Border Style="{StaticResource CardBorderStyle}">
                 <StackPanel Spacing="10">

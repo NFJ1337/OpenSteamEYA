@@ -85,10 +85,19 @@
             <StaticResource x:Key="ComboBoxItemForegroundSelected" ResourceKey="AuroraTextHeadingBrush" />
             <StaticResource x:Key="ComboBoxItemForegroundSelectedPointerOver" ResourceKey="AuroraTextHeadingBrush" />
             <StaticResource x:Key="ComboBoxItemForegroundSelectedPressed" ResourceKey="AuroraTextHeadingBrush" />
-            <StaticResource x:Key="ContentDialogBackground" ResourceKey="CustomUiDialogBrush" />
+            <StaticResource x:Key="ContentDialogBackground" ResourceKey="AuroraGlassStrongBrush" />
             <StaticResource x:Key="ContentDialogBorderBrush" ResourceKey="CustomUiBorderBrush" />
             <StaticResource x:Key="ContentDialogForeground" ResourceKey="AuroraTextBodyBrush" />
             <StaticResource x:Key="ContentDialogContentForegroundBrush" ResourceKey="AuroraTextBodyBrush" />
+            <!-- 弹窗遮罩保持透明，但 ContentDialog 仍会拦截背景点击，只允许操作弹窗内容。 -->
+            <SolidColorBrush x:Key="ContentDialogSmokeFill" Color="Transparent" />
+            <SolidColorBrush x:Key="ContentDialogLightDismissOverlayBackground" Color="Transparent" />
+            <SolidColorBrush x:Key="ContentDialogTopOverlay" Color="Transparent" />
+            <!-- 滚动条只显示浮动滑块，轨道透明，避免弹层里出现黑色竖条。 -->
+            <SolidColorBrush x:Key="ScrollBarTrackFill" Color="Transparent" />
+            <SolidColorBrush x:Key="ScrollBarTrackFillPointerOver" Color="Transparent" />
+            <SolidColorBrush x:Key="ScrollBarTrackFillDisabled" Color="Transparent" />
+            <SolidColorBrush x:Key="ScrollBarTrackStroke" Color="Transparent" />
 
             <!-- 全局控件圆角，后续新增控件默认沿用主题 UI 的圆角。 -->
             <CornerRadius x:Key="ControlCornerRadius">12</CornerRadius>
@@ -201,17 +210,66 @@
                 <Setter Property="Padding" Value="12,8" />
                 <Setter Property="FontWeight" Value="SemiBold" />
             </Style>
-            <Style TargetType="RadioMenuFlyoutItem">
-                <Setter Property="Foreground" Value="{ThemeResource AuroraTextBodyBrush}" />
-                <Setter Property="Background" Value="Transparent" />
-                <Setter Property="CornerRadius" Value="8" />
-                <Setter Property="MinHeight" Value="34" />
-                <Setter Property="Padding" Value="12,8" />
-                <Setter Property="FontWeight" Value="SemiBold" />
-            </Style>
             <Style TargetType="MenuFlyoutSeparator">
                 <Setter Property="Background" Value="{ThemeResource AuroraGlassBorderBrush}" />
                 <Setter Property="Margin" Value="8,4" />
+            </Style>
+            <Style x:Key="WhiteDialogCheckBoxStyle" TargetType="CheckBox">
+                <Setter Property="Foreground" Value="White" />
+                <Setter Property="MinHeight" Value="32" />
+                <Setter Property="HorizontalContentAlignment" Value="Left" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="CheckBox">
+                            <Grid Background="Transparent">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border
+                                    x:Name="CheckBorder"
+                                    Width="18"
+                                    Height="18"
+                                    VerticalAlignment="Center"
+                                    Background="Transparent"
+                                    BorderBrush="White"
+                                    BorderThickness="1.5"
+                                    CornerRadius="4">
+                                    <FontIcon
+                                        x:Name="CheckGlyph"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        FontSize="11"
+                                        Foreground="White"
+                                        Glyph="&#xE73E;"
+                                        Visibility="Collapsed" />
+                                </Border>
+                                <ContentPresenter
+                                    Grid.Column="1"
+                                    Margin="8,0,0,0"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center"
+                                    Content="{TemplateBinding Content}"
+                                    ContentTemplate="{TemplateBinding ContentTemplate}"
+                                    Foreground="{TemplateBinding Foreground}" />
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CheckStates">
+                                        <VisualState x:Name="Unchecked" />
+                                        <VisualState x:Name="Checked">
+                                            <Storyboard>
+                                                <ObjectAnimationUsingKeyFrames
+                                                    Storyboard.TargetName="CheckGlyph"
+                                                    Storyboard.TargetProperty="Visibility">
+                                                    <DiscreteObjectKeyFrame KeyTime="0" Value="Visible" />
+                                                </ObjectAnimationUsingKeyFrames>
+                                            </Storyboard>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
             </Style>
             <Style x:Key="ThemedDialogPrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
                 <Setter Property="Background" Value="{ThemeResource CustomUiBrush}" />

@@ -34,6 +34,15 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     private bool _movingDataFolder;
     private bool _pickingBackground;
     private bool _pickingIntroVideo;
+    private bool _closeBehaviorMenuBuilt;
+    private string _selectedCloseBehavior = CloseButtonBehaviors.Ask;
+
+    private static readonly (string Code, string TextKey)[] CloseBehaviorItems =
+    [
+        (CloseButtonBehaviors.Ask, "Settings_CloseBehavior_Ask"),
+        (CloseButtonBehaviors.HideToTray, "Settings_CloseBehavior_Hide"),
+        (CloseButtonBehaviors.Exit, "Settings_CloseBehavior_Exit")
+    ];
 
     public SettingsPage()
     {
@@ -43,6 +52,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
 
         BuildLanguageMenu();
         BuildThemeMenu();
+        BuildCloseBehaviorMenu();
         // 语言切换后，让本页所有 {x:Bind Strings.Get(...), Mode=OneWay} 重新求值（主题项文本等）。
         Loc.LanguageChanged += OnLanguageChanged;
         _syncing = false;
@@ -69,6 +79,8 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
 
             UpdateThemeMenuTexts();
             UpdateChoiceButtonTexts();
+            UpdateCloseBehaviorMenuTexts();
+            UpdateCloseBehaviorButtonText();
             UpdateCustomBackgroundControls();
             UpdateIntroVideoControls();
 
@@ -114,6 +126,76 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             item.Click += ThemeMenuItem_Click;
             ThemeFlyout.Items.Add(item);
         }
+    }
+
+    private void BuildCloseBehaviorMenu()
+    {
+        if (_closeBehaviorMenuBuilt)
+        {
+            return;
+        }
+
+        foreach (var (code, textKey) in CloseBehaviorItems)
+        {
+            var item = new MenuFlyoutItem
+            {
+                Text = Loc.T(textKey),
+                Tag = code
+            };
+            item.Click += CloseBehaviorMenuItem_Click;
+            CloseBehaviorFlyout.Items.Add(item);
+        }
+
+        _closeBehaviorMenuBuilt = true;
+    }
+
+    private void UpdateCloseBehaviorMenuTexts()
+    {
+        foreach (var item in CloseBehaviorFlyout.Items.OfType<MenuFlyoutItem>())
+        {
+            if (item.Tag is not string code)
+            {
+                continue;
+            }
+
+            var match = CloseBehaviorItems.FirstOrDefault(entry =>
+                string.Equals(entry.Code, code, StringComparison.Ordinal));
+            if (match.TextKey is not null)
+            {
+                item.Text = Loc.T(match.TextKey);
+            }
+        }
+    }
+
+    private void UpdateCloseBehaviorButtonText()
+    {
+        var match = CloseBehaviorItems.FirstOrDefault(entry =>
+            string.Equals(entry.Code, _selectedCloseBehavior, StringComparison.Ordinal));
+        CloseBehaviorButtonText.Text = Loc.T(
+            string.IsNullOrEmpty(match.TextKey)
+                ? "Settings_CloseBehavior_Ask"
+                : match.TextKey);
+    }
+
+    internal void RefreshCloseBehaviorFromSettings()
+    {
+        _selectedCloseBehavior = CloseButtonBehaviors.Normalize(
+            AppState.SettingsService.Load().CloseButtonBehavior);
+        UpdateCloseBehaviorButtonText();
+    }
+
+    private void CloseBehaviorMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuFlyoutItem { Tag: string behavior })
+        {
+            return;
+        }
+
+        _selectedCloseBehavior = CloseButtonBehaviors.Normalize(behavior);
+        var settings = AppState.SettingsService.Load();
+        settings.CloseButtonBehavior = _selectedCloseBehavior;
+        AppState.SettingsService.Save(settings);
+        UpdateCloseBehaviorButtonText();
     }
 
     private void LanguageMenuItem_Click(object sender, RoutedEventArgs e)
@@ -282,6 +364,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             }
 
             UpdateChoiceButtonTexts();
+            RefreshCloseBehaviorFromSettings();
 
             WindowWidthBox.Text = Math.Clamp(settings.WindowWidth ?? MainWindow.DefaultWindowWidth, MainWindow.MinimumWindowWidth, MainWindow.MaximumWindowWidth).ToString(CultureInfo.InvariantCulture);
             WindowHeightBox.Text = Math.Clamp(settings.WindowHeight ?? MainWindow.DefaultWindowHeight, MainWindow.MinimumWindowHeight, MainWindow.MaximumWindowHeight).ToString(CultureInfo.InvariantCulture);
@@ -966,13 +1049,19 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         Cs2SyncSourceFlyout.Items.Clear();
         foreach (var option in _cs2SourceOptions)
         {
-            var item = new RadioMenuFlyoutItem
+            var isSelected = string.Equals(
+                option.SteamId64, _cs2SourceSteamId, StringComparison.OrdinalIgnoreCase);
+            var item = new MenuFlyoutItem
             {
                 Text = option.Display,
                 Tag = option,
-                GroupName = "Cs2SyncSource",
-                IsChecked = string.Equals(
-                    option.SteamId64, _cs2SourceSteamId, StringComparison.OrdinalIgnoreCase)
+                // 普通 MenuFlyoutItem 在 WinUI 弹层中最稳定；用勾号保持当前来源可见。
+                Icon = new FontIcon
+                {
+                    Glyph = isSelected ? "\uE73E" : "\u200B",
+                    FontSize = 12,
+                    Opacity = isSelected ? 1 : 0
+                }
             };
             item.Click += Cs2SyncSourceMenuItem_Click;
             Cs2SyncSourceFlyout.Items.Add(item);

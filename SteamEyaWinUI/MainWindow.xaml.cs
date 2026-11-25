@@ -49,6 +49,9 @@ public sealed partial class MainWindow : Window
     private bool _startupInitializationStarted;
     private TaskCompletionSource<bool>? _introPlaybackCompletion;
     private bool _introPlaybackStartsApp;
+    private TrayIconService? _trayIconService;
+    private bool _shutdownConfirmed;
+    private bool _closePromptOpen;
 
     public static MainWindow? Instance { get; private set; }
 
@@ -838,6 +841,20 @@ public sealed partial class MainWindow : Window
         // 用 WM_GETMINMAXINFO 子类化实时按当前 DPI 计算最小尺寸，
         // 跨多显示器 / DPI 变化时 OverlappedPresenter.PreferredMinimum*（启动时固定的物理像素）会失效。
         SetWindowSubclass(s_hwnd, &SubclassProc, WindowSubclassId, 0);
+        try
+        {
+            _trayIconService = new TrayIconService(
+                s_hwnd,
+                Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"),
+                () => DispatcherQueue.TryEnqueue(ShowMainWindowFromTray),
+                () => DispatcherQueue.TryEnqueue(RequestApplicationExit));
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"初始化任务栏托盘图标失败：{ex.Message}");
+        }
+
+        AppWindow.Closing += OnAppWindowClosing;
         Closed += OnClosed;
     }
 
@@ -1001,23 +1018,187 @@ public sealed partial class MainWindow : Window
         AppWindow.Move(new PointInt32(clampedX, clampedY));
     }
 
-    private unsafe void OnClosed(object sender, WindowEventArgs args)
+    private void OnAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
+    {
+        if (_shutdownConfirmed)
+        {
+            return;
+        }
+
+        var behavior = CloseButtonBehaviors.Normalize(
+            AppState.SettingsService.Load().CloseButtonBehavior);
+        if (string.Equals(behavior, CloseButtonBehaviors.Exit, StringComparison.Ordinal))
+        {
+            args.Cancel = true;
+            DispatcherQueue.TryEnqueue(RequestApplicationExit);
+            return;
+        }
+
+        args.Cancel = true;
+        if (string.Equals(behavior, CloseButtonBehaviors.HideToTray, StringComparison.Ordinal))
+        {
+            HideMainWindowToTray();
+            return;
+        }
+
+        if (!_closePromptOpen)
+        {
+            _ = PromptForCloseActionAsync();
+        }
+    }
+
+    private async Task PromptForCloseActionAsync()
+    {
+        _closePromptOpen = true;
+        try
+        {
+            var doNotAskAgain = new CheckBox
+            {
+                Content = new TextBlock
+                {
+                    Text = Loc.T("CloseDialog_DontAsk"),
+                    Foreground = new SolidColorBrush(Microsoft.UI.Colors.White),
+                    TextWrapping = TextWrapping.Wrap
+                },
+                Style = (Style)Application.Current.Resources["WhiteDialogCheckBoxStyle"]
+            };
+            var content = new StackPanel { Spacing = 12 };
+            content.Children.Add(new TextBlock
+            {
+                Text = Loc.T("CloseDialog_Content"),
+                TextWrapping = TextWrapping.Wrap
+            });
+            content.Children.Add(doNotAskAgain);
+
+            var dialog = new ContentDialog
+            {
+                XamlRoot = Content.XamlRoot,
+                Title = Loc.T("CloseDialog_Title"),
+                Content = content,
+                PrimaryButtonText = Loc.T("Settings_CloseBehavior_Hide"),
+                SecondaryButtonText = Loc.T("Settings_CloseBehavior_Exit"),
+                CloseButtonText = Loc.T("Common_Cancel"),
+                DefaultButton = ContentDialogButton.Primary
+            };
+
+            var result = await dialog.ShowAsync();
+            if (result is not (ContentDialogResult.Primary or ContentDialogResult.Secondary))
+            {
+                return;
+            }
+
+            var behavior = result == ContentDialogResult.Primary
+                ? CloseButtonBehaviors.HideToTray
+                : CloseButtonBehaviors.Exit;
+            if (doNotAskAgain.IsChecked == true)
+            {
+                var settings = AppState.SettingsService.Load();
+                settings.CloseButtonBehavior = behavior;
+                AppState.SettingsService.Save(settings);
+            }
+
+            if (result == ContentDialogResult.Primary)
+            {
+                HideMainWindowToTray();
+            }
+            else
+            {
+                RequestApplicationExit();
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("显示关闭方式选择框失败。", ex);
+            AppState.ShowStatus(Loc.T("CloseDialog_Error"), InfoBarSeverity.Error);
+        }
+        finally
+        {
+            _closePromptOpen = false;
+        }
+    }
+
+    private void HideMainWindowToTray()
+    {
+        if (_trayIconService is null)
+        {
+            AppState.ShowStatus(Loc.T("Tray_InitFailed"), InfoBarSeverity.Error);
+            return;
+        }
+
+        _trayIconService.EnsureVisible();
+        if (!_trayIconService.IsVisible)
+        {
+            AppState.ShowStatus(Loc.T("Tray_InitFailed"), InfoBarSeverity.Error);
+            return;
+        }
+
+        AppWindow.Hide();
+        AppLog.Info("主窗口已隐藏到任务栏托盘。");
+    }
+
+    private void ShowMainWindowFromTray()
+    {
+        if (_shutdownConfirmed)
+        {
+            return;
+        }
+
+        AppWindow.Show(true);
+        if (AppWindow.Presenter is OverlappedPresenter
+            {
+                State: OverlappedPresenterState.Minimized
+            } presenter)
+        {
+            presenter.Restore();
+        }
+
+        Activate();
+        if (ContentFrame.Content is SettingsPage settingsPage)
+        {
+            settingsPage.RefreshCloseBehaviorFromSettings();
+        }
+    }
+
+    private void RequestApplicationExit()
+    {
+        if (_shutdownConfirmed)
+        {
+            return;
+        }
+
+        _shutdownConfirmed = true;
+        SaveWindowPositionBeforeExit();
+        _trayIconService?.Dispose();
+        _trayIconService = null;
+        Application.Current.Exit();
+    }
+
+    private void SaveWindowPositionBeforeExit()
     {
         try
         {
             var settings = AppState.SettingsService.Load();
-            if (settings.RememberWindowPosition)
+            if (!settings.RememberWindowPosition)
             {
-                var position = AppWindow.Position;
-                settings.WindowX = position.X;
-                settings.WindowY = position.Y;
-                AppState.SettingsService.Save(settings);
+                return;
             }
+
+            var position = AppWindow.Position;
+            settings.WindowX = position.X;
+            settings.WindowY = position.Y;
+            AppState.SettingsService.Save(settings);
         }
         catch (Exception ex)
         {
             AppLog.Warn($"保存窗口位置失败：{ex.Message}");
         }
+    }
+
+    private unsafe void OnClosed(object sender, WindowEventArgs args)
+    {
+        _trayIconService?.Dispose();
+        _trayIconService = null;
+        SaveWindowPositionBeforeExit();
 
         _introVideoActive = false;
         _introPlaybackCompletion?.TrySetResult(false);
