@@ -1041,6 +1041,7 @@
     "Login_Action_Personalize": "個人化",
     "Nav_Personalization": "個性自擬",
     "Login_Btn_Personalize": "一鍵個人化",
+    "Nav_Cs2Tracker": "CS2Tracker",
     "Login_Btn_Personalize_Tip": "用「個人化」頁儲存的暱稱、簡介和頭像設定目前帳號的資料",
     "Login_Personalize_Empty": "尚未設定個人化資料，請先在「個人化」頁填寫暱稱、簡介或上傳頭像。",
     "Login_Status_Personalized": "帳號資料已設定。",

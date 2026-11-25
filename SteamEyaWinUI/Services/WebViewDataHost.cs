@@ -64,6 +64,7 @@ internal static class WebViewDataHost
     {
         Cores.Clear();
         WindowClosers.Clear();
+        Cs2TrackerWebSession.Reset();
 
         var handlers = DataMoveFinished;
         if (handlers is null)

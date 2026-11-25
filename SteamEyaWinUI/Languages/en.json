@@ -1031,6 +1031,7 @@
     "Login_Action_Personalize": "personalize",
     "Nav_Personalization": "Custom Persona",
     "Login_Btn_Personalize": "Personalize",
+    "Nav_Cs2Tracker": "CS2Tracker",
     "Login_Btn_Personalize_Tip": "Set this account's profile to the nickname, profile info and avatar saved on the Personalize page",
     "Login_Personalize_Empty": "No personalization set. Add a nickname, profile info or avatar on the Personalize page first.",
     "Login_Status_Personalized": "Account profile updated.",

@@ -137,6 +137,19 @@ public sealed partial class LegacyAccountsPage
         }
     }
 
+    private void LegacyAccountQuerySteamId_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: LegacyAccountQueryRow row } ||
+            string.IsNullOrWhiteSpace(row.Item.SteamId))
+        {
+            return;
+        }
+
+        CopyToClipboard(row.Item.SteamId);
+        AppState.ShowStatus(Loc.T("Common_CopiedToClipboard"), InfoBarSeverity.Success);
+        e.Handled = true;
+    }
+
     private void RegisterAccountQueryCheckboxDragHandlers()
     {
         LegacyAccountQueryList.AddHandler(

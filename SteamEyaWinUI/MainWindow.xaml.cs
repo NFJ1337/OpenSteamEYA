@@ -17,6 +17,7 @@ using SteamEyaWinUI.Services;
 using Windows.Graphics;
 using Windows.Media.Core;
 using Windows.Media.Playback;
+using Microsoft.Web.WebView2.Core;
 
 namespace SteamEyaWinUI;
 
@@ -54,6 +55,8 @@ public sealed partial class MainWindow : Window
     private bool _shutdownConfirmed;
     private bool _closePromptOpen;
     private bool _externalActivationReady;
+    private bool _cs2TrackerWarmupInitialized;
+    private Task? _cs2TrackerWarmupTask;
 
     public static MainWindow? Instance { get; private set; }
 
@@ -93,6 +96,7 @@ public sealed partial class MainWindow : Window
 
         // 关窗口时停掉背景视频：及时释放解码器与文件句柄。
         Closed += (_, _) => StopBackgroundVideo();
+        WebViewDataHost.DataMoveFinished += OnWebViewDataMoveFinished;
 
         // 后台预热 Steam 侧连接：首次点「一键查询 / 清空无效账号」不用再等冷启动。
         _ = PrewarmSteamConnectionsAsync();
@@ -223,6 +227,7 @@ public sealed partial class MainWindow : Window
     private async void OnRootLayoutGridLoaded(object sender, RoutedEventArgs e)
     {
         RootLayoutGrid.Loaded -= OnRootLayoutGridLoaded;
+        StartCs2TrackerWarmup();
         if (LegacyCredentialMigration.HasPassphraseProtectedAccountFiles())
         {
             await MigratePassphraseProtectedAccountsAsync();
@@ -232,6 +237,60 @@ public sealed partial class MainWindow : Window
         {
             StartStartupInitialization();
         }
+    }
+
+    private void StartCs2TrackerWarmup()
+    {
+        _cs2TrackerWarmupTask ??= PrewarmCs2TrackerAsync();
+    }
+
+    private async Task PrewarmCs2TrackerAsync()
+    {
+        try
+        {
+            var language = Loc.CurrentCode.StartsWith("zh-Hant", StringComparison.OrdinalIgnoreCase)
+                ? "zh-TW"
+                : Loc.CurrentCode.StartsWith("en", StringComparison.OrdinalIgnoreCase)
+                    ? "en-US"
+                    : "zh-CN";
+            var environment = await Cs2TrackerWebSession.GetEnvironmentAsync(language);
+            if (!_cs2TrackerWarmupInitialized)
+            {
+                await Cs2TrackerWarmupBrowser.EnsureCoreWebView2Async(environment);
+                WebViewDataHost.Track(Cs2TrackerWarmupBrowser.CoreWebView2);
+                _cs2TrackerWarmupInitialized = true;
+            }
+
+            var core = Cs2TrackerWarmupBrowser.CoreWebView2;
+            var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            void OnNavigationCompleted(CoreWebView2 sender, CoreWebView2NavigationCompletedEventArgs args)
+            {
+                sender.NavigationCompleted -= OnNavigationCompleted;
+                completed.TrySetResult(args.IsSuccess);
+            }
+
+            core.NavigationCompleted += OnNavigationCompleted;
+            core.Navigate(Cs2TrackerWebSession.HomeUrl);
+            var success = await completed.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            AppLog.Info(success
+                ? "CS2Tracker 启动预热完成。"
+                : "CS2Tracker 启动预热导航未成功，将在打开页面时重试。");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Info($"CS2Tracker 启动预热异常：{ex.Message}");
+        }
+        finally
+        {
+            _cs2TrackerWarmupTask = null;
+        }
+    }
+
+    private void OnWebViewDataMoveFinished()
+    {
+        _cs2TrackerWarmupInitialized = false;
+        _cs2TrackerWarmupTask = null;
+        DispatcherQueue.TryEnqueue(StartCs2TrackerWarmup);
     }
 
     /// <summary>
@@ -622,6 +681,7 @@ public sealed partial class MainWindow : Window
             CachedAccountsPageTag => typeof(CachedAccountsPage), // [备用页面] 路由保留，入口默认隐藏。
             "loadout" => typeof(LoadoutPage),
             "personalization" => typeof(PersonalizationPage),
+            "cs2Tracker" => typeof(Cs2TrackerPage),
             "treasureBox" => typeof(TreasureBoxPage),
             "settings" => typeof(SettingsPage),
             "about" => typeof(AboutPage),
@@ -822,6 +882,7 @@ public sealed partial class MainWindow : Window
         CachedAccountsNavItem.Content = Loc.T("Nav_CachedAccounts");
         LoadoutNavItem.Content = Loc.T("Nav_Loadout");
         PersonalizationNavItem.Content = Loc.T("Nav_Personalization");
+        Cs2TrackerNavItem.Content = Loc.T("Nav_Cs2Tracker");
         TreasureBoxNavItem.Content = Loc.T("Nav_TreasureBox");
         SettingsNavItem.Content = Loc.T("Nav_Settings");
         AboutNavItem.Content = Loc.T("Nav_About");

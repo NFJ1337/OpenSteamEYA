@@ -129,6 +129,13 @@
                         <FontIcon Glyph="&#xE779;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem
+                    x:Name="Cs2TrackerNavItem"
+                    Tag="cs2Tracker">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE774;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
             </NavigationView.MenuItems>
             <NavigationView.FooterMenuItems>
                 <NavigationViewItem
@@ -209,6 +216,18 @@
                 </Grid>
             </Grid>
         </NavigationView>
+
+        <!-- 启动后在后台建立 CS2Tracker 的 WebView2/Cloudflare 会话；不显示、不接收输入。 -->
+        <WebView2
+            x:Name="Cs2TrackerWarmupBrowser"
+            Grid.RowSpan="2"
+            Width="1"
+            Height="1"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Top"
+            Opacity="0"
+            IsHitTestVisible="False" />
+
         <!-- 启动视频：覆盖整个窗口播放，结束或任意输入后进入主界面。 -->
         <Grid
             x:Name="IntroVideoOverlay"

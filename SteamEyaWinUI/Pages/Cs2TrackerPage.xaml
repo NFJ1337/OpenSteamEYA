@@ -1,0 +1,267 @@
+<Page
+    x:Class="SteamEyaWinUI.Pages.Cs2TrackerPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    NavigationCacheMode="Required">
+
+    <Grid>
+        <ScrollViewer
+            x:Name="TrackerScrollViewer"
+            HorizontalScrollBarVisibility="Disabled"
+            VerticalScrollBarVisibility="Auto"
+            Padding="32,24,32,16">
+            <StackPanel
+                x:Name="TrackerContentPanel"
+                MaxWidth="1120"
+                Spacing="14"
+                HorizontalAlignment="Stretch"
+                Background="Transparent">
+                <Border Style="{StaticResource CardBorderStyle}">
+                    <StackPanel Spacing="12">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="3">
+                                <TextBlock
+                                    Text="CS2Tracker"
+                                    Style="{StaticResource PageTitleTextStyle}" />
+                                <TextBlock
+                                    Text="输入 SteamID64 或 Steam 个人资料链接，查询公开的 CS2 统计。"
+                                    Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ProgressRing
+                                x:Name="QueryProgress"
+                                Grid.Column="1"
+                                Width="22"
+                                Height="22"
+                                IsActive="False"
+                                Visibility="Collapsed" />
+                        </Grid>
+
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox
+                                x:Name="TrackerIdBox"
+                                Header="Steam ID 或个人资料链接"
+                                PlaceholderText="7656119xxxxxxxxxx"
+                                IsSpellCheckEnabled="False"
+                                KeyDown="TrackerIdBox_KeyDown" />
+                            <Button
+                                x:Name="CheckStatsButton"
+                                Grid.Column="1"
+                                MinWidth="110"
+                                VerticalAlignment="Bottom"
+                                Style="{StaticResource AccentButtonStyle}"
+                                Click="CheckStatsButton_Click"
+                                Content="查询" />
+                            <Button
+                                x:Name="HistoryQueriesButton"
+                                Grid.Column="2"
+                                MinWidth="110"
+                                VerticalAlignment="Bottom"
+                                Style="{StaticResource AuroraGlassButtonStyle}"
+                                Click="HistoryQueriesButton_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <FontIcon Glyph="&#xE81C;" FontSize="13" />
+                                    <TextBlock Text="历史查询" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+
+                        <TextBlock
+                            x:Name="QueryStatusText"
+                            Foreground="{ThemeResource AuroraTextMutedBrush}"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <Border
+                    x:Name="ErrorCard"
+                    Style="{StaticResource CardBorderStyle}"
+                    Visibility="Collapsed">
+                    <TextBlock
+                        x:Name="ErrorText"
+                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                        TextWrapping="Wrap" />
+                </Border>
+
+                <StackPanel x:Name="DetailsPanel" Spacing="14" Visibility="Collapsed">
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="14">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Border
+                                    Width="76"
+                                    Height="76"
+                                    CornerRadius="38"
+                                    BorderThickness="2"
+                                    BorderBrush="{ThemeResource AuroraGlassBorderBrush}">
+                                    <Image x:Name="ProfileAvatarImage" Stretch="UniformToFill" />
+                                </Border>
+                                <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
+                                    <TextBlock
+                                        x:Name="ProfileNameText"
+                                        FontSize="22"
+                                        FontWeight="SemiBold" />
+                                    <TextBlock
+                                        x:Name="ProfileSteamIdText"
+                                        Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                        IsTextSelectionEnabled="True" />
+                                    <TextBlock
+                                        x:Name="ProfileMetaText"
+                                        Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                        TextWrapping="Wrap" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Spacing="6" VerticalAlignment="Center">
+                                    <Border
+                                        x:Name="RiskBadge"
+                                        Padding="12,6"
+                                        CornerRadius="999"
+                                        Background="{ThemeResource AuroraPillBrush}">
+                                        <TextBlock
+                                            x:Name="RiskText"
+                                            FontWeight="SemiBold" />
+                                    </Border>
+                                    <TextBlock
+                                        x:Name="ProfileBadgeText"
+                                        HorizontalAlignment="Right"
+                                        Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                                </StackPanel>
+                            </Grid>
+                            <StackPanel
+                                x:Name="TrackerLinksPanel"
+                                Orientation="Horizontal"
+                                Spacing="6" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="玩家概览" Style="{StaticResource SectionTitleTextStyle}" />
+                            <TextBlock
+                                x:Name="SummaryMetaText"
+                                Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                TextWrapping="Wrap" />
+                            <StackPanel x:Name="SummaryMetricsPanel" Spacing="8" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="Leetify 数据" Style="{StaticResource SectionTitleTextStyle}" />
+                            <TextBlock
+                                x:Name="LeetifyMetaText"
+                                Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                TextWrapping="Wrap" />
+                            <StackPanel x:Name="LeetifyMetricsPanel" Spacing="8" />
+                        </StackPanel>
+                    </Border>
+
+                    <Grid ColumnSpacing="14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Style="{StaticResource CardBorderStyle}">
+                            <StackPanel Spacing="12">
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border
+                                        Width="24"
+                                        Height="24"
+                                        CornerRadius="6"
+                                        Background="{ThemeResource AuroraPillBrush}">
+                                        <FontIcon
+                                            Glyph="&#xE7FC;"
+                                            FontSize="14"
+                                            Foreground="#2AA6FF" />
+                                    </Border>
+                                    <TextBlock
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        Text="优先模式数据"
+                                        Style="{StaticResource SectionTitleTextStyle}" />
+                                </Grid>
+                                <StackPanel x:Name="PremierMetricsPanel" Spacing="12" />
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Column="1" Style="{StaticResource CardBorderStyle}">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="FACEIT 数据" Style="{StaticResource SectionTitleTextStyle}" />
+                                <TextBlock
+                                    x:Name="FaceitMetaText"
+                                    Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                    TextWrapping="Wrap" />
+                                <StackPanel x:Name="FaceitMetricsPanel" Spacing="8" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="CS2Tracker 瞄准数据" Style="{StaticResource SectionTitleTextStyle}" />
+                            <TextBlock
+                                x:Name="AimMetaText"
+                                Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                TextWrapping="Wrap" />
+                            <StackPanel x:Name="AimMetricsPanel" Spacing="8" />
+                            <Border
+                                Height="1"
+                                Margin="0,4,0,0"
+                                Background="{ThemeResource AuroraGlassBorderBrush}" />
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock
+                                    Text="武器表现"
+                                    Style="{StaticResource SectionTitleTextStyle}" />
+                                <TextBlock
+                                    x:Name="WeaponMetaText"
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                            </Grid>
+                            <StackPanel x:Name="WeaponsPanel" Spacing="6" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="最近比赛" Style="{StaticResource SectionTitleTextStyle}" />
+                            <StackPanel x:Name="RecentMatchesPanel" Spacing="6" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- CS2Tracker Overview 原生 1:1 渲染区。 -->
+                <StackPanel x:Name="TrackerModulesPanel" Spacing="14" Visibility="Collapsed" />
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- 仅用于复用 cs2tracker.gg 的 Cloudflare 会话执行公开数据请求；不显示网站内容。 -->
+        <WebView2
+            x:Name="RequestBrowser"
+            Width="1"
+            Height="1"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Top"
+            Opacity="0"
+            IsHitTestVisible="False" />
+    </Grid>
+</Page>

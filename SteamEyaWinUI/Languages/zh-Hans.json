@@ -1029,6 +1029,7 @@
     "Login_Action_Personalize": "个性化",
     "Nav_Personalization": "个性自拟",
     "Login_Btn_Personalize": "一键个性化",
+    "Nav_Cs2Tracker": "CS2Tracker",
     "Login_Btn_Personalize_Tip": "用「个性化」页保存的昵称、简介和头像设置当前账号的资料",
     "Login_Personalize_Empty": "尚未设置个性化资料，请先在「个性化」页填写昵称、简介或上传头像。",
     "Login_Status_Personalized": "账号资料已设置。",

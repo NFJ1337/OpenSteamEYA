@@ -930,7 +930,14 @@
                                 <TextBlock Grid.Column="5" Text="{x:Bind LastLoginText, Mode=OneWay}" TextTrimming="CharacterEllipsis" Style="{StaticResource LegacyTableTextStyle}" />
                                 <TextBlock Grid.Column="6" Text="{x:Bind RegionText, Mode=OneWay}" HorizontalAlignment="Center" Style="{StaticResource LegacyTableTextStyle}" />
                                 <TextBlock Grid.Column="7" Text="{x:Bind ChinaSteamText, Mode=OneWay}" HorizontalAlignment="Center" Style="{StaticResource LegacyTableTextStyle}" />
-                                <TextBlock Grid.Column="8" Text="{x:Bind SteamIdText, Mode=OneWay}" TextTrimming="CharacterEllipsis" Style="{StaticResource LegacyTableTextStyle}" />
+                                <TextBlock
+                                    Grid.Column="8"
+                                    Text="{x:Bind SteamIdText, Mode=OneWay}"
+                                    TextTrimming="CharacterEllipsis"
+                                    Style="{StaticResource LegacyTableTextStyle}"
+                                    HorizontalAlignment="Stretch"
+                                    IsDoubleTapEnabled="True"
+                                    DoubleTapped="LegacyAccountQuerySteamId_DoubleTapped" />
                                 <TextBlock
                                     Grid.Column="9"
                                     Text="{x:Bind BanTimeText, Mode=OneWay}"

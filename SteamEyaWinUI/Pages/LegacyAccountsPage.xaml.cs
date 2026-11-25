@@ -1942,6 +1942,9 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             {
                 Clipboard.SetContent(package);
             }
+
+            // Flush 后数据由系统剪贴板持有；否则本进程退出后内容随即失效。
+            Clipboard.Flush();
         }
         catch (COMException)
         {
