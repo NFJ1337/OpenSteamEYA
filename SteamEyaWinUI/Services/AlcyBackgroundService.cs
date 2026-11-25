@@ -15,6 +15,7 @@ internal static class AlcyBackgroundService
     private const string SiteRoot = "https://t.alcy.cc/";
     private const int CacheImageCount = 10;
     private const int DownloadBatchSize = 5;
+    private static readonly SemaphoreSlim CacheMaintenanceGate = new(1, 1);
     private static readonly TimeSpan RefreshTimeout = TimeSpan.FromSeconds(45);
     private static readonly HttpClient Client = new()
     {
@@ -166,10 +167,33 @@ internal static class AlcyBackgroundService
         return files;
     }
 
-    public static async Task<IReadOnlyList<string>> RefreshBackgroundCacheAsync(
+    /// <summary>
+    /// 只补齐缓存中缺少的图片，已有图片原样保留。正常轮换时一次只会缺 1 张，
+    /// 首次使用或下载失败后才可能一次补多张。
+    /// </summary>
+    public static async Task<IReadOnlyList<string>> EnsureBackgroundCacheAsync(
         IReadOnlyList<string> apiPaths,
         string cacheFolder,
         CancellationToken cancellationToken = default)
+    {
+        await CacheMaintenanceGate.WaitAsync(cancellationToken);
+        try
+        {
+            return await EnsureBackgroundCacheCoreAsync(
+                apiPaths,
+                cacheFolder,
+                cancellationToken);
+        }
+        finally
+        {
+            CacheMaintenanceGate.Release();
+        }
+    }
+
+    private static async Task<IReadOnlyList<string>> EnsureBackgroundCacheCoreAsync(
+        IReadOnlyList<string> apiPaths,
+        string cacheFolder,
+        CancellationToken cancellationToken)
     {
         var normalizedPaths = NormalizeApiPaths(apiPaths);
         if (normalizedPaths.Count == 0)
@@ -178,6 +202,13 @@ internal static class AlcyBackgroundService
         }
 
         Directory.CreateDirectory(cacheFolder);
+        var existing = GetCachedBackgroundFiles(cacheFolder);
+        var missingCount = CacheImageCount - existing.Count;
+        if (missingCount <= 0)
+        {
+            return existing;
+        }
+
         var stamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var stagingFolder = Path.Combine(
             cacheFolder,
@@ -187,16 +218,16 @@ internal static class AlcyBackgroundService
             CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         refreshCancellation.CancelAfter(RefreshTimeout);
         var refreshToken = refreshCancellation.Token;
-        var promoted = new List<string>(CacheImageCount);
+        var promoted = new List<string>(missingCount);
         try
         {
-            var downloaded = new List<string>(CacheImageCount);
+            var downloaded = new List<string>(missingCount);
             var sequence = 0;
-            for (var attempt = 0; attempt < 4 && downloaded.Count < CacheImageCount; attempt++)
+            for (var attempt = 0; attempt < 4 && downloaded.Count < missingCount; attempt++)
             {
                 var batchSize = Math.Min(
                     DownloadBatchSize,
-                    CacheImageCount - downloaded.Count);
+                    missingCount - downloaded.Count);
                 var tasks = Enumerable.Range(sequence, batchSize)
                     .Select(index => DownloadBackgroundAsync(
                         normalizedPaths[Random.Shared.Next(normalizedPaths.Count)],
@@ -210,13 +241,12 @@ internal static class AlcyBackgroundService
                     (await Task.WhenAll(tasks)).OfType<string>());
             }
 
-            if (downloaded.Count < CacheImageCount)
+            if (downloaded.Count == 0)
             {
-                throw new InvalidOperationException(
-                    $"自动背景图未能完整预下载 {CacheImageCount} 张，继续使用上一次缓存。");
+                return existing;
             }
 
-            foreach (var file in downloaded.Take(CacheImageCount))
+            foreach (var file in downloaded.Take(missingCount))
             {
                 refreshToken.ThrowIfCancellationRequested();
                 var finalPath = Path.Combine(
@@ -226,8 +256,12 @@ internal static class AlcyBackgroundService
                 promoted.Add(finalPath);
             }
 
-            PruneOldCacheFiles(cacheFolder, promoted);
-            return promoted;
+            var available = existing
+                .Concat(promoted)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            PruneOldCacheFiles(cacheFolder, available);
+            return GetCachedBackgroundFiles(cacheFolder);
         }
         catch
         {
@@ -237,6 +271,101 @@ internal static class AlcyBackgroundService
             }
 
             throw;
+        }
+        finally
+        {
+            TryDeleteDirectory(stagingFolder);
+        }
+    }
+
+    /// <summary>
+    /// 一张缓存图被使用后，只下载 1 张新图补回缓存；下载失败时保留正在使用的旧图。
+    /// </summary>
+    public static async Task<string?> ReplenishOneBackgroundAsync(
+        IReadOnlyList<string> apiPaths,
+        string cacheFolder,
+        string consumedFile,
+        CancellationToken cancellationToken = default)
+    {
+        await CacheMaintenanceGate.WaitAsync(cancellationToken);
+        try
+        {
+            return await ReplenishOneBackgroundCoreAsync(
+                apiPaths,
+                cacheFolder,
+                consumedFile,
+                cancellationToken);
+        }
+        finally
+        {
+            CacheMaintenanceGate.Release();
+        }
+    }
+
+    private static async Task<string?> ReplenishOneBackgroundCoreAsync(
+        IReadOnlyList<string> apiPaths,
+        string cacheFolder,
+        string consumedFile,
+        CancellationToken cancellationToken)
+    {
+        var normalizedPaths = NormalizeApiPaths(apiPaths);
+        if (normalizedPaths.Count == 0 || string.IsNullOrWhiteSpace(consumedFile))
+        {
+            return null;
+        }
+
+        Directory.CreateDirectory(cacheFolder);
+        var stamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var stagingFolder = Path.Combine(
+            cacheFolder,
+            $".staging-{stamp}-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(stagingFolder);
+        using var refreshCancellation =
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        refreshCancellation.CancelAfter(RefreshTimeout);
+        var refreshToken = refreshCancellation.Token;
+        try
+        {
+            var downloaded = await DownloadBackgroundAsync(
+                normalizedPaths[Random.Shared.Next(normalizedPaths.Count)],
+                stagingFolder,
+                stamp,
+                0,
+                refreshToken);
+            if (downloaded is null)
+            {
+                return null;
+            }
+
+            refreshToken.ThrowIfCancellationRequested();
+            var finalPath = Path.Combine(cacheFolder, Path.GetFileName(downloaded));
+            File.Move(downloaded, finalPath, overwrite: true);
+
+            var consumedFullPath = Path.GetFullPath(consumedFile);
+            var cacheRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(cacheFolder));
+            if (string.Equals(
+                    Path.GetDirectoryName(consumedFullPath),
+                    cacheRoot,
+                    StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(
+                    consumedFullPath,
+                    Path.GetFullPath(finalPath),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                TryDelete(consumedFullPath);
+            }
+
+            GetCachedBackgroundFiles(cacheFolder);
+            return File.Exists(finalPath) ? finalPath : null;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"补充自动背景图缓存失败：{ex.Message}");
+            return null;
         }
         finally
         {
@@ -297,7 +426,9 @@ internal static class AlcyBackgroundService
                 "image/jpeg" => ".jpg",
                 _ => ".webp"
             };
-            var finalPath = Path.Combine(cacheFolder, $"auto-bg-{stamp}-{index}{extension}");
+            var finalPath = Path.Combine(
+                cacheFolder,
+                $"auto-bg-{stamp}-{index}-{Guid.NewGuid():N}{extension}");
             await using (var source = await response.Content.ReadAsStreamAsync(cancellationToken))
             await using (var target = new FileStream(
                 tempPath,

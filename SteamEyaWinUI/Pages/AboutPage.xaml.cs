@@ -456,12 +456,18 @@ public sealed partial class AboutPage : Page, INotifyPropertyChanged
             Render();
         }
 
-        // ---------- 阶段 2：启动安装器 ----------
+        // ---------- 阶段 2：安排“主程序退出后”再启动安装器 ----------
         // 这一段出错以前会被上面的总 catch 说成「下载安装包失败」（下载其实已经成功），
         // 现在单独报「安装器启动失败」并保留安装包，用户可以直接双击那个文件装。
         try
         {
-            if (!AppState.UpdateInstallerService.LaunchInstaller(installerPath))
+            using var current = Process.GetCurrentProcess();
+            AppState.UpdateInstallerService.ForceCloseOtherInstances(
+                current.ProcessName,
+                current.Id);
+            if (!AppState.UpdateInstallerService.LaunchInstallerAfterExit(
+                    installerPath,
+                    current.Id))
             {
                 AppState.ShowStatus(
                     Loc.Tf("About_Update_InstallerLaunchFailed_Format", Loc.T("About_Update_InstallerLaunchFailed"), installerPath),
@@ -485,22 +491,14 @@ public sealed partial class AboutPage : Page, INotifyPropertyChanged
     }
 
     /// <summary>
-    /// 结束本进程，把文件让给安装器。
-    /// 注意不能用 Process.Kill(entireProcessTree: true) 杀「自己」——.NET 在这种情况下会直接抛
-    /// InvalidOperationException（消息里带 "containing the calling process"），这正是之前「下载完却提示
-    /// 下载安装包失败」的真凶。这里改成先清掉别的残留实例，再干净退出。
+    /// 撤掉托盘图标并结束本进程；安装器由独立的等待进程稍后启动。
     /// </summary>
     private void ExitForUpdate()
     {
-        try
+        if (MainWindow.Instance is { } mainWindow)
         {
-            var current = Process.GetCurrentProcess();
-            AppState.UpdateInstallerService.ForceCloseOtherInstances(current.ProcessName, current.Id);
-        }
-        catch (Exception ex)
-        {
-            // best-effort：清别的实例失败不影响安装（安装器自己带 /FORCECLOSEAPPLICATIONS）。
-            AppLog.Warn($"清理其它主程序实例失败（不影响安装）：{ex.Message}");
+            mainWindow.ExitForUpdate();
+            return;
         }
 
         Environment.Exit(0);

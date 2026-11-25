@@ -16,29 +16,6 @@ public sealed partial class SettingsPage
         await PickAndApplyAutoBackgroundAsync();
     }
 
-    private void ClearAutoBackgroundImageButton_Click(object sender, RoutedEventArgs e)
-    {
-        var settings = AppState.SettingsService.Load();
-        settings.AutoBackgroundEnabled = false;
-        settings.AutoBackgroundImageApiPath = null;
-        settings.AutoBackgroundImageApiPaths = [];
-        AppState.SettingsService.Save(settings);
-        AlcyBackgroundService.ClearCache(AppState.SettingsService.AutoBackgroundCacheFolderPath);
-
-        _syncing = true;
-        try
-        {
-            AutoBackgroundToggle.IsOn = false;
-        }
-        finally
-        {
-            _syncing = false;
-        }
-
-        MainWindow.Instance?.ApplyCustomBackground(settings);
-        UpdateCustomBackgroundControls();
-    }
-
     private async Task HandleAutoBackgroundToggleAsync()
     {
         if (_syncing)
@@ -131,11 +108,13 @@ public sealed partial class SettingsPage
         var availableWidth = XamlRoot?.Size.Width ?? 1380;
         var availableHeight = XamlRoot?.Size.Height ?? 810;
         var dialogWidth = Math.Clamp(availableWidth - 40, 1120, 1400);
-        var gridWidth = Math.Max(1040, dialogWidth - 80);
+        const double scrollBarSpacing = 16;
+        var gridWidth = Math.Max(1020, dialogWidth - 80 - scrollBarSpacing);
         var scrollHeight = Math.Clamp(availableHeight - 310, 260, 560);
         var grid = new Grid
         {
             MinWidth = gridWidth,
+            Margin = new Thickness(0, 0, scrollBarSpacing, 0),
             ColumnSpacing = 12,
             RowSpacing = 12
         };
@@ -263,14 +242,16 @@ public sealed partial class SettingsPage
             Foreground = AutoBackgroundBrush("AuroraTextMutedBrush"),
             TextWrapping = TextWrapping.Wrap
         });
-        content.Children.Add(new ScrollViewer
+        var scroll = new ScrollViewer
         {
             Content = grid,
             MaxHeight = scrollHeight,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             VerticalScrollMode = ScrollMode.Enabled
-        });
+        };
+        ApplyAutoBackgroundScrollBarStyle(scroll);
+        content.Children.Add(scroll);
 
         dialog = new ContentDialog
         {
@@ -332,9 +313,7 @@ public sealed partial class SettingsPage
             _syncing = false;
         }
 
-        MainWindow.Instance?.ApplyCustomBackground(
-            settings,
-            applyRefreshedAutoBackground: true);
+        MainWindow.Instance?.ApplyCustomBackground(settings);
         UpdateCustomBackgroundControls();
         AppState.ShowStatus(
             Loc.T("Settings_Background_Auto_Applied"),
@@ -345,6 +324,23 @@ public sealed partial class SettingsPage
         Application.Current.Resources.TryGetValue(key, out var value) && value is Brush brush
             ? brush
             : new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+
+    private static void ApplyAutoBackgroundScrollBarStyle(ScrollViewer scroll)
+    {
+        var resources = scroll.Resources;
+        resources["ScrollBarSize"] = 12d;
+        resources["ScrollBarVerticalThumbMinWidth"] = 8d;
+        resources["ScrollBarThumbOffset"] = 2d;
+        resources["ScrollBarCornerRadius"] = new CornerRadius(3);
+        resources["ScrollBarThumbFill"] = AutoBackgroundBrush("AuroraTextMutedBrush");
+        resources["ScrollBarThumbFillPointerOver"] = AutoBackgroundBrush("AuroraTextBodyBrush");
+        resources["ScrollBarThumbFillPressed"] = AutoBackgroundBrush("AuroraTextHeadingBrush");
+        resources["ScrollBarPanningThumbBackground"] = AutoBackgroundBrush("AuroraTextMutedBrush");
+        resources["ScrollBarTrackFill"] = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        resources["ScrollBarTrackFillPointerOver"] = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        resources["ScrollBarTrackFillDisabled"] = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        resources["ScrollBarTrackStroke"] = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+    }
 
     private static IReadOnlyList<string> GetConfiguredAutoBackgroundPaths(AppSettings settings)
     {

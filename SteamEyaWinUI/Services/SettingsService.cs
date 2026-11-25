@@ -23,7 +23,7 @@ internal sealed class SettingsService
     /// <summary>「个性化」头像的固定落盘路径（裁剪后的 512² JPEG）。</summary>
     public string PersonalizationAvatarPath => Path.Combine(AppFolderPath, "personalization", "avatar.jpg");
 
-    /// <summary>自动背景图每次启动预下载的 10 张高清图片缓存目录。</summary>
+    /// <summary>自动背景图高清缓存目录：保持约 10 张，使用一张后补充一张。</summary>
     public string AutoBackgroundCacheFolderPath =>
         Path.Combine(AppFolderPath, "personalization", "auto-background-cache");
 

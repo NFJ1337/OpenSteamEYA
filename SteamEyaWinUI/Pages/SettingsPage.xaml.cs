@@ -736,7 +736,6 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         ClearCustomBackgroundButton.IsEnabled = hasImage && !_pickingBackground;
         AutoBackgroundToggle.IsEnabled = !_pickingAutoBackground;
         ChooseAutoBackgroundImageButton.IsEnabled = !_pickingAutoBackground;
-        ClearAutoBackgroundImageButton.IsEnabled = hasAutoType && !_pickingAutoBackground;
         var opacityEnabled =
             (hasImage && CustomBackgroundToggle.IsOn) ||
             (hasAutoType && AutoBackgroundToggle.IsOn);

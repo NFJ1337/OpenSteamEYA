@@ -376,7 +376,7 @@
                         LineHeight="24"
                         IsTextSelectionEnabled="True">
                         <Run Text="本重制版仅对界面 UI 进行全面重构，同时再原有基础上增加若干自定义实用小功能。" /><LineBreak />
-                        <Run Text="此 UI重构 99.99%采用DeepSeek AI编写，介意请勿使用。" /><LineBreak />
+                        <Run Text="此 UI重构 99.99%采用Codex + DeepSeek AI编写，介意请勿使用。" /><LineBreak />
                         <Run Text="如果你在使用过程中有 Bug 反馈、优化建议、新功能 或 源码 需求，欢迎添加本人 QQ：261064327。" /><LineBreak /><LineBreak />
                         <Run Text="重要声明：" Foreground="#FFFF7A93" /><LineBreak />
                         <Run Text="如果您介意因使此软件黑号登录错误或售后问题 请勿使用！请勿使用！请勿使用！" Foreground="#FFFF7A93" /><LineBreak />

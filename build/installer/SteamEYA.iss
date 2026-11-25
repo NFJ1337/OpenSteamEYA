@@ -32,7 +32,9 @@ MinVersion=10.0.17763
 PrivilegesRequired=lowest
 WizardStyle=modern
 ChangesAssociations=no
-CloseApplications=yes
+; 托盘关闭策略会拦截 WM_CLOSE；安装开始时由下方 [Code] 直接强制结束旧进程，
+; 避免 Restart Manager 长时间停留在“正在关闭应用程序”。
+CloseApplications=no
 RestartApplications=no
 UninstallDisplayIcon={app}\SteamEyaWinUI.exe
 SetupIconFile={#PublishDir}\Assets\AppIcon.ico
@@ -57,3 +59,22 @@ Name: "{autodesktop}\SteamEYANFJ"; Filename: "{app}\SteamEyaWinUI.exe"; Tasks: d
 
 [Run]
 Filename: "{app}\SteamEyaWinUI.exe"; Description: "{cm:LaunchProgram,SteamEYANFJ}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  NeedsRestart := False;
+  { 目标文件名固定，不会误杀安装器或其它程序。 }
+  Exec(
+    ExpandConstant('{sys}\taskkill.exe'),
+    '/F /T /IM SteamEyaWinUI.exe',
+    '',
+    SW_HIDE,
+    ewWaitUntilTerminated,
+    ResultCode);
+  { 给 Windows 释放 EXE / DLL / WebView2 文件句柄留一点时间。 }
+  Sleep(800);
+  Result := '';
+end;

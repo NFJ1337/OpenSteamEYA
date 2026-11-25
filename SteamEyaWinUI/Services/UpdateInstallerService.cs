@@ -172,6 +172,41 @@ internal sealed class UpdateInstallerService
     }
 
     public bool LaunchInstaller(string installerPath)
+        => StartInstallerProcess(installerPath);
+
+    /// <summary>
+    /// 先启动本程序自带的无界面等待进程；它会在当前主进程退出后启动安装器。
+    /// </summary>
+    public bool LaunchInstallerAfterExit(string installerPath, int currentProcessId)
+    {
+        if (!File.Exists(installerPath) || currentProcessId <= 0)
+        {
+            return false;
+        }
+
+        var executablePath = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(executablePath) ||
+            !File.Exists(executablePath))
+        {
+            return false;
+        }
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = executablePath,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = Path.GetDirectoryName(executablePath)
+        };
+        startInfo.ArgumentList.Add(UpdateLaunchWorker.CommandLineSwitch);
+        startInfo.ArgumentList.Add(currentProcessId.ToString());
+        startInfo.ArgumentList.Add(Path.GetFullPath(installerPath));
+
+        using var process = Process.Start(startInfo);
+        return process is not null;
+    }
+
+    internal static bool StartInstallerProcess(string installerPath)
     {
         if (!File.Exists(installerPath))
         {

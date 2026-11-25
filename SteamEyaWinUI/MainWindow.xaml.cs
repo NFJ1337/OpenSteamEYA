@@ -776,9 +776,7 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>按当前设置加载自定义背景图片。</summary>
-    internal void ApplyCustomBackground(
-        AppSettings settings,
-        bool applyRefreshedAutoBackground = false)
+    internal void ApplyCustomBackground(AppSettings settings)
     {
         RefreshBackgroundButton.Visibility = settings.AutoBackgroundEnabled
             ? Visibility.Visible
@@ -797,8 +795,7 @@ public sealed partial class MainWindow : Window
             }
             ApplyAutomaticBackground(
                 apiPaths,
-                settings.CustomBackgroundOpacity,
-                applyRefreshedAutoBackground);
+                settings.CustomBackgroundOpacity);
             return;
         }
 
@@ -837,37 +834,27 @@ public sealed partial class MainWindow : Window
         RefreshBackgroundButton.IsEnabled = false;
 
         var cacheFolder = AppState.SettingsService.AutoBackgroundCacheFolderPath;
-        var cached = AlcyBackgroundService.GetCachedBackgroundFiles(cacheFolder);
-        if (cached.Count > 0)
-        {
-            var candidates = cached.Count > 1
-                ? cached
-                    .Where(path => !string.Equals(
-                        path,
-                        _currentAutomaticBackgroundFile,
-                        StringComparison.OrdinalIgnoreCase))
-                    .ToArray()
-                : cached.ToArray();
-            ApplyAutomaticBackgroundFile(
-                candidates[Random.Shared.Next(candidates.Length)],
-                settings.CustomBackgroundOpacity);
-        }
-
         CancelAutomaticBackgroundRefresh();
         var cancellation = new CancellationTokenSource();
         _autoBackgroundRefreshCts = cancellation;
         try
         {
-            await AlcyBackgroundService.RefreshBackgroundCacheAsync(
-                apiPaths,
-                cacheFolder,
-                cancellation.Token);
-            if (cancellation.IsCancellationRequested ||
-                !ReferenceEquals(_autoBackgroundRefreshCts, cancellation))
+            var cached = AlcyBackgroundService.GetCachedBackgroundFiles(cacheFolder);
+            string? consumedFile = null;
+            if (cached.Count > 0)
             {
-                return;
+                consumedFile = PickAutomaticBackgroundFile(cached);
+                ApplyAutomaticBackgroundFile(
+                    consumedFile,
+                    settings.CustomBackgroundOpacity);
             }
 
+            await ReplenishAutomaticBackgroundAsync(
+                apiPaths,
+                settings.CustomBackgroundOpacity,
+                cacheFolder,
+                consumedFile,
+                cancellation.Token);
         }
         catch (OperationCanceledException)
         {
@@ -881,17 +868,16 @@ public sealed partial class MainWindow : Window
             if (ReferenceEquals(_autoBackgroundRefreshCts, cancellation))
             {
                 _autoBackgroundRefreshCts = null;
+                cancellation.Dispose();
             }
 
-            cancellation.Dispose();
             RefreshBackgroundButton.IsEnabled = true;
         }
     }
 
     private void ApplyAutomaticBackground(
         IReadOnlyList<string> apiPaths,
-        double opacity,
-        bool applyRefreshedImage)
+        double opacity)
     {
         CancelAutomaticBackgroundRefresh();
         StopBackgroundVideo();
@@ -903,55 +889,66 @@ public sealed partial class MainWindow : Window
 
         var cacheFolder = AppState.SettingsService.AutoBackgroundCacheFolderPath;
         var cached = AlcyBackgroundService.GetCachedBackgroundFiles(cacheFolder);
-        var hadCachedImage = cached.Count > 0;
+        string? consumedFile = null;
         if (cached.Count > 0)
         {
+            consumedFile = PickAutomaticBackgroundFile(cached);
             ApplyAutomaticBackgroundFile(
-                cached[Random.Shared.Next(cached.Count)],
+                consumedFile,
                 opacity);
         }
 
         var cancellation = new CancellationTokenSource();
         _autoBackgroundRefreshCts = cancellation;
-        _ = RefreshAutomaticBackgroundAsync(
+        _ = ReplenishAutomaticBackgroundAsync(
             apiPaths,
             opacity,
             cacheFolder,
-            cancellation,
-            applyRefreshedImage || !hadCachedImage);
+            consumedFile,
+            cancellation.Token);
     }
 
-    private async Task RefreshAutomaticBackgroundAsync(
+    private async Task ReplenishAutomaticBackgroundAsync(
         IReadOnlyList<string> apiPaths,
         double opacity,
         string cacheFolder,
-        CancellationTokenSource cancellation,
-        bool applyWhenReady)
+        string? consumedFile,
+        CancellationToken cancellationToken)
     {
+        var cancellation = _autoBackgroundRefreshCts;
+        if (cancellation is null || cancellation.IsCancellationRequested)
+        {
+            return;
+        }
+
         try
         {
-            if (!applyWhenReady)
-            {
-                await Task.Delay(TimeSpan.FromSeconds(3), cancellation.Token);
-            }
-
-            var files = await AlcyBackgroundService.RefreshBackgroundCacheAsync(
+            var files = await AlcyBackgroundService.EnsureBackgroundCacheAsync(
                 apiPaths,
                 cacheFolder,
-                cancellation.Token);
+                cancellationToken);
             if (cancellation.IsCancellationRequested ||
-                !ReferenceEquals(_autoBackgroundRefreshCts, cancellation) ||
-                files.Count == 0)
+                !ReferenceEquals(_autoBackgroundRefreshCts, cancellation))
             {
                 return;
             }
 
-            if (applyWhenReady)
+            if (consumedFile is null)
             {
-                ApplyAutomaticBackgroundFile(
-                    files[Random.Shared.Next(files.Count)],
-                    opacity);
+                if (files.Count == 0)
+                {
+                    return;
+                }
+
+                consumedFile = PickAutomaticBackgroundFile(files);
+                ApplyAutomaticBackgroundFile(consumedFile, opacity);
             }
+
+            await AlcyBackgroundService.ReplenishOneBackgroundAsync(
+                apiPaths,
+                cacheFolder,
+                consumedFile,
+                cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -969,6 +966,30 @@ public sealed partial class MainWindow : Window
 
             cancellation.Dispose();
         }
+    }
+
+    private string PickAutomaticBackgroundFile(IReadOnlyList<string> files)
+    {
+        if (files.Count == 0)
+        {
+            throw new InvalidOperationException("自动背景图缓存为空。");
+        }
+
+        var candidates = files.Count > 1 &&
+            !string.IsNullOrWhiteSpace(_currentAutomaticBackgroundFile)
+            ? files
+                .Where(path => !string.Equals(
+                    path,
+                    _currentAutomaticBackgroundFile,
+                    StringComparison.OrdinalIgnoreCase))
+                .ToArray()
+            : files.ToArray();
+        if (candidates.Length == 0)
+        {
+            candidates = files.ToArray();
+        }
+
+        return candidates[Random.Shared.Next(candidates.Length)];
     }
 
     private void ApplyAutomaticBackgroundFile(string path, double opacity)
@@ -1506,6 +1527,33 @@ public sealed partial class MainWindow : Window
         SaveWindowPositionBeforeExit();
         _trayIconService?.Dispose();
         _trayIconService = null;
+        Application.Current.Exit();
+    }
+
+    /// <summary>
+    /// 自动更新专用退出：先撤掉窗口和托盘图标，再结束 WinUI；若框架退出被挂住，2 秒后强制终止进程。
+    /// 安装器由独立等待进程在主程序退出后才启动。
+    /// </summary>
+    internal void ExitForUpdate()
+    {
+        _shutdownConfirmed = true;
+        SaveWindowPositionBeforeExit();
+        try
+        {
+            AppWindow.Hide();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"更新前隐藏主窗口失败：{ex.Message}");
+        }
+
+        _trayIconService?.Dispose();
+        _trayIconService = null;
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2));
+            Environment.Exit(0);
+        });
         Application.Current.Exit();
     }
 
