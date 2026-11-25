@@ -22,8 +22,8 @@ public sealed partial class Cs2TrackerPage : Page
 
     private bool _requestBrowserInitialized;
     private TaskCompletionSource<bool>? _requestBrowserReady;
-    private TaskCompletionSource<WebFetchResult>? _pendingFetch;
-    private string? _pendingRequestId;
+    private readonly Dictionary<string, TaskCompletionSource<WebFetchResult>> _pendingFetches =
+        new(StringComparer.Ordinal);
     private bool _querying;
     private uint? _trackerPointerId;
     private double _trackerPointerStartX;
@@ -179,6 +179,19 @@ public sealed partial class Cs2TrackerPage : Page
         try
         {
             await EnsureRequestBrowserAsync();
+            var prefetchedSteamId = ExtractSteamId64(input);
+            Task<WebFetchResult>? aimTask = null;
+            Task<WebFetchResult>? highlightsTask = null;
+            if (prefetchedSteamId is { Length: 17 })
+            {
+                aimTask = FetchWithChallengeRetryAsync(
+                    $"/api/aim-stats?steamid={Uri.EscapeDataString(prefetchedSteamId)}",
+                    "application/json");
+                highlightsTask = FetchWithChallengeRetryAsync(
+                    $"/api/stats-clips?steamid={Uri.EscapeDataString(prefetchedSteamId)}&kind=highlights",
+                    "application/json");
+            }
+
             var profileResponse = await FetchWithChallengeRetryAsync(
                 $"/api/player/{Uri.EscapeDataString(lookupKey)}",
                 "application/x-ndjson");
@@ -194,41 +207,21 @@ public sealed partial class Cs2TrackerPage : Page
                         "未知玩家"));
             }
 
-            JsonObject? aimStats = null;
-            JsonObject? highlights = null;
             if (resolvedSteamId is { Length: 17 })
             {
-                try
+                if (!string.Equals(prefetchedSteamId, resolvedSteamId, StringComparison.Ordinal))
                 {
-                    var aimResponse = await FetchWithChallengeRetryAsync(
+                    aimTask = FetchWithChallengeRetryAsync(
                         $"/api/aim-stats?steamid={Uri.EscapeDataString(resolvedSteamId)}",
                         "application/json");
-                    if (aimResponse.Status is >= 200 and < 300)
-                    {
-                        aimStats = JsonNode.Parse(aimResponse.Text) as JsonObject;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    AppLog.Warn($"读取 CS2Tracker Aim 数据失败：{ex.Message}");
-                }
-
-                try
-                {
-                    var clipsResponse = await FetchWithChallengeRetryAsync(
+                    highlightsTask = FetchWithChallengeRetryAsync(
                         $"/api/stats-clips?steamid={Uri.EscapeDataString(resolvedSteamId)}&kind=highlights",
                         "application/json");
-                    if (clipsResponse.Status is >= 200 and < 300)
-                    {
-                        highlights = JsonNode.Parse(clipsResponse.Text) as JsonObject;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    AppLog.Warn($"读取 CS2Tracker Highlights 数据失败：{ex.Message}");
                 }
             }
 
+            var aimStats = await ReadOptionalJsonAsync(aimTask, "Aim");
+            var highlights = await ReadOptionalJsonAsync(highlightsTask, "Highlights");
             RenderOverview(profile, aimStats, highlights, resolvedSteamId ?? lookupKey);
             TrackerModulesPanel.Visibility = Visibility.Visible;
             QueryStatusText.Text = $"查询完成 · {DateTime.Now:HH:mm:ss}";
@@ -244,6 +237,29 @@ public sealed partial class Cs2TrackerPage : Page
             CheckStatsButton.IsEnabled = true;
             QueryProgress.IsActive = false;
             QueryProgress.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private static async Task<JsonObject?> ReadOptionalJsonAsync(
+        Task<WebFetchResult>? request,
+        string label)
+    {
+        if (request is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var response = await request;
+            return response.Status is >= 200 and < 300
+                ? JsonNode.Parse(response.Text) as JsonObject
+                : null;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"读取 CS2Tracker {label} 数据失败：{ex.Message}");
+            return null;
         }
     }
 
@@ -320,7 +336,10 @@ public sealed partial class Cs2TrackerPage : Page
                 return last;
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(2));
+            if (attempt < 3)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(2));
+            }
         }
 
         return last ?? new WebFetchResult(0, string.Empty, string.Empty, "CS2Tracker 请求超时。");
@@ -328,16 +347,10 @@ public sealed partial class Cs2TrackerPage : Page
 
     private async Task<WebFetchResult> FetchFromSiteAsync(string path, string accept)
     {
-        if (_pendingFetch is not null)
-        {
-            throw new InvalidOperationException("已有 CS2Tracker 请求正在进行。");
-        }
-
         var requestId = Guid.NewGuid().ToString("N");
         var completion = new TaskCompletionSource<WebFetchResult>(
             TaskCreationOptions.RunContinuationsAsynchronously);
-        _pendingFetch = completion;
-        _pendingRequestId = requestId;
+        _pendingFetches[requestId] = completion;
         try
         {
             var quotedPath = JsonQuote(path);
@@ -375,11 +388,7 @@ public sealed partial class Cs2TrackerPage : Page
         }
         finally
         {
-            if (ReferenceEquals(_pendingFetch, completion))
-            {
-                _pendingFetch = null;
-                _pendingRequestId = null;
-            }
+            _pendingFetches.Remove(requestId);
         }
     }
 
@@ -399,21 +408,26 @@ public sealed partial class Cs2TrackerPage : Page
                 kind.GetString() != RequestKind ||
                 !root.TryGetProperty("requestId", out var requestIdElement) ||
                 requestIdElement.GetString() is not { } requestId ||
-                !string.Equals(requestId, _pendingRequestId, StringComparison.Ordinal))
+                !_pendingFetches.TryGetValue(requestId, out var completion))
             {
                 return;
             }
 
+            _pendingFetches.Remove(requestId);
             var result = new WebFetchResult(
                 root.TryGetProperty("status", out var status) ? status.GetInt32() : 0,
                 root.TryGetProperty("contentType", out var contentType) ? contentType.GetString() ?? string.Empty : string.Empty,
                 root.TryGetProperty("text", out var body) ? body.GetString() ?? string.Empty : string.Empty,
                 root.TryGetProperty("error", out var error) ? error.GetString() : null);
-            _pendingFetch?.TrySetResult(result);
+            completion.TrySetResult(result);
         }
         catch (Exception ex)
         {
-            _pendingFetch?.TrySetException(ex);
+            foreach (var completion in _pendingFetches.Values)
+            {
+                completion.TrySetException(ex);
+            }
+            _pendingFetches.Clear();
         }
     }
 
@@ -1290,10 +1304,10 @@ public sealed partial class Cs2TrackerPage : Page
 
     private string WeaponDisplayName(string id, string? sourceName)
     {
-        var catalog = FindCatalogWeapon(id);
-        if (catalog is not null)
+        var normalized = NormalizeWeaponId(id);
+        if (normalized == "enemy_blinded")
         {
-            return catalog.LocalizedName;
+            return "致盲击杀";
         }
 
         if (!string.IsNullOrWhiteSpace(sourceName))
@@ -1301,7 +1315,13 @@ public sealed partial class Cs2TrackerPage : Page
             return sourceName;
         }
 
-        return id.Replace('_', ' ').ToUpperInvariant();
+        var catalog = FindCatalogWeapon(id);
+        if (catalog is not null)
+        {
+            return catalog.LocalizedName;
+        }
+
+        return (normalized ?? id).Replace('_', ' ').ToUpperInvariant();
     }
 
     private static CsWeapon? FindCatalogWeapon(string id)
@@ -1861,7 +1881,10 @@ public sealed partial class Cs2TrackerPage : Page
     {
         _requestBrowserInitialized = false;
         _requestBrowserReady = null;
-        _pendingFetch = null;
-        _pendingRequestId = null;
+        foreach (var completion in _pendingFetches.Values)
+        {
+            completion.TrySetException(new InvalidOperationException("CS2Tracker 会话已重建。"));
+        }
+        _pendingFetches.Clear();
     }
 }

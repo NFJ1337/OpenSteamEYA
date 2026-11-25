@@ -600,6 +600,10 @@ public sealed partial class AboutPage : Page, INotifyPropertyChanged
         UpdateDownloadHighlightState(updateAvailable && !_isDownloadingUpdate);
 
         UpdateDownloadProgressPanel.Visibility = _isDownloadingUpdate ? Visibility.Visible : Visibility.Collapsed;
+        // 下载期间用进度区替换次要信息与操作行，避免横向按钮和进度区把固定高度的左侧卡片撑出边界。
+        UpdateActionsPanel.Visibility = _isDownloadingUpdate ? Visibility.Collapsed : Visibility.Visible;
+        AboutArtifactText.Visibility = _isDownloadingUpdate ? Visibility.Collapsed : Visibility.Visible;
+        AboutUpdateCheckedText.Visibility = _isDownloadingUpdate ? Visibility.Collapsed : Visibility.Visible;
         if (_isDownloadingUpdate)
         {
             if (_downloadTotalBytes is > 0)

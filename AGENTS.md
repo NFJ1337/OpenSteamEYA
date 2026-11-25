@@ -25,6 +25,20 @@
 - 回报：安装包链接 + 一行确认（新 Release/标签已发布 / 安装包和 latest.json 已上传 / 源码与标签已推送）。
   只有失败或需要用户决策时才多解释几句。
 
+## 触发词：裸回复「3」= 把最近几次更新同步到最新版本并重新发布（2026-11-25 用户定义）
+- 用户消息就是单个数字 `3`（前后无其它文字）时：**版本号不 +1，也不创建新版本**。
+- 以 `SteamEyaWinUI.csproj` 当前版本为本次要重新发布的最新版本，先确认对应的 `v<版本>`
+  GitHub Release 和标签已经存在；不存在时停止并说明，不能自行换成新版本。
+- 把最近这几次尚未写入该版本发布说明的更新，按用户视角浓缩合并到现有
+  `artifacts\release-notes-<版本>.txt`。保留原版本已有说明，去重后追加，不反复重复同一条。
+- 用同一版本重新执行 `scripts\build-installer.ps1 -Version <版本>`。
+- `裸回复 3` 属于用户明确要求的“重新发布同一个最新版本”：
+  提交当前改动并将现有 `v<版本>` 标签更新到当前提交；先打包源码 zip，再更新该标签对应 Release 的正文，
+  用 `gh release upload <标签> <文件> --clobber` 覆盖安装包、`latest.json` 和源码 zip，
+  并确保该 Release 仍为 latest。不得改动其它旧 Release。
+- 完成后只回报安装包的单链接，并简短确认：最近更新已合并、同一版本的 Release/标签已重新发布，
+  安装包、latest.json 和源码包已更新。
+
 ## 版本号与打包脚本（用法备查；何时调用由用户当次明确说明）
 - `scripts\bump-version.ps1`：同步 `SteamEyaWinUI.csproj`（Version/FileVersion/AssemblyVersion/InformationalVersion）、
   `scripts\build-installer.ps1` 的默认 `$Version`、`build\installer\SteamEYA.iss` 的默认 AppVersion，输出 `NewVersion=x.y.z`；`-DryRun` 只算不写。

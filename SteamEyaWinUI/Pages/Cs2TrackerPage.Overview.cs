@@ -192,19 +192,23 @@ public sealed partial class Cs2TrackerPage
             CornerRadius = new CornerRadius(8),
             BorderThickness = new Thickness(1),
             BorderBrush = ThemeBrush("AuroraGlassBorderBrush"),
-            Child = avatarUrl.Length > 0
-                ? new Image
-                {
-                    Source = new BitmapImage(new Uri(avatarUrl)),
-                    Stretch = Stretch.UniformToFill
-                }
-                : new FontIcon
-                {
-                    Glyph = "\uE77B",
-                    FontSize = 28,
-                    Foreground = ThemeBrush("AuroraTextMutedBrush")
-                }
+            Background = ThemeBrush("AuroraPillBrush"),
+            Child = CreateAvatarFallback(name)
         };
+        var normalizedAvatarUrl = NormalizeSteamImageUrl(avatarUrl);
+        if (Uri.TryCreate(normalizedAvatarUrl, UriKind.Absolute, out var avatarUri))
+        {
+            var avatarImage = new Image
+            {
+                Stretch = Stretch.UniformToFill
+            };
+            avatarImage.ImageFailed += (_, _) => avatar.Child = CreateAvatarFallback(name);
+            avatarImage.Source = new BitmapImage(avatarUri)
+            {
+                DecodePixelWidth = 140
+            };
+            avatar.Child = avatarImage;
+        }
         header.Children.Add(avatar);
 
         var identity = new StackPanel { Spacing = 3, VerticalAlignment = VerticalAlignment.Center };
@@ -341,9 +345,10 @@ public sealed partial class Cs2TrackerPage
                 Width = 22,
                 Height = 22,
                 CornerRadius = new CornerRadius(11),
+                Background = ThemeBrush("AuroraPillBrush"),
                 Child = new Image
                 {
-                    Source = new BitmapImage(new Uri(avatarUrl)),
+                    Source = new BitmapImage(new Uri(NormalizeSteamImageUrl(avatarUrl))),
                     Stretch = Stretch.UniformToFill
                 }
             });
@@ -2458,6 +2463,40 @@ public sealed partial class Cs2TrackerPage
 
     private static string FormatWhole(int? value) =>
         value is null ? "—" : value.Value.ToString("N0", CultureInfo.InvariantCulture);
+
+    private TextBlock CreateAvatarFallback(string name)
+    {
+        var initial = string.IsNullOrWhiteSpace(name)
+            ? "?"
+            : StringInfo.GetNextTextElement(name.Trim()).ToUpperInvariant();
+        return new TextBlock
+        {
+            Text = initial,
+            FontSize = 28,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = ThemeBrush("AuroraTextHeadingBrush"),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+    }
+
+    private static string NormalizeSteamImageUrl(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            return url;
+        }
+        if (!string.Equals(uri.Host, "avatars.steamstatic.com", StringComparison.OrdinalIgnoreCase))
+        {
+            return url;
+        }
+
+        var builder = new UriBuilder(uri)
+        {
+            Host = "avatars.akamai.steamstatic.com"
+        };
+        return builder.Uri.AbsoluteUri;
+    }
 
     private Border CreatePill(string text, double fontSize = 8)
     {

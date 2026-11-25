@@ -96,7 +96,10 @@
                                 HorizontalContentAlignment="Center"
                                 Style="{StaticResource AccentButtonStyle}"
                                 Click="OpenBilibiliButton_Click">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                <StackPanel
+                                    x:Name="UpdateActionsPanel"
+                                    Orientation="Horizontal"
+                                    Spacing="8">
                                     <FontIcon Glyph="&#xE774;" FontSize="16" />
                                     <TextBlock Text="{x:Bind Strings.Get('About_Follow_Button'), Mode=OneWay}" />
                                 </StackPanel>
@@ -346,7 +349,7 @@
                     <!-- 特别强调：账号核验模块已适配 奶味验号.xyz -->
                     <TextBlock
                         Text="{x:Bind Strings.Get('About_Usage_NaiweiNote'), Mode=OneWay}"
-                        Foreground="{ThemeResource CustomUiBrush}"
+                        Foreground="#FFFF5A65"
                         FontWeight="SemiBold"
                         TextWrapping="Wrap"
                         LineHeight="22" />
@@ -357,6 +360,7 @@
                     <TextBlock Text="{x:Bind Strings.Get('About_Usage_CachedAccounts'), Mode=OneWay}" TextWrapping="Wrap" LineHeight="22" />
                     <TextBlock Text="{x:Bind Strings.Get('About_Usage_Loadout'), Mode=OneWay}" TextWrapping="Wrap" LineHeight="22" />
                     <TextBlock Text="{x:Bind Strings.Get('About_Usage_Personalize'), Mode=OneWay}" TextWrapping="Wrap" LineHeight="22" />
+                    <TextBlock Text="{x:Bind Strings.Get('About_Usage_Cs2Tracker'), Mode=OneWay}" TextWrapping="Wrap" LineHeight="22" />
                     <TextBlock Text="{x:Bind Strings.Get('About_Usage_TreasureBox'), Mode=OneWay}" TextWrapping="Wrap" LineHeight="22" />
                     <TextBlock Text="{x:Bind Strings.Get('About_Usage_Settings'), Mode=OneWay}" TextWrapping="Wrap" LineHeight="22" />
                     <TextBlock Text="{x:Bind Strings.Get('About_Usage_Security'), Mode=OneWay}" TextWrapping="Wrap" LineHeight="22" />

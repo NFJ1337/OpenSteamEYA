@@ -64,6 +64,7 @@ public sealed partial class Cs2TrackerPage
                 row.Children.Add(steamId);
                 var rowBorder = new Border
                 {
+                    Height = 34,
                     Padding = new Thickness(10, 7, 10, 7),
                     CornerRadius = new CornerRadius(8),
                     Background = ThemeBrush("AuroraPaneBrush"),
@@ -82,7 +83,8 @@ public sealed partial class Cs2TrackerPage
             }
             content = new ScrollViewer
             {
-                MaxHeight = 440,
+                // 10 × 34px 行高 + 9 × 6px 间距，超出部分使用内部滚动条。
+                MaxHeight = 394,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
                 Content = list
