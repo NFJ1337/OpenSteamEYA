@@ -24,10 +24,16 @@ public sealed partial class Cs2TrackerPage
 
     private async void HistoryQueriesButton_Click(object sender, RoutedEventArgs e)
     {
-        var entries = LoadTrackerQueryHistory();
+        var entries = LoadTrackerQueryHistory()
+            .OrderByDescending(entry => entry.QueriedAt)
+            .ToList();
         ContentDialog? dialog = null;
         string? selectedSteamId = null;
-        var list = new StackPanel { Spacing = 6 };
+        var list = new StackPanel
+        {
+            Spacing = 6,
+            Margin = new Thickness(0, 0, 10, 0)
+        };
         var emptyText = new TextBlock
         {
             Text = "暂无历史查询。",
@@ -44,6 +50,7 @@ public sealed partial class Cs2TrackerPage
             Visibility = entries.Count == 0 ? Visibility.Collapsed : Visibility.Visible,
             Content = list
         };
+        ApplyTrackerHistoryScrollBarStyle(scroll);
         foreach (var entry in entries)
         {
             var row = new Grid();
@@ -133,7 +140,7 @@ public sealed partial class Cs2TrackerPage
             var rowBorder = new Border
             {
                 Height = 34,
-                Padding = new Thickness(10, 5, 5, 5),
+                Padding = new Thickness(10, 5, 10, 5),
                 CornerRadius = new CornerRadius(8),
                 Background = ThemeBrush("AuroraPaneBrush"),
                 BorderBrush = ThemeBrush("AuroraGlassBorderBrush"),
@@ -187,6 +194,23 @@ public sealed partial class Cs2TrackerPage
             TrackerIdBox.Text = selectedSteamId;
             await RunQueryAsync();
         }
+    }
+
+    private static void ApplyTrackerHistoryScrollBarStyle(ScrollViewer scroll)
+    {
+        var resources = scroll.Resources;
+        resources["ScrollBarSize"] = 8d;
+        resources["ScrollBarVerticalThumbMinWidth"] = 6d;
+        resources["ScrollBarThumbOffset"] = 1d;
+        resources["ScrollBarCornerRadius"] = new CornerRadius(3);
+        resources["ScrollBarThumbFill"] = ThemeBrush("AuroraTextMutedBrush");
+        resources["ScrollBarThumbFillPointerOver"] = ThemeBrush("AuroraTextBodyBrush");
+        resources["ScrollBarThumbFillPressed"] = ThemeBrush("AuroraTextHeadingBrush");
+        resources["ScrollBarPanningThumbBackground"] = ThemeBrush("AuroraTextMutedBrush");
+        resources["ScrollBarTrackFill"] = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        resources["ScrollBarTrackFillPointerOver"] = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        resources["ScrollBarTrackFillDisabled"] = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        resources["ScrollBarTrackStroke"] = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
     }
 
     private static void SaveTrackerQueryHistory(string steamId, string name)

@@ -91,6 +91,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         base.OnNavigatedTo(e);
         RefreshHighlightBrush();
         AppState.ReloadWhiteAccounts();
+        LoadLegacyGroups();
         UpdateBatchButtonsState();
         RebuildRows(highlightFirst: false);
         ApplyLegacyPageMode(string.Equals(
@@ -199,6 +200,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Strings)));
         UpdateGenIdMenuTexts();
+        LoadLegacyGroups();
         RebuildRows();
         RefreshAccountQueryRows();
         UpdateAccountQueryLocalizedChrome();
@@ -232,6 +234,11 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         foreach (var account in AppState.WhiteAccounts)
         {
             if (keyword.Length > 0 && !Matches(account, keyword))
+            {
+                continue;
+            }
+
+            if (!MatchesLegacyGroupFilter(account))
             {
                 continue;
             }
@@ -330,9 +337,24 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             LegacyBatchNoteButton.IsEnabled = hasChecked;
         }
 
+        if (LegacyBatchGroupButton is not null)
+        {
+            LegacyBatchGroupButton.IsEnabled = hasChecked && !AppState.IsBusy;
+        }
+
         if (LegacyDeleteButton is not null)
         {
             LegacyDeleteButton.IsEnabled = hasChecked;
+        }
+
+        if (LegacyGroupFilterButton is not null)
+        {
+            LegacyGroupFilterButton.IsEnabled = !AppState.IsBusy;
+        }
+
+        if (LegacyManageGroupsButton is not null)
+        {
+            LegacyManageGroupsButton.IsEnabled = !AppState.IsBusy;
         }
 
         UpdateAccountManagementFooter();

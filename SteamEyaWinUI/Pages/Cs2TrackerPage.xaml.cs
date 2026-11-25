@@ -307,6 +307,7 @@ public sealed partial class Cs2TrackerPage : Page
                 "application/x-ndjson");
             var profile = ParseProfilePayload(profileResponse);
             var resolvedSteamId = GetString(profile, "steamid64") ?? directSteamId;
+            Task<JsonObject?>? freshLeetifyTask = null;
             if (resolvedSteamId is { Length: 17 })
             {
                 BeginCrossPlatformLoad(resolvedSteamId, viewGeneration);
@@ -316,6 +317,8 @@ public sealed partial class Cs2TrackerPage : Page
                         GetString(profile, "nickname"),
                         GetString(profile, "csstatsgg", "name"),
                         "未知玩家"));
+                freshLeetifyTask =
+                    LeetifyFreshProfileService.FetchRecentRatingsAsync(resolvedSteamId);
             }
 
             if (resolvedSteamId is { Length: 17 })
@@ -337,9 +340,15 @@ public sealed partial class Cs2TrackerPage : Page
             var aimStats = await ReadOptionalJsonAsync(aimTask, "Aim");
             var highlights = await ReadOptionalJsonAsync(highlightsTask, "Highlights");
             var cheatRisk = await ReadOptionalJsonAsync(cheatRiskTask, "实时作弊风险");
+            var freshLeetifyRatings = await ReadFreshLeetifyRatingsAsync(freshLeetifyTask);
             if (viewGeneration != _trackerViewGeneration)
             {
                 return;
+            }
+
+            if (freshLeetifyRatings is not null)
+            {
+                LeetifyFreshProfileService.ApplyRecentRatings(profile, freshLeetifyRatings);
             }
 
             RenderOverview(profile, aimStats, highlights, cheatRisk, resolvedSteamId ?? lookupKey);
@@ -389,6 +398,25 @@ public sealed partial class Cs2TrackerPage : Page
         catch (Exception ex)
         {
             AppLog.Warn($"读取 CS2Tracker {label} 数据失败：{ex.Message}");
+            return null;
+        }
+    }
+
+    private static async Task<JsonObject?> ReadFreshLeetifyRatingsAsync(
+        Task<JsonObject?>? request)
+    {
+        if (request is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await request;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"读取 Leetify 实时评分失败，保留 CS2Tracker 数据：{ex.Message}");
             return null;
         }
     }

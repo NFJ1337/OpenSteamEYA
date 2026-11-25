@@ -295,6 +295,15 @@
                                         <TextBlock Text="{x:Bind Strings.Get('Common_Cancel'), Mode=OneWay}" />
                                     </StackPanel>
                                 </Button>
+                                <Button x:Name="LegacyBatchGroupButton" Style="{StaticResource LegacyIcedGlassButtonStyle}" ToolTipService.ToolTip="{x:Bind Strings.Get('History_BatchGroup_Tooltip'), Mode=OneWay}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE8FD;" FontSize="14" />
+                                        <TextBlock Text="{x:Bind Strings.Get('Common_BatchGroup'), Mode=OneWay}" />
+                                    </StackPanel>
+                                    <Button.Flyout>
+                                        <MenuFlyout x:Name="LegacyBatchGroupFlyout" Opening="LegacyBatchGroupFlyout_Opening" />
+                                    </Button.Flyout>
+                                </Button>
                                 <Button x:Name="LegacyBatchNoteButton" Style="{StaticResource LegacyIcedGlassButtonStyle}" Click="LegacyBatchNoteButton_Click">
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <FontIcon Glyph="&#xE70F;" FontSize="14" />
@@ -341,6 +350,26 @@
                                     ToolTipService.ToolTip="{x:Bind Strings.Get('Legacy_Filter_Hidden_Tip'), Mode=OneWay}"
                                     Checked="LegacyShowHiddenCheck_Changed"
                                     Unchecked="LegacyShowHiddenCheck_Changed" />
+                                <DropDownButton
+                                    x:Name="LegacyGroupFilterButton"
+                                    MinWidth="128"
+                                    Style="{StaticResource LegacyIcedDropDownButtonStyle}"
+                                    ToolTipService.ToolTip="{x:Bind Strings.Get('History_Group_Filter_Tooltip'), Mode=OneWay}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE8EC;" FontSize="14" />
+                                        <TextBlock x:Name="LegacyGroupFilterText" />
+                                    </StackPanel>
+                                    <DropDownButton.Flyout>
+                                        <MenuFlyout x:Name="LegacyGroupFilterFlyout" />
+                                    </DropDownButton.Flyout>
+                                </DropDownButton>
+                                <Button
+                                    x:Name="LegacyManageGroupsButton"
+                                    Style="{StaticResource LegacyIcedGlassButtonStyle}"
+                                    Click="LegacyManageGroupsButton_Click"
+                                    ToolTipService.ToolTip="{x:Bind Strings.Get('History_Group_Manage'), Mode=OneWay}">
+                                    <FontIcon Glyph="&#xE713;" FontSize="14" />
+                                </Button>
                             </StackPanel>
                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
                                 <Button

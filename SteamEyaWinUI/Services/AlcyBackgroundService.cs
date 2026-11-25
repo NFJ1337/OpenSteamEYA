@@ -15,6 +15,7 @@ internal static class AlcyBackgroundService
     private const string SiteRoot = "https://t.alcy.cc/";
     private const int CacheImageCount = 10;
     private const int DownloadBatchSize = 5;
+    private static readonly TimeSpan RefreshTimeout = TimeSpan.FromSeconds(45);
     private static readonly HttpClient Client = new()
     {
         Timeout = TimeSpan.FromSeconds(20)
@@ -154,6 +155,7 @@ internal static class AlcyBackgroundService
             return [];
         }
 
+        PruneStagingFolders(cacheFolder, force: false);
         var files = Directory
             .EnumerateFiles(cacheFolder, "auto-bg-*")
             .Where(IsSupportedImageFile)
@@ -177,40 +179,69 @@ internal static class AlcyBackgroundService
 
         Directory.CreateDirectory(cacheFolder);
         var stamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var downloaded = new List<string>(CacheImageCount);
-        var sequence = 0;
-        for (var attempt = 0; attempt < 4 && downloaded.Count < CacheImageCount; attempt++)
+        var stagingFolder = Path.Combine(
+            cacheFolder,
+            $".staging-{stamp}-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(stagingFolder);
+        using var refreshCancellation =
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        refreshCancellation.CancelAfter(RefreshTimeout);
+        var refreshToken = refreshCancellation.Token;
+        var promoted = new List<string>(CacheImageCount);
+        try
         {
-            var batchSize = Math.Min(
-                DownloadBatchSize,
-                CacheImageCount - downloaded.Count);
-            var tasks = Enumerable.Range(sequence, batchSize)
-                .Select(index => DownloadBackgroundAsync(
-                    normalizedPaths[Random.Shared.Next(normalizedPaths.Count)],
-                    cacheFolder,
-                    stamp,
-                    index,
-                    cancellationToken))
-                .ToArray();
-            sequence += batchSize;
-            downloaded.AddRange(
-                (await Task.WhenAll(tasks)).OfType<string>());
-        }
+            var downloaded = new List<string>(CacheImageCount);
+            var sequence = 0;
+            for (var attempt = 0; attempt < 4 && downloaded.Count < CacheImageCount; attempt++)
+            {
+                var batchSize = Math.Min(
+                    DownloadBatchSize,
+                    CacheImageCount - downloaded.Count);
+                var tasks = Enumerable.Range(sequence, batchSize)
+                    .Select(index => DownloadBackgroundAsync(
+                        normalizedPaths[Random.Shared.Next(normalizedPaths.Count)],
+                        stagingFolder,
+                        stamp,
+                        index,
+                        refreshToken))
+                    .ToArray();
+                sequence += batchSize;
+                downloaded.AddRange(
+                    (await Task.WhenAll(tasks)).OfType<string>());
+            }
 
-        if (downloaded.Count < CacheImageCount)
+            if (downloaded.Count < CacheImageCount)
+            {
+                throw new InvalidOperationException(
+                    $"自动背景图未能完整预下载 {CacheImageCount} 张，继续使用上一次缓存。");
+            }
+
+            foreach (var file in downloaded.Take(CacheImageCount))
+            {
+                refreshToken.ThrowIfCancellationRequested();
+                var finalPath = Path.Combine(
+                    cacheFolder,
+                    Path.GetFileName(file));
+                File.Move(file, finalPath, overwrite: true);
+                promoted.Add(finalPath);
+            }
+
+            PruneOldCacheFiles(cacheFolder, promoted);
+            return promoted;
+        }
+        catch
         {
-            foreach (var file in downloaded)
+            foreach (var file in promoted)
             {
                 TryDelete(file);
             }
 
-            throw new InvalidOperationException(
-                $"自动背景图未能完整预下载 {CacheImageCount} 张，继续使用上一次缓存。");
+            throw;
         }
-
-        var result = downloaded.Take(CacheImageCount).ToArray();
-        PruneOldCacheFiles(cacheFolder, result);
-        return result;
+        finally
+        {
+            TryDeleteDirectory(stagingFolder);
+        }
     }
 
     public static void ClearCache(string cacheFolder)
@@ -224,6 +255,8 @@ internal static class AlcyBackgroundService
         {
             TryDelete(file);
         }
+
+        PruneStagingFolders(cacheFolder, force: true);
     }
 
     private static string ReadValue(Regex regex, string html)
@@ -311,6 +344,28 @@ internal static class AlcyBackgroundService
         }
     }
 
+    private static void PruneStagingFolders(string cacheFolder, bool force)
+    {
+        if (!Directory.Exists(cacheFolder))
+        {
+            return;
+        }
+
+        var staleBefore = DateTime.UtcNow - TimeSpan.FromMinutes(10);
+        foreach (var folder in Directory.EnumerateDirectories(
+                     cacheFolder,
+                     ".staging-*",
+                     SearchOption.TopDirectoryOnly))
+        {
+            if (!force && Directory.GetLastWriteTimeUtc(folder) > staleBefore)
+            {
+                continue;
+            }
+
+            TryDeleteDirectory(folder);
+        }
+    }
+
     private static bool IsSupportedImageFile(string path) =>
         Path.GetExtension(path).ToLowerInvariant() is ".webp" or ".jpg" or ".jpeg" or ".png";
 
@@ -326,6 +381,21 @@ internal static class AlcyBackgroundService
         catch (Exception ex)
         {
             AppLog.Warn($"清理自动背景缓存失败：{ex.Message}");
+        }
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+            {
+                Directory.Delete(path, recursive: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"清理自动背景暂存目录失败：{ex.Message}");
         }
     }
 }
