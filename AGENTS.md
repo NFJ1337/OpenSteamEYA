@@ -48,6 +48,10 @@
 - `scripts\publish-source.ps1 -Version <x.y.z>`：打源码 zip → 提交 → `git push origin main` → 确认 `v<x.y.z>` 标签 →
   上传源码包到该版本 Release；不移动标签、不覆盖旧源码包。
 - 以上都只在用户明确要求时执行；版本号要不要 +1 也由用户当次说明决定。
+- **本地发布产物仅保留最近 3 个版本**：`artifacts\release-notes-<版本>.txt`、
+  `artifacts\release-notes-v<版本>.md`、`artifacts\SteamEYANFJ-<版本>-source.zip`、
+  `artifacts\SteamEYANFJ-<版本>-win-x64-setup.exe` 四类文件分别只保留版本号最高的 3 个；
+  打包、发布 Release、上传源码后均自动运行 `scripts\prune-release-artifacts.ps1 -Keep 3`。
 
 ## 符号留档（用户明确要求）
 - 每次打包 `build-installer.ps1` 会自动调用 `scripts\archive-symbols.ps1`，把本次 Native AOT 构建的

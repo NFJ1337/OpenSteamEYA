@@ -170,5 +170,9 @@ finally {
 
 # 只向当前版本自己的 Release 上传源码包，不改旧 Release。
 gh release upload $Tag $zipPath --repo $Repository
+if ($LASTEXITCODE -ne 0) {
+    throw "上传源码包失败（退出码 $LASTEXITCODE）。"
+}
+& (Join-Path $PSScriptRoot 'prune-release-artifacts.ps1') -ProjectRoot $ProjectRoot -Keep 3
 Write-Host 'release 现在的资产：'
 gh release view $Tag --repo $Repository --json assets --jq '.assets[] | "  - \(.name)  (\(.size) 字节)"'

@@ -27,6 +27,7 @@ public sealed partial class Cs2TrackerPage
         JsonObject root,
         JsonObject? aimStats,
         JsonObject? highlights,
+        JsonObject? cheatRisk,
         string fallbackSteamId)
     {
         TrackerModulesPanel.Children.Clear();
@@ -36,7 +37,15 @@ public sealed partial class Cs2TrackerPage
             GetString(root, "nickname"),
             GetString(root, "csstatsgg", "name"),
             steamId);
-        var riskScore = GetMetricNumber(GetNode(root, "gauges", "cheating")) ??
+        var liveCheatResult = GetNode(cheatRisk ?? new JsonObject(), "result") as JsonObject;
+        var useLiveCheatRisk =
+            GetBool(cheatRisk ?? new JsonObject(), "live") == true &&
+            liveCheatResult is not null &&
+            GetBool(liveCheatResult, "available") != false;
+        var riskScore = useLiveCheatRisk
+            ? GetMetricNumber(liveCheatResult?["percent"])
+            : null;
+        riskScore ??= GetMetricNumber(GetNode(root, "gauges", "cheating")) ??
             GetMetricNumber(GetNode(root, "gauges", "cheating_details", "percent"));
         var headshot = GetMetricNumber(GetNode(root, "gauges", "headshot")) ??
             GetMetricNumber(GetNode(root, "gauges", "headshot%")) ??
@@ -78,7 +87,8 @@ public sealed partial class Cs2TrackerPage
                 >= 60 => "检测到较强异常信号。",
                 >= 30 => "存在少量待复核信号。",
                 _ => "近期对局表现与普通玩家一致。"
-            }));
+            },
+            4));
         gaugeGrid.Children.Add(BuildGaugeCard(
             "爆头率",
             headshot,
@@ -99,7 +109,8 @@ public sealed partial class Cs2TrackerPage
                 null => "暂无爆头率数据。",
                 >= 55 => "首发射击与爆头转化表现突出。",
                 _ => "爆头转化处于普通区间。"
-            }));
+            },
+            35));
         gaugeGrid.Children.Add(BuildGaugeCard(
             "胜率",
             winRate,
@@ -120,7 +131,8 @@ public sealed partial class Cs2TrackerPage
                 null => "暂无胜率数据。",
                 >= 55 => "近期对局胜率高于平均水平。",
                 _ => "近期对局胜率接近平均水平。"
-            }));
+            },
+            50));
         ArrangeColumnsInOrder(gaugeGrid);
         Grid.SetColumn(gaugeGrid, 1);
         top.Children.Add(gaugeGrid);
@@ -553,7 +565,8 @@ public sealed partial class Cs2TrackerPage
         string iconUri,
         string status,
         string subStatus,
-        string description)
+        string description,
+        double averageMarker)
     {
         var content = new StackPanel { Spacing = 5, HorizontalAlignment = HorizontalAlignment.Stretch };
         content.Children.Add(new TextBlock
@@ -572,7 +585,8 @@ public sealed partial class Cs2TrackerPage
             colorHex,
             iconUri,
             108,
-            27));
+            27,
+            averageMarker));
         content.Children.Add(new TextBlock
         {
             Text = status,
@@ -713,7 +727,8 @@ public sealed partial class Cs2TrackerPage
             colorHex,
             null,
             74,
-            18));
+            18,
+            50));
         content.Children.Add(new TextBlock
         {
             Text = percentile is null ? "—" : $"前 {FormatTopPercent(percentile.Value)}",
@@ -1726,7 +1741,8 @@ public sealed partial class Cs2TrackerPage
         string colorHex,
         string? iconUri,
         double size,
-        double valueFontSize)
+        double valueFontSize,
+        double averageMarker)
     {
         var container = new Grid
         {
@@ -1759,6 +1775,16 @@ public sealed partial class Cs2TrackerPage
                 arcSweep * clamped / 100,
                 new SolidColorBrush(ColorFrom(colorHex)),
                 thickness));
+        }
+        if (averageMarker is >= 0 and <= 100)
+        {
+            canvas.Children.Add(CreateGaugeThresholdTick(
+                center,
+                radius,
+                startAngle,
+                arcSweep,
+                averageMarker,
+                size >= 100 ? 2.2 : 1.8));
         }
         container.Children.Add(canvas);
         container.Children.Add(new Border
@@ -1817,6 +1843,31 @@ public sealed partial class Cs2TrackerPage
         }
         container.Children.Add(centerContent);
         return container;
+    }
+
+    private static Microsoft.UI.Xaml.Shapes.Line CreateGaugeThresholdTick(
+        double center,
+        double radius,
+        double startAngle,
+        double arcSweep,
+        double markerPercent,
+        double thickness)
+    {
+        var angle = startAngle + arcSweep * Math.Clamp(markerPercent, 0, 100) / 100;
+        var radians = angle * Math.PI / 180;
+        var innerRadius = radius - 4;
+        var outerRadius = radius + 3;
+        return new Microsoft.UI.Xaml.Shapes.Line
+        {
+            X1 = center + innerRadius * Math.Cos(radians),
+            Y1 = center + innerRadius * Math.Sin(radians),
+            X2 = center + outerRadius * Math.Cos(radians),
+            Y2 = center + outerRadius * Math.Sin(radians),
+            Stroke = new SolidColorBrush(ColorFrom("#F2FFFFFF")),
+            StrokeThickness = thickness,
+            StrokeStartLineCap = PenLineCap.Round,
+            StrokeEndLineCap = PenLineCap.Round
+        };
     }
 
     private static Microsoft.UI.Xaml.Shapes.Path CreateArc(
@@ -1921,7 +1972,8 @@ public sealed partial class Cs2TrackerPage
             colorHex,
             null,
             88,
-            20));
+            20,
+            50));
         content.Children.Add(new TextBlock
         {
             Text = topPercent is null ? "—" : $"前 {FormatTopPercent(topPercent.Value)}",

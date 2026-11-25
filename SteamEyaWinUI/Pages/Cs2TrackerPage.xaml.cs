@@ -182,6 +182,7 @@ public sealed partial class Cs2TrackerPage : Page
             var prefetchedSteamId = ExtractSteamId64(input);
             Task<WebFetchResult>? aimTask = null;
             Task<WebFetchResult>? highlightsTask = null;
+            Task<WebFetchResult>? cheatRiskTask = null;
             if (prefetchedSteamId is { Length: 17 })
             {
                 aimTask = FetchWithChallengeRetryAsync(
@@ -189,6 +190,9 @@ public sealed partial class Cs2TrackerPage : Page
                     "application/json");
                 highlightsTask = FetchWithChallengeRetryAsync(
                     $"/api/stats-clips?steamid={Uri.EscapeDataString(prefetchedSteamId)}&kind=highlights",
+                    "application/json");
+                cheatRiskTask = FetchWithChallengeRetryAsync(
+                    $"/api/cheat-v2?steamid={Uri.EscapeDataString(prefetchedSteamId)}",
                     "application/json");
             }
 
@@ -217,12 +221,16 @@ public sealed partial class Cs2TrackerPage : Page
                     highlightsTask = FetchWithChallengeRetryAsync(
                         $"/api/stats-clips?steamid={Uri.EscapeDataString(resolvedSteamId)}&kind=highlights",
                         "application/json");
+                    cheatRiskTask = FetchWithChallengeRetryAsync(
+                        $"/api/cheat-v2?steamid={Uri.EscapeDataString(resolvedSteamId)}",
+                        "application/json");
                 }
             }
 
             var aimStats = await ReadOptionalJsonAsync(aimTask, "Aim");
             var highlights = await ReadOptionalJsonAsync(highlightsTask, "Highlights");
-            RenderOverview(profile, aimStats, highlights, resolvedSteamId ?? lookupKey);
+            var cheatRisk = await ReadOptionalJsonAsync(cheatRiskTask, "实时作弊风险");
+            RenderOverview(profile, aimStats, highlights, cheatRisk, resolvedSteamId ?? lookupKey);
             TrackerModulesPanel.Visibility = Visibility.Visible;
             QueryStatusText.Text = $"查询完成 · {DateTime.Now:HH:mm:ss}";
         }

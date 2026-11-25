@@ -110,4 +110,7 @@ Write-Host "[3/3] Building installer..."
 & $iscc "/DAppVersion=$Version" "/DPublishDir=$publishDir" "/DOutputDir=$outputDir" $issPath
 Ensure-Success "ISCC"
 
+# 发布说明 TXT/MD、源码包、安装包都只保留最近 3 个版本。
+& (Join-Path $PSScriptRoot 'prune-release-artifacts.ps1') -ProjectRoot $repoRoot -Keep 3
+
 Write-Host "Done. Output: $outputDir"

@@ -297,6 +297,9 @@ if ($LASTEXITCODE -ne 0) {
 [void](Remove-ExcessReleaseNoteFiles `
     -folder (Join-Path $ProjectRoot 'artifacts') `
     -keepCount $KeepReleaseNoteCount)
+& (Join-Path $PSScriptRoot 'prune-release-artifacts.ps1') `
+    -ProjectRoot $ProjectRoot `
+    -Keep $KeepReleaseNoteCount
 
 $releaseUrl = "https://github.com/$Repository/releases/tag/$([Uri]::EscapeDataString($Tag))"
 Write-Host "已创建新 Release：$releaseUrl"
