@@ -23,7 +23,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     private static readonly string[] ThemeCodes = ["Default", "Light", "Dark"];
     // 自定义背景可选的文件类型：图片（含 GIF）+ 视频（静音循环播放）。
     private static readonly string[] BackgroundImageExtensions =
-        [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".mp4", ".m4v", ".mov", ".wmv", ".avi", ".mkv"];
+        [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".mp4", ".m4v", ".mov", ".wmv", ".avi", ".mkv"];
     private static readonly string[] IntroVideoExtensions = [".mp4", ".m4v", ".mov", ".wmv", ".avi", ".mkv"];
 
     // 代码设置 ComboBox.SelectedItem 会触发 SelectionChanged，置位以区分“用户选择”与“初始同步”，避免回写/重复应用。
@@ -381,6 +381,9 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             TableSeparatorToggle.IsOn = settings.ShowTableSeparators;
             UpdateTableSeparatorControls();
             CustomBackgroundToggle.IsOn = settings.CustomBackgroundEnabled && AppState.SettingsService.GetCustomBackgroundImagePath(settings) is not null;
+            AutoBackgroundToggle.IsOn =
+                settings.AutoBackgroundEnabled &&
+                GetConfiguredAutoBackgroundPaths(settings).Count > 0;
             CustomBackgroundOpacitySlider.Value = Math.Clamp(settings.CustomBackgroundOpacity, 0.1, 0.9);
             UpdateCustomBackgroundControls();
         }
@@ -399,6 +402,11 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         if (_syncing)
         {
             return;
+        }
+
+        if (CustomBackgroundToggle.IsOn && AutoBackgroundToggle.IsOn)
+        {
+            AutoBackgroundToggle.IsOn = false;
         }
 
         var settings = AppState.SettingsService.Load();
@@ -426,9 +434,18 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         }
 
         settings.CustomBackgroundEnabled = CustomBackgroundToggle.IsOn;
+        if (settings.CustomBackgroundEnabled)
+        {
+            settings.AutoBackgroundEnabled = false;
+        }
         AppState.SettingsService.Save(settings);
         MainWindow.Instance?.ApplyCustomBackground(settings);
              UpdateCustomBackgroundControls();
+    }
+
+    private async void AutoBackgroundToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        await HandleAutoBackgroundToggleAsync();
     }
 
     private async void ChooseCustomBackgroundButton_Click(object sender, RoutedEventArgs e)
@@ -492,6 +509,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             var settings = AppState.SettingsService.Load();
             settings.CustomBackgroundImageFileName = fileName;
             settings.CustomBackgroundEnabled = true;
+            settings.AutoBackgroundEnabled = false;
             settings.CustomBackgroundOpacity = Math.Clamp(CustomBackgroundOpacitySlider.Value, 0.1, 0.9);
             AppState.SettingsService.Save(settings);
 
@@ -499,6 +517,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             try
             {
                 CustomBackgroundToggle.IsOn = true;
+                AutoBackgroundToggle.IsOn = false;
                 CustomBackgroundOpacitySlider.Value = settings.CustomBackgroundOpacity;
             }
             finally
@@ -689,10 +708,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             _syncing = false;
         }
 
-        if (settings.CustomBackgroundEnabled)
-        {
-            MainWindow.Instance?.ApplyCustomBackground(settings);
-        }
+        MainWindow.Instance?.SetCustomBackgroundOpacity(settings.CustomBackgroundOpacity);
     }
 
     private void CustomBackgroundOpacitySlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
@@ -705,23 +721,27 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         var settings = AppState.SettingsService.Load();
         settings.CustomBackgroundOpacity = Math.Clamp(e.NewValue, 0.1, 0.9);
         AppState.SettingsService.Save(settings);
-        if (settings.CustomBackgroundEnabled)
-        {
-            MainWindow.Instance?.ApplyCustomBackground(settings);
-        }
+        MainWindow.Instance?.SetCustomBackgroundOpacity(settings.CustomBackgroundOpacity);
     }
 
     private void UpdateCustomBackgroundControls()
     {
         var settings = AppState.SettingsService.Load();
         var hasImage = AppState.SettingsService.GetCustomBackgroundImagePath(settings) is not null;
+        var hasAutoType = GetConfiguredAutoBackgroundPaths(settings).Count > 0;
         CustomBackgroundFileNameText.Text = Loc.T(hasImage
             ? "Settings_Background_Selected"
             : "Settings_Background_None");
         ChooseCustomBackgroundButton.IsEnabled = !_pickingBackground;
         ClearCustomBackgroundButton.IsEnabled = hasImage && !_pickingBackground;
-        CustomBackgroundOpacitySlider.IsEnabled = hasImage && CustomBackgroundToggle.IsOn;
-        ResetCustomBackgroundOpacityButton.IsEnabled = hasImage && CustomBackgroundToggle.IsOn;
+        AutoBackgroundToggle.IsEnabled = !_pickingAutoBackground;
+        ChooseAutoBackgroundImageButton.IsEnabled = !_pickingAutoBackground;
+        ClearAutoBackgroundImageButton.IsEnabled = hasAutoType && !_pickingAutoBackground;
+        var opacityEnabled =
+            (hasImage && CustomBackgroundToggle.IsOn) ||
+            (hasAutoType && AutoBackgroundToggle.IsOn);
+        CustomBackgroundOpacitySlider.IsEnabled = opacityEnabled;
+        ResetCustomBackgroundOpacityButton.IsEnabled = opacityEnabled;
     }
 
     /// <summary>显示当前持久化的 Steam 安装目录；未设置时显示占位文案（启动会自动检测）。</summary>

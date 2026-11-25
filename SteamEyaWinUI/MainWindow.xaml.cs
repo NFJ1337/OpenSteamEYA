@@ -57,6 +57,8 @@ public sealed partial class MainWindow : Window
     private bool _externalActivationReady;
     private bool _cs2TrackerWarmupInitialized;
     private Task? _cs2TrackerWarmupTask;
+    private CancellationTokenSource? _autoBackgroundRefreshCts;
+    private string? _currentAutomaticBackgroundFile;
 
     public static MainWindow? Instance { get; private set; }
 
@@ -94,24 +96,18 @@ public sealed partial class MainWindow : Window
         };
         CustomBackgroundMedia.SetMediaPlayer(_backgroundPlayer);
 
+        // 自动背景图优先发起网络加载；维护任务移到首页导航之后。
+        var startupSettings = AppState.SettingsService.Load();
+        ApplyCustomBackground(startupSettings);
+
         // 关窗口时停掉背景视频：及时释放解码器与文件句柄。
-        Closed += (_, _) => StopBackgroundVideo();
+        Closed += (_, _) =>
+        {
+            CancelAutomaticBackgroundRefresh();
+            StopBackgroundVideo();
+        };
         WebViewDataHost.DataMoveFinished += OnWebViewDataMoveFinished;
 
-        // 后台预热 Steam 侧连接：首次点「一键查询 / 清空无效账号」不用再等冷启动。
-        _ = PrewarmSteamConnectionsAsync();
-
-        // 旧版本「轻松音乐」页遗留的网页缓存：清一次，别让它继续占盘、也别被打进备份包。
-        LegacyCacheCleaner.CleanRemovedMusicCacheOnce();
-
-        // 首次使用新版时可能把旧目录的数据复制过来了：写一条日志，方便排查「数据在哪」。
-        if (AppPaths.ImportedFromLegacy is { } legacyRoot)
-        {
-            AppLog.Info($"已从旧数据目录导入：\"{legacyRoot}\" → \"{AppPaths.DataRoot}\"（原目录保持原样，旧版仍可用）");
-        }
-
-        // 每天第一次打开：把数据目录整个压成 ZIP 放到数据根目录（后台跑，完成/失败只写日志）。
-        DailyBackupService.RunForTodayIfNeeded();
         StatusInfoBar.RegisterPropertyChangedCallback(
             InfoBar.IsOpenProperty,
             (_, _) => StatusOverlay.Visibility = StatusInfoBar.IsOpen ? Visibility.Visible : Visibility.Collapsed);
@@ -138,9 +134,7 @@ public sealed partial class MainWindow : Window
         SetWindowIcon();
         TitleVersionText.Text = $"v{GitHubUpdateService.CurrentVersion}";
 
-        var startupSettings = AppState.SettingsService.Load();
         ApplyTheme(ParseTheme(startupSettings.Theme, startupSettings.UiColor));
-        ApplyCustomBackground(startupSettings);
         RefreshNavText();
         Loc.LanguageChanged += RefreshNavText;
 
@@ -165,6 +159,15 @@ public sealed partial class MainWindow : Window
         // 用户在设置里把它隐藏了就不再进这一页。登录页仍会预构造，导航或历史账号也能快捷进入。
         ApplyNavPageVisibility();
         SelectFirstVisibleNavItem();
+
+        // 首页已开始呈现，再执行不会阻塞背景图与首屏的后台维护任务。
+        _ = PrewarmSteamConnectionsAsync();
+        LegacyCacheCleaner.CleanRemovedMusicCacheOnce();
+        if (AppPaths.ImportedFromLegacy is { } legacyRoot)
+        {
+            AppLog.Info($"已从旧数据目录导入：\"{legacyRoot}\" → \"{AppPaths.DataRoot}\"（原目录保持原样，旧版仍可用）");
+        }
+        DailyBackupService.RunForTodayIfNeeded();
 
         // 首次启动即解析并持久化 Steam 安装路径（之后上号直接复用，不再每次探测）。
         // 等内容进入可视树（XamlRoot 就绪）后再跑，检测失败才需要弹框。
@@ -773,12 +776,240 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>按当前设置加载自定义背景图片。</summary>
-    internal void ApplyCustomBackground(AppSettings settings)
+    internal void ApplyCustomBackground(
+        AppSettings settings,
+        bool applyRefreshedAutoBackground = false)
     {
+        RefreshBackgroundButton.Visibility = settings.AutoBackgroundEnabled
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        if (settings.AutoBackgroundEnabled)
+        {
+            var apiPaths = AlcyBackgroundService
+                .NormalizeApiPaths(settings.AutoBackgroundImageApiPaths)
+                .ToList();
+            if (apiPaths.Count == 0 &&
+                AlcyBackgroundService.TryNormalizeApiPath(
+                    settings.AutoBackgroundImageApiPath,
+                    out var legacyApiPath))
+            {
+                apiPaths.Add(legacyApiPath);
+            }
+            ApplyAutomaticBackground(
+                apiPaths,
+                settings.CustomBackgroundOpacity,
+                applyRefreshedAutoBackground);
+            return;
+        }
+
+        CancelAutomaticBackgroundRefresh();
         ApplyCustomBackground(
             AppState.SettingsService.GetCustomBackgroundImagePath(settings),
             settings.CustomBackgroundEnabled,
             settings.CustomBackgroundOpacity);
+    }
+
+    private async void RefreshBackgroundButton_Click(object sender, RoutedEventArgs e)
+    {
+        var settings = AppState.SettingsService.Load();
+        if (!settings.AutoBackgroundEnabled)
+        {
+            RefreshBackgroundButton.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var apiPaths = AlcyBackgroundService
+            .NormalizeApiPaths(settings.AutoBackgroundImageApiPaths)
+            .ToList();
+        if (apiPaths.Count == 0 &&
+            AlcyBackgroundService.TryNormalizeApiPath(
+                settings.AutoBackgroundImageApiPath,
+                out var legacyApiPath))
+        {
+            apiPaths.Add(legacyApiPath);
+        }
+
+        if (apiPaths.Count == 0)
+        {
+            return;
+        }
+
+        RefreshBackgroundButton.IsEnabled = false;
+
+        var cacheFolder = AppState.SettingsService.AutoBackgroundCacheFolderPath;
+        var cached = AlcyBackgroundService.GetCachedBackgroundFiles(cacheFolder);
+        if (cached.Count > 0)
+        {
+            var candidates = cached.Count > 1
+                ? cached
+                    .Where(path => !string.Equals(
+                        path,
+                        _currentAutomaticBackgroundFile,
+                        StringComparison.OrdinalIgnoreCase))
+                    .ToArray()
+                : cached.ToArray();
+            ApplyAutomaticBackgroundFile(
+                candidates[Random.Shared.Next(candidates.Length)],
+                settings.CustomBackgroundOpacity);
+        }
+
+        CancelAutomaticBackgroundRefresh();
+        var cancellation = new CancellationTokenSource();
+        _autoBackgroundRefreshCts = cancellation;
+        try
+        {
+            await AlcyBackgroundService.RefreshBackgroundCacheAsync(
+                apiPaths,
+                cacheFolder,
+                cancellation.Token);
+            if (cancellation.IsCancellationRequested ||
+                !ReferenceEquals(_autoBackgroundRefreshCts, cancellation))
+            {
+                return;
+            }
+
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"手动刷新自动背景图失败：{ex.Message}");
+        }
+        finally
+        {
+            if (ReferenceEquals(_autoBackgroundRefreshCts, cancellation))
+            {
+                _autoBackgroundRefreshCts = null;
+            }
+
+            cancellation.Dispose();
+            RefreshBackgroundButton.IsEnabled = true;
+        }
+    }
+
+    private void ApplyAutomaticBackground(
+        IReadOnlyList<string> apiPaths,
+        double opacity,
+        bool applyRefreshedImage)
+    {
+        CancelAutomaticBackgroundRefresh();
+        StopBackgroundVideo();
+        if (apiPaths.Count == 0)
+        {
+            HideBackgroundImage();
+            return;
+        }
+
+        var cacheFolder = AppState.SettingsService.AutoBackgroundCacheFolderPath;
+        var cached = AlcyBackgroundService.GetCachedBackgroundFiles(cacheFolder);
+        var hadCachedImage = cached.Count > 0;
+        if (cached.Count > 0)
+        {
+            ApplyAutomaticBackgroundFile(
+                cached[Random.Shared.Next(cached.Count)],
+                opacity);
+        }
+
+        var cancellation = new CancellationTokenSource();
+        _autoBackgroundRefreshCts = cancellation;
+        _ = RefreshAutomaticBackgroundAsync(
+            apiPaths,
+            opacity,
+            cacheFolder,
+            cancellation,
+            applyRefreshedImage || !hadCachedImage);
+    }
+
+    private async Task RefreshAutomaticBackgroundAsync(
+        IReadOnlyList<string> apiPaths,
+        double opacity,
+        string cacheFolder,
+        CancellationTokenSource cancellation,
+        bool applyWhenReady)
+    {
+        try
+        {
+            if (!applyWhenReady)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(3), cancellation.Token);
+            }
+
+            var files = await AlcyBackgroundService.RefreshBackgroundCacheAsync(
+                apiPaths,
+                cacheFolder,
+                cancellation.Token);
+            if (cancellation.IsCancellationRequested ||
+                !ReferenceEquals(_autoBackgroundRefreshCts, cancellation) ||
+                files.Count == 0)
+            {
+                return;
+            }
+
+            if (applyWhenReady)
+            {
+                ApplyAutomaticBackgroundFile(
+                    files[Random.Shared.Next(files.Count)],
+                    opacity);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"更新自动背景图缓存失败：{ex.Message}");
+        }
+        finally
+        {
+            if (ReferenceEquals(_autoBackgroundRefreshCts, cancellation))
+            {
+                _autoBackgroundRefreshCts = null;
+            }
+
+            cancellation.Dispose();
+        }
+    }
+
+    private void ApplyAutomaticBackgroundFile(string path, double opacity)
+    {
+        try
+        {
+            CustomBackgroundImage.Source = new BitmapImage
+            {
+                UriSource = new Uri(Path.GetFullPath(path), UriKind.Absolute),
+                CreateOptions = BitmapCreateOptions.IgnoreImageCache,
+                DecodePixelWidth = 1920
+            };
+            CustomBackgroundImage.Opacity = Math.Clamp(opacity, 0.1, 0.9);
+            CustomBackgroundImage.Visibility = Visibility.Visible;
+            _currentAutomaticBackgroundFile = Path.GetFullPath(path);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"加载自动背景图缓存失败：{ex.Message}");
+        }
+    }
+
+    private void CancelAutomaticBackgroundRefresh()
+    {
+        var cancellation = _autoBackgroundRefreshCts;
+        _autoBackgroundRefreshCts = null;
+        cancellation?.Cancel();
+    }
+
+    internal void SetCustomBackgroundOpacity(double opacity)
+    {
+        var clamped = Math.Clamp(opacity, 0.1, 0.9);
+        if (CustomBackgroundImage.Visibility == Visibility.Visible)
+        {
+            CustomBackgroundImage.Opacity = clamped;
+        }
+
+        if (CustomBackgroundMedia.Visibility == Visibility.Visible)
+        {
+            CustomBackgroundMedia.Opacity = clamped;
+        }
     }
 
     /// <summary>自定义背景视频的播放器（静音循环）。</summary>
@@ -865,6 +1096,7 @@ public sealed partial class MainWindow : Window
 
     private void HideBackgroundImage()
     {
+        _currentAutomaticBackgroundFile = null;
         CustomBackgroundImage.Source = null;
         CustomBackgroundImage.Opacity = 0;
         CustomBackgroundImage.Visibility = Visibility.Collapsed;
@@ -886,6 +1118,10 @@ public sealed partial class MainWindow : Window
         TreasureBoxNavItem.Content = Loc.T("Nav_TreasureBox");
         SettingsNavItem.Content = Loc.T("Nav_Settings");
         AboutNavItem.Content = Loc.T("Nav_About");
+        RefreshBackgroundButton.Content = Loc.T("MainWindow_RefreshBackground");
+        ToolTipService.SetToolTip(
+            RefreshBackgroundButton,
+            Loc.T("MainWindow_RefreshBackground"));
     }
 
     private void SetWindowIcon()

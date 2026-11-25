@@ -176,7 +176,7 @@ public sealed partial class Cs2TrackerPage
         TrackerModulesPanel.Children.Add(BuildTrackerStatsCard(aimStats));
         TrackerModulesPanel.Children.Add(BuildScopeCard(root, steamId));
         TrackerModulesPanel.Children.Add(BuildCollectiblesCard(root));
-        TrackerModulesPanel.Children.Add(BuildRecentMatchesCard(root));
+        TrackerModulesPanel.Children.Add(BuildRecentMatchesCard(root, steamId));
 
         var weapons = BuildWeaponsCard(root);
         if (weapons is not null)
@@ -1477,17 +1477,30 @@ public sealed partial class Cs2TrackerPage
         return OverviewCard(content, new Thickness(14));
     }
 
-    private Border BuildRecentMatchesCard(JsonObject root)
+    private Border BuildRecentMatchesCard(JsonObject root, string steamId)
     {
         var matches = GetNode(root, "csstatsgg", "recent_matches") as JsonArray;
         var content = new StackPanel { Spacing = 8 };
-        content.Children.Add(new TextBlock
+        var heading = new Grid();
+        heading.ColumnDefinitions.Add(new ColumnDefinition());
+        heading.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        heading.Children.Add(new TextBlock
         {
             Text = "最近比赛",
             FontSize = 12,
             FontWeight = FontWeights.SemiBold,
             Foreground = ThemeBrush("AuroraTextHeadingBrush")
         });
+        var hint = new TextBlock
+        {
+            Text = "双击卡片查看对局详情",
+            FontSize = 9,
+            Foreground = ThemeBrush("AuroraTextMutedBrush"),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        Grid.SetColumn(hint, 1);
+        heading.Children.Add(hint);
+        content.Children.Add(heading);
         var games = GetNode(root, "leetify", "games") as JsonArray;
         if ((matches is null || matches.Count == 0) &&
             (games is null || games.Count == 0))
@@ -1502,27 +1515,10 @@ public sealed partial class Cs2TrackerPage
         }
 
         var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-        IEnumerable<JsonObject> recentSources = matches?.OfType<JsonObject>() ?? [];
-        if (!recentSources.Any() && games is not null)
-        {
-            recentSources = games
-                .OfType<JsonObject>()
-                .OrderByDescending(game => GetString(game, "gameFinishedAt") ?? string.Empty)
-                .Select(game =>
-                {
-                    var scores = game["scores"] as JsonArray;
-                    return new JsonObject
-                    {
-                        ["map"] = GetString(game, "mapName"),
-                        ["score_for"] = scores is { Count: >= 2 } ? GetMetricNumber(scores[0]) : null,
-                        ["score_against"] = scores is { Count: >= 2 } ? GetMetricNumber(scores[1]) : null,
-                        ["date"] = GetString(game, "gameFinishedAt")
-                    };
-                });
-        }
+        var recentSources = CollectRecentMatchTiles(matches, games);
         foreach (var match in recentSources.Take(60))
         {
-            row.Children.Add(BuildRecentMatchTile(match));
+            row.Children.Add(BuildRecentMatchTile(match, steamId));
         }
         var scroll = new ScrollViewer
         {
@@ -1545,6 +1541,93 @@ public sealed partial class Cs2TrackerPage
         content.Children.Add(container);
         return OverviewCard(content, new Thickness(14));
     }
+
+    private static IReadOnlyList<JsonObject> CollectRecentMatchTiles(
+        JsonArray? csStatsMatches,
+        JsonArray? leetifyGames)
+    {
+        var candidates = new List<(JsonObject Match, DateTimeOffset SortAt)>();
+        if (leetifyGames is not null)
+        {
+            foreach (var game in leetifyGames.OfType<JsonObject>())
+            {
+                var finishedAt = GetString(game, "gameFinishedAt");
+                var scores = game["scores"] as JsonArray;
+                candidates.Add((
+                    new JsonObject
+                    {
+                        ["map"] = GetString(game, "mapName"),
+                        ["score_for"] = scores is { Count: >= 2 }
+                            ? GetMetricNumber(scores[0])
+                            : null,
+                        ["score_against"] = scores is { Count: >= 2 }
+                            ? GetMetricNumber(scores[1])
+                            : null,
+                        ["date"] = finishedAt
+                    },
+                    ParseRecentMatchSortDate(finishedAt)));
+            }
+        }
+
+        if (csStatsMatches is not null)
+        {
+            foreach (var match in csStatsMatches.OfType<JsonObject>())
+            {
+                var date = GetString(match, "date");
+                candidates.Add((
+                    match,
+                    ParseRecentMatchSortDate(date)));
+            }
+        }
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var result = new List<JsonObject>();
+        foreach (var candidate in candidates
+            .OrderByDescending(item => item.SortAt)
+            .Take(120))
+        {
+            var map = NormalizeRecentMatchMap(GetString(candidate.Match, "map"));
+            var scoreFor = GetMetricNumber(candidate.Match["score_for"]);
+            var scoreAgainst = GetMetricNumber(candidate.Match["score_against"]);
+            var day = candidate.SortAt == DateTimeOffset.MinValue
+                ? "unknown"
+                : candidate.SortAt.ToLocalTime().ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+            var key = string.Create(
+                CultureInfo.InvariantCulture,
+                $"{day}|{map}|{scoreFor:F0}|{scoreAgainst:F0}");
+            if (seen.Add(key))
+            {
+                result.Add(candidate.Match);
+            }
+        }
+
+        return result;
+    }
+
+    private static DateTimeOffset ParseRecentMatchSortDate(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return DateTimeOffset.MinValue;
+        }
+
+        return DateTimeOffset.TryParse(
+            raw,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal,
+            out var parsed)
+            ? parsed
+            : DateTimeOffset.MinValue;
+    }
+
+    private static string NormalizeRecentMatchMap(string? map) =>
+        string.IsNullOrWhiteSpace(map)
+            ? string.Empty
+            : map.Trim()
+                .ToLowerInvariant()
+                .Replace("de_", string.Empty, StringComparison.Ordinal)
+                .Replace("cs_", string.Empty, StringComparison.Ordinal)
+                .Replace("ar_", string.Empty, StringComparison.Ordinal);
 
     private Border? BuildWeaponsCard(JsonObject root)
     {
@@ -2451,7 +2534,7 @@ public sealed partial class Cs2TrackerPage
         return button;
     }
 
-    private Border BuildRecentMatchTile(JsonObject match)
+    private Border BuildRecentMatchTile(JsonObject match, string steamId)
     {
         var scoreFor = GetMetricNumber(match["score_for"]) ?? 0;
         var scoreAgainst = GetMetricNumber(match["score_against"]) ?? 0;
@@ -2504,7 +2587,7 @@ public sealed partial class Cs2TrackerPage
             HorizontalAlignment = HorizontalAlignment.Center
         });
         grid.Children.Add(text);
-        return new Border
+        var tile = new Border
         {
             Width = 178,
             Height = 70,
@@ -2514,6 +2597,13 @@ public sealed partial class Cs2TrackerPage
             Background = ThemeBrush("AuroraPaneBrush"),
             Child = grid
         };
+        ToolTipService.SetToolTip(tile, "双击查看对局详情");
+        tile.DoubleTapped += async (_, args) =>
+        {
+            args.Handled = true;
+            await ShowRecentMatchDetailsAsync(match, steamId);
+        };
+        return tile;
     }
 
     private Grid BuildWeaponRow(

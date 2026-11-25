@@ -15,6 +15,9 @@ namespace SteamEyaWinUI.Pages;
 /// </summary>
 public sealed partial class SteamBrowserWindow : Window
 {
+    // WinUI 3 的次级 Window 没有主窗口那样的长期引用；显式保活到窗口关闭，避免登录完成后窗口被回收或一闪而过。
+    private static readonly HashSet<SteamBrowserWindow> OpenWindows = [];
+
     // 带 l=schinese：steamcommunity 认这个参数（实测匿名页能翻成中文，302 跳转也带着它走）。
     private const string TargetUrl = "https://steamcommunity.com/my/?l=schinese";
     private const string CookieDomain = ".steamcommunity.com";
@@ -48,6 +51,16 @@ public sealed partial class SteamBrowserWindow : Window
         WebViewDataHost.TrackWindow(Close);
 
         _ = LoadSessionAsync();
+    }
+
+    /// <summary>会话登录成功后创建并置前显示内置浏览器窗口。</summary>
+    internal static void Show(SteamBrowserSession session)
+    {
+        var window = new SteamBrowserWindow(session);
+        OpenWindows.Add(window);
+        window.Closed += (_, _) => OpenWindows.Remove(window);
+        window.AppWindow.Show(true);
+        window.Activate();
     }
 
     /// <summary>

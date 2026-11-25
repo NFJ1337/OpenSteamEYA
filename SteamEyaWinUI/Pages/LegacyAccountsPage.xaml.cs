@@ -1697,6 +1697,100 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         return false;
     }
 
+    /// <summary>用当前高亮/右键账号的令牌或密码建立 Steam 网页会话，并在内置浏览器中打开。</summary>
+    private async void LegacyInternalLoginButton_Click(object sender, RoutedEventArgs e)
+    {
+        var account = GetActionTargetAccount();
+        if (account is null)
+        {
+            AppState.ShowStatus(Loc.T("Legacy_Status_NoSelection"), InfoBarSeverity.Warning);
+            return;
+        }
+
+        if (AppState.IsBusy)
+        {
+            AppState.ShowStatus(Loc.T("Legacy_Query_OtherBusy"), InfoBarSeverity.Warning);
+            return;
+        }
+
+        var xamlRoot = XamlRoot;
+        if (xamlRoot is null)
+        {
+            return;
+        }
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = xamlRoot,
+            Title = Loc.T("Legacy_InternalLogin_DialogTitle"),
+            Content = Loc.Tf("Legacy_InternalLogin_DialogMessage_Format", account.AccountTitle),
+            PrimaryButtonText = Loc.T("Legacy_InternalLogin_Button"),
+            CloseButtonText = Loc.T("Common_Cancel"),
+            DefaultButton = ContentDialogButton.Close
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        var token = account.EyaToken?.Trim() ?? string.Empty;
+        var tokenInfo = AppState.JwtTokenService.Inspect(token);
+        var canUseToken = tokenInfo.IsValid && !string.IsNullOrWhiteSpace(tokenInfo.SteamId);
+        var canUsePassword =
+            !string.IsNullOrWhiteSpace(account.AccountName) &&
+            !string.IsNullOrWhiteSpace(account.Password);
+        if (!canUseToken && !canUsePassword)
+        {
+            AppState.ShowStatus(Loc.T("Legacy_InternalLogin_NoCredential"), InfoBarSeverity.Warning);
+            return;
+        }
+
+        LegacyInternalLoginButton.IsEnabled = false;
+        var cancellationToken = AppState.BeginBusyOperation();
+        AppState.ShowStatus(
+            Loc.Tf("Legacy_InternalLogin_Logging_Format", account.AccountTitle),
+            InfoBarSeverity.Informational);
+        try
+        {
+            SteamBrowserSession session;
+            if (canUseToken)
+            {
+                session = await SteamBrowserLoginService.CreateSessionFromTokenAsync(token, cancellationToken);
+            }
+            else
+            {
+                var progress = new Progress<string>(message =>
+                    AppState.ShowStatus(message, InfoBarSeverity.Informational));
+                session = await SteamBrowserLoginService.CreateSessionAsync(
+                    account.AccountName,
+                    account.Password,
+                    progress,
+                    cancellationToken);
+            }
+
+            SteamBrowserWindow.Show(session);
+            AppState.ShowStatus(
+                Loc.Tf("Legacy_InternalLogin_Opened_Format", account.AccountTitle),
+                InfoBarSeverity.Success);
+        }
+        catch (OperationCanceledException)
+        {
+            AppState.ShowStatus(Loc.T("Login_Status_LoginCancelled"), InfoBarSeverity.Informational);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"Steam 内置登录失败：{ex.Message}");
+            AppState.ShowStatus(
+                Loc.Tf("Legacy_InternalLogin_Error_Format", ex.Message),
+                InfoBarSeverity.Error);
+        }
+        finally
+        {
+            AppState.EndBusyOperation();
+            LegacyInternalLoginButton.IsEnabled = true;
+        }
+    }
+
     /// <summary>一键装配：用配装页预设 + 当前账号令牌，走与黑号登录页相同的装配服务。</summary>
     private async void LegacyApplyLoadoutButton_Click(object sender, RoutedEventArgs e)
     {

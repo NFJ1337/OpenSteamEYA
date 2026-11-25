@@ -38,6 +38,8 @@ public sealed partial class Cs2TrackerPage : Page
     public Cs2TrackerPage()
     {
         InitializeComponent();
+        TrackerPlatformSelector.SelectedItem = TrackerSteamPlatformItem;
+        UpdateTrackerPlatformPanel();
         Loaded += OnLoaded;
         WebViewDataHost.DataMoveFinished += OnWebViewDataMoveFinished;
         TrackerContentPanel.AddHandler(
@@ -64,6 +66,24 @@ public sealed partial class Cs2TrackerPage : Page
         string ContentType,
         string Text,
         string? Error);
+
+    private void TrackerPlatformSelector_SelectionChanged(
+        SelectorBar sender,
+        SelectorBarSelectionChangedEventArgs args)
+    {
+        UpdateTrackerPlatformPanel();
+    }
+
+    private void UpdateTrackerPlatformPanel()
+    {
+        var selectedItem = TrackerPlatformSelector.SelectedItem;
+        TrackerSteamPlatformPanel.Visibility =
+            selectedItem == TrackerSteamPlatformItem ? Visibility.Visible : Visibility.Collapsed;
+        TrackerPerfectPlatformPanel.Visibility =
+            selectedItem == TrackerPerfectPlatformItem ? Visibility.Visible : Visibility.Collapsed;
+        TrackerFiveEPlatformPanel.Visibility =
+            selectedItem == TrackerFiveEPlatformItem ? Visibility.Visible : Visibility.Collapsed;
+    }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
@@ -155,6 +175,10 @@ public sealed partial class Cs2TrackerPage : Page
         ErrorCard.Visibility = Visibility.Collapsed;
         DetailsPanel.Visibility = Visibility.Collapsed;
         TrackerModulesPanel.Visibility = Visibility.Collapsed;
+        ResetCrossPlatformPanels();
+        TrackerPlatformSelector.SelectedItem = TrackerSteamPlatformItem;
+        UpdateTrackerPlatformPanel();
+        TrackerResultsPanel.Visibility = Visibility.Collapsed;
         TrackerLandingPanel.Visibility = Visibility.Visible;
         TrackerScrollViewer.ChangeView(null, 0, null, disableAnimation: true);
     }
@@ -255,6 +279,8 @@ public sealed partial class Cs2TrackerPage : Page
         TrackerLandingPanel.Visibility = Visibility.Collapsed;
         DetailsPanel.Visibility = Visibility.Collapsed;
         TrackerModulesPanel.Visibility = Visibility.Collapsed;
+        ResetCrossPlatformPanels();
+        TrackerResultsPanel.Visibility = Visibility.Collapsed;
         QueryStatusText.Text = "正在读取 CS2Tracker 数据，请稍候…";
         try
         {
@@ -283,6 +309,7 @@ public sealed partial class Cs2TrackerPage : Page
             var resolvedSteamId = GetString(profile, "steamid64") ?? directSteamId;
             if (resolvedSteamId is { Length: 17 })
             {
+                BeginCrossPlatformLoad(resolvedSteamId, viewGeneration);
                 SaveTrackerQueryHistory(
                     resolvedSteamId,
                     FirstNonEmpty(
@@ -317,6 +344,9 @@ public sealed partial class Cs2TrackerPage : Page
 
             RenderOverview(profile, aimStats, highlights, cheatRisk, resolvedSteamId ?? lookupKey);
             TrackerModulesPanel.Visibility = Visibility.Visible;
+            TrackerPlatformSelector.SelectedItem = TrackerSteamPlatformItem;
+            UpdateTrackerPlatformPanel();
+            TrackerResultsPanel.Visibility = Visibility.Visible;
             QueryStatusText.Text = $"查询完成 · {DateTime.Now:HH:mm:ss}";
         }
         catch (Exception ex)
@@ -324,6 +354,7 @@ public sealed partial class Cs2TrackerPage : Page
             AppLog.Warn($"CS2Tracker 查询失败：{ex.Message}");
             if (viewGeneration == _trackerViewGeneration)
             {
+                SetCrossPlatformUnavailable($"Steam 查询失败，未读取平台数据：{ex.Message}");
                 ShowError($"查询失败：{ex.Message}");
             }
         }

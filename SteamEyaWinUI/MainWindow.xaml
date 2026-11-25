@@ -15,7 +15,7 @@
         <Image
             x:Name="CustomBackgroundImage"
             Grid.RowSpan="2"
-            Stretch="Fill"
+            Stretch="UniformToFill"
             HorizontalAlignment="Stretch"
             VerticalAlignment="Stretch"
             IsHitTestVisible="False"
@@ -52,6 +52,17 @@
                     Style="{StaticResource CaptionTextBlockStyle}"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     VerticalAlignment="Center" />
+                <Button
+                    x:Name="RefreshBackgroundButton"
+                    MinWidth="0"
+                    MinHeight="24"
+                    Padding="8,2"
+                    Style="{StaticResource AuroraGlassButtonStyle}"
+                    FontSize="10"
+                    CornerRadius="12"
+                    VerticalAlignment="Center"
+                    Visibility="Collapsed"
+                    Click="RefreshBackgroundButton_Click" />
             </StackPanel>
         </Grid>
 

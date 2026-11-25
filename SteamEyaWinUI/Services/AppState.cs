@@ -220,7 +220,7 @@ internal static class AppState
         /// <summary>版本一致，只提示。</summary>
         SameVersion,
 
-        /// <summary>远端更新：只提示（「关于」页会高亮下载按钮），下载要用户点按钮。</summary>
+        /// <summary>远端更新：只提示（「版本概述」页会高亮下载按钮），下载要用户点按钮。</summary>
         UpdateAvailable,
 
         /// <summary>远端比本机旧（例如刚回滚过 release）：不自动降级，只提示。</summary>
@@ -276,11 +276,11 @@ internal static class AppState
             switch (DecideUpdateAction(update))
             {
                 case UpdateAction.SameVersion:
-                    // 版本一致 → 不提示（关于页自己会显示「已是最新」）。
+                    // 版本一致 → 不提示（版本概述页自己会显示「已是最新」）。
                     break;
 
                 case UpdateAction.UpdateAvailable:
-                    // 只提示，不自动下载：「关于」页会把「下载更新」按钮高亮，等用户点了才下载。
+                    // 只提示，不自动下载：「版本概述」页会把「下载更新」按钮高亮，等用户点了才下载。
                     ShowStatus(
                         Loc.Tf("AppState_Update_Available_Format", update.LatestVersion),
                         InfoBarSeverity.Warning);

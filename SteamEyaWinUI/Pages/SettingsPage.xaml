@@ -190,25 +190,20 @@
                         Text="{x:Bind Strings.Get('Settings_Background_Desc'), Mode=OneWay}"
                         Foreground="{ThemeResource AuroraTextMutedBrush}"
                         TextWrapping="Wrap" />
-                    <ToggleSwitch
-                        x:Name="CustomBackgroundToggle"
-                        Header="{x:Bind Strings.Get('Settings_Background_Enable'), Mode=OneWay}"
-                        Toggled="CustomBackgroundToggle_Toggled" />
                     <Grid ColumnSpacing="12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock
-                            x:Name="CustomBackgroundFileNameText"
-                            VerticalAlignment="Center"
-                            TextTrimming="CharacterEllipsis"
-                            Style="{StaticResource CaptionTextBlockStyle}"
-                            Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                        <ToggleSwitch
+                            x:Name="CustomBackgroundToggle"
+                            Header="{x:Bind Strings.Get('Settings_Background_Enable'), Mode=OneWay}"
+                            Toggled="CustomBackgroundToggle_Toggled" />
                         <StackPanel
                             Grid.Column="1"
                             Orientation="Horizontal"
-                            Spacing="8">
+                            Spacing="8"
+                            VerticalAlignment="Center">
                             <Button
                                 x:Name="ChooseCustomBackgroundButton"
                                 Click="ChooseCustomBackgroundButton_Click">
@@ -220,6 +215,45 @@
                             <Button
                                 x:Name="ClearCustomBackgroundButton"
                                 Click="ClearCustomBackgroundButton_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE74D;" FontSize="16" />
+                                    <TextBlock Text="{x:Bind Strings.Get('Settings_Background_Clear'), Mode=OneWay}" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock
+                        x:Name="CustomBackgroundFileNameText"
+                        VerticalAlignment="Center"
+                        TextTrimming="CharacterEllipsis"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Foreground="{ThemeResource AuroraTextMutedBrush}" />
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ToggleSwitch
+                            x:Name="AutoBackgroundToggle"
+                            HorizontalAlignment="Left"
+                            Header="{x:Bind Strings.Get('Settings_Background_Auto'), Mode=OneWay}"
+                            Toggled="AutoBackgroundToggle_Toggled" />
+                        <StackPanel
+                            Grid.Column="1"
+                            Orientation="Horizontal"
+                            Spacing="8"
+                            VerticalAlignment="Center">
+                            <Button
+                                x:Name="ChooseAutoBackgroundImageButton"
+                                Click="ChooseAutoBackgroundImageButton_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xEB9F;" FontSize="16" />
+                                    <TextBlock Text="{x:Bind Strings.Get('Settings_Background_ChooseImage'), Mode=OneWay}" />
+                                </StackPanel>
+                            </Button>
+                            <Button
+                                x:Name="ClearAutoBackgroundImageButton"
+                                Click="ClearAutoBackgroundImageButton_Click">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <FontIcon Glyph="&#xE74D;" FontSize="16" />
                                     <TextBlock Text="{x:Bind Strings.Get('Settings_Background_Clear'), Mode=OneWay}" />

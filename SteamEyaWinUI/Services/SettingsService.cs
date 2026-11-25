@@ -23,6 +23,10 @@ internal sealed class SettingsService
     /// <summary>「个性化」头像的固定落盘路径（裁剪后的 512² JPEG）。</summary>
     public string PersonalizationAvatarPath => Path.Combine(AppFolderPath, "personalization", "avatar.jpg");
 
+    /// <summary>自动背景图每次启动预下载的 10 张高清图片缓存目录。</summary>
+    public string AutoBackgroundCacheFolderPath =>
+        Path.Combine(AppFolderPath, "personalization", "auto-background-cache");
+
     private static readonly HashSet<string> AllowedCustomIntroVideoExtensions =
         new(StringComparer.OrdinalIgnoreCase) { ".mp4", ".m4v", ".mov", ".wmv", ".avi", ".mkv" };
 
@@ -30,7 +34,7 @@ internal sealed class SettingsService
     private static readonly HashSet<string> AllowedCustomBackgroundExtensions =
         new(StringComparer.OrdinalIgnoreCase)
         {
-            ".png", ".jpg", ".jpeg", ".gif", ".bmp",
+            ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp",
             ".mp4", ".m4v", ".mov", ".wmv", ".avi", ".mkv"
         };
 
@@ -52,6 +56,14 @@ internal sealed class SettingsService
                         settings.HiddenNavPages ??= [];
                         // 首次从旧版本升级时，为账号管理复制一份独立分组定义；之后两边互不影响。
                         settings.WhiteAccountGroups ??= CloneGroups(settings.Groups);
+                        settings.AutoBackgroundImageApiPaths ??= [];
+                        if (settings.AutoBackgroundImageApiPaths.Count == 0 &&
+                            AlcyBackgroundService.TryNormalizeApiPath(
+                                settings.AutoBackgroundImageApiPath,
+                                out var legacyAutoBackgroundPath))
+                        {
+                            settings.AutoBackgroundImageApiPaths.Add(legacyAutoBackgroundPath);
+                        }
                         // 同理防护配装预设：显式 null 会让配装页导航、一键配装直接 NRE。
                         settings.Loadout ??= CsLoadoutPreset.Default();
                         settings.Loadout.T ??= new Dictionary<uint, uint>();
@@ -65,7 +77,11 @@ internal sealed class SettingsService
                 AppLog.Error("读取应用设置失败，按默认设置处理。", ex);
             }
 
-            return new AppSettings { WhiteAccountGroups = [] };
+            return new AppSettings
+            {
+                WhiteAccountGroups = [],
+                AutoBackgroundImageApiPaths = []
+            };
         }
     }
 
@@ -384,6 +400,18 @@ internal sealed class AppSettings
 
     /// <summary>数据目录 personalization 文件夹内的自定义背景图片文件名。</summary>
     public string? CustomBackgroundImageFileName { get; set; }
+
+    /// <summary>是否启用 t.alcy.cc 自动背景图；与本地自定义背景互斥。</summary>
+    public bool AutoBackgroundEnabled { get; set; }
+
+    /// <summary>t.alcy.cc 自动背景图类型路径，例如 /ycy 或 /pc。</summary>
+    public string? AutoBackgroundImageApiPath { get; set; }
+
+    /// <summary>t.alcy.cc 自动背景图类型路径列表；启动时从中随机选择一种。</summary>
+    public List<string>? AutoBackgroundImageApiPaths { get; set; } = [];
+
+    /// <summary>是否已经显示过自动背景图需要良好网络的提示。</summary>
+    public bool AutoBackgroundNetworkNoticeShown { get; set; }
 
     /// <summary>自定义背景不透明度，范围 0.1～0.9。</summary>
     public double CustomBackgroundOpacity { get; set; } = DefaultCustomBackgroundOpacity;

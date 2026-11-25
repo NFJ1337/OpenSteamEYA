@@ -5,6 +5,8 @@
     NavigationCacheMode="Required">
 
     <Page.Resources>
+        <x:Double x:Key="SelectorBarItemPillWidth">62</x:Double>
+        <x:Double x:Key="SelectorBarItemPillHeight">3</x:Double>
         <Style x:Key="TrackerExampleButtonStyle" TargetType="Button">
             <Setter Property="MinHeight" Value="30" />
             <Setter Property="Padding" Value="10,4" />
@@ -618,12 +620,59 @@
                     </Border>
                 </StackPanel>
 
-                <!-- CS2Tracker Overview 原生 1:1 渲染区。 -->
+                <!-- 查询完成后按平台分类；Steam 保留现有 CS2Tracker 全部内容，完美/5E 暂留空。 -->
                 <StackPanel
-                    x:Name="TrackerModulesPanel"
+                    x:Name="TrackerResultsPanel"
                     HorizontalAlignment="Stretch"
                     Spacing="14"
-                    Visibility="Collapsed" />
+                    Visibility="Collapsed">
+                    <SelectorBar
+                        x:Name="TrackerPlatformSelector"
+                        HorizontalAlignment="Stretch"
+                        Padding="4"
+                        Background="{ThemeResource AuroraGlassStrongBrush}"
+                        BorderBrush="{ThemeResource AuroraGlassBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="14"
+                        SelectionChanged="TrackerPlatformSelector_SelectionChanged">
+                        <SelectorBarItem
+                            x:Name="TrackerSteamPlatformItem"
+                            Text="Steam" />
+                        <SelectorBarItem
+                            x:Name="TrackerPerfectPlatformItem"
+                            Text="完美" />
+                        <SelectorBarItem
+                            x:Name="TrackerFiveEPlatformItem"
+                            Text="5E" />
+                    </SelectorBar>
+
+                    <Grid>
+                        <!-- CS2Tracker Overview 原生 1:1 渲染区。 -->
+                        <StackPanel
+                            x:Name="TrackerSteamPlatformPanel"
+                            HorizontalAlignment="Stretch"
+                            Background="Transparent"
+                            Spacing="14">
+                            <StackPanel
+                                x:Name="TrackerModulesPanel"
+                                HorizontalAlignment="Stretch"
+                                Spacing="14"
+                                Visibility="Collapsed" />
+                        </StackPanel>
+                        <StackPanel
+                            x:Name="TrackerPerfectPlatformPanel"
+                            HorizontalAlignment="Stretch"
+                            Background="Transparent"
+                            Spacing="14"
+                            Visibility="Collapsed" />
+                        <StackPanel
+                            x:Name="TrackerFiveEPlatformPanel"
+                            HorizontalAlignment="Stretch"
+                            Background="Transparent"
+                            Spacing="14"
+                            Visibility="Collapsed" />
+                    </Grid>
+                </StackPanel>
             </StackPanel>
         </ScrollViewer>
 

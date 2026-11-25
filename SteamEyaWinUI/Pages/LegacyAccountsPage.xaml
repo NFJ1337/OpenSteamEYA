@@ -315,7 +315,7 @@
                                 </Button>
                             </StackPanel>
                         </Grid>
-                        <!-- 左侧三个筛选框与右侧一键装配 / 一键个性化同一行；按钮作用于当前高亮/右键选中的账号。 -->
+                        <!-- 左侧三个筛选框与右侧内置登录 / 一键装配 / 一键个性化同一行；按钮作用于当前高亮/右键选中的账号。 -->
                         <Grid ColumnSpacing="12">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -343,6 +343,17 @@
                                     Unchecked="LegacyShowHiddenCheck_Changed" />
                             </StackPanel>
                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <Button
+                                    x:Name="LegacyInternalLoginButton"
+                                    Visibility="Collapsed"
+                                    Style="{StaticResource LegacyIcedGlassButtonStyle}"
+                                    Click="LegacyInternalLoginButton_Click"
+                                    ToolTipService.ToolTip="{x:Bind Strings.Get('Legacy_InternalLogin_Tip'), Mode=OneWay}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE77B;" FontSize="14" />
+                                        <TextBlock Text="{x:Bind Strings.Get('Legacy_InternalLogin_Button'), Mode=OneWay}" />
+                                    </StackPanel>
+                                </Button>
                                 <Button
                                     x:Name="LegacyApplyLoadoutButton"
                                     Style="{StaticResource LegacyIcedGlassButtonStyle}"
