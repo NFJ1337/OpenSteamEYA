@@ -60,6 +60,10 @@ public sealed partial class LegacyAccountsPage
             return;
         }
 
+        var scrollViewer = FindDescendant<ScrollViewer>(LegacyAccountQueryList);
+        (double Vertical, double Horizontal)? scrollOffset = scrollViewer is null
+            ? null
+            : (Vertical: scrollViewer.VerticalOffset, Horizontal: scrollViewer.HorizontalOffset);
         var selectedAccounts = AccountQueryRows
             .Where(row => row.IsSelected)
             .Select(row => row.AccountName)
@@ -110,6 +114,18 @@ public sealed partial class LegacyAccountsPage
         }
 
         UpdateAccountQueryFooter();
+        if (scrollOffset is { } offset)
+        {
+            _dispatcherQueue.TryEnqueue(() =>
+            {
+                var currentScrollViewer = FindDescendant<ScrollViewer>(LegacyAccountQueryList);
+                currentScrollViewer?.ChangeView(
+                    offset.Horizontal,
+                    offset.Vertical,
+                    null,
+                    disableAnimation: true);
+            });
+        }
     }
 
     private void OnAccountQueryRowPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -1368,6 +1384,14 @@ public sealed partial class LegacyAccountQueryRow : INotifyPropertyChanged
     {
         _progressText = message;
         RaiseStatus();
+    }
+
+    /// <summary>账号管理手动修改冷却后，只刷新本行“封禁时间”相关绑定，不重建查询列表。</summary>
+    internal void RefreshBanTimeFromItem()
+    {
+        Raise(nameof(BanTimeText));
+        Raise(nameof(BanTimeBrush));
+        Raise(nameof(IsBanned));
     }
 
     internal void ApplyResult(SteamAccountQueryResult result)

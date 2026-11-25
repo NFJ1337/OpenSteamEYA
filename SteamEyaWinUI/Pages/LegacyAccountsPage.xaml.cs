@@ -92,7 +92,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         RefreshHighlightBrush();
         AppState.ReloadWhiteAccounts();
         UpdateBatchButtonsState();
-        RebuildRows();
+        RebuildRows(highlightFirst: false);
         ApplyLegacyPageMode(string.Equals(
             e.Parameter as string,
             "accountQuery",
@@ -192,6 +192,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         }
 
         _lastTickHadLiveCooldown = anyLiveCooldown;
+        UpdateAccountManagementFooter();
     }
 
     private void OnLanguageChanged() => _dispatcherQueue.TryEnqueue(() =>
@@ -333,6 +334,29 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         {
             LegacyDeleteButton.IsEnabled = hasChecked;
         }
+
+        UpdateAccountManagementFooter();
+    }
+
+    private void UpdateAccountManagementFooter()
+    {
+        if (LegacyManagementTotalCountText is null)
+        {
+            return;
+        }
+
+        var selected = Rows.Count(row => row.IsChecked);
+        var available = Rows.Count(row => IsAvailable(row.Item));
+        var cooldown = Rows.Count(row =>
+            row.Item.GcVacBanned != true &&
+            row.Item.RemainingCooldownSeconds is > 0);
+        var vac = Rows.Count(row => row.Item.GcVacBanned == true);
+
+        LegacyManagementSelectedCountText.Text = Loc.Tf("Legacy_Query_Selected_Format", selected);
+        LegacyManagementTotalCountText.Text = Loc.Tf("Legacy_Query_Total_Format", Rows.Count);
+        LegacyManagementAvailableCountText.Text = Loc.Tf("Legacy_Management_Available_Format", available);
+        LegacyManagementCooldownCountText.Text = Loc.Tf("Legacy_Management_Cooldown_Format", cooldown);
+        LegacyManagementVacCountText.Text = Loc.Tf("Legacy_Management_Vac_Format", vac);
     }
 
     private static bool Matches(SteamAccountHistoryItem account, string keyword) =>
@@ -1327,18 +1351,24 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
     private void ApplyCooldown(LegacyAccountRow row, uint seconds)
     {
         var account = row.Item;
-        AppState.WhiteAccountService.SaveValidationStatus(
+        var updatedAt = AppState.WhiteAccountService.SetCooldownManually(
             account.AccountName,
             account.SteamId,
-            seconds,
-            account.GcVacBanned);
-        var updatedAt = DateTimeOffset.Now;
+            seconds) ?? DateTimeOffset.Now;
         account.CooldownSeconds = seconds;
         account.CooldownReason = null;
         account.CsStatusUpdatedAt = updatedAt;
+        account.BanExpiresAt = seconds == 0 ? null : updatedAt.AddSeconds(seconds);
+        account.AccountQueryBanChecked = true;
 
-        // JSON 已在上方写入；这里只刷新当前行的绑定，不重建页面或滚动列表。
+        // JSON 已在上方写入；只刷新当前管理行和对应查询行，不重建页面或滚动列表。
         row.RefreshStateFromItem();
+        var queryRow = AccountQueryRows.FirstOrDefault(candidate =>
+            (!string.IsNullOrWhiteSpace(account.SteamId) &&
+             string.Equals(candidate.Item.SteamId, account.SteamId, StringComparison.Ordinal)) ||
+            string.Equals(candidate.Item.AccountName, account.AccountName, StringComparison.OrdinalIgnoreCase));
+        queryRow?.RefreshBanTimeFromItem();
+        UpdateAccountManagementFooter();
     }
 
     private async Task PromptCustomCooldownAsync(LegacyAccountRow row)

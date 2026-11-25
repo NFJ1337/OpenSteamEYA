@@ -448,6 +448,54 @@ internal sealed class AccountHistoryService
     }
 
     /// <summary>
+    /// 账号管理右键手动设置冷却：同步冷却结束时间与账号查询的封禁时间，只写 JSON，不触发整表刷新。
+    /// </summary>
+    public DateTimeOffset? SetCooldownManually(string accountName, string steamId, uint cooldownSeconds)
+    {
+        accountName = accountName.Trim();
+        steamId = steamId.Trim();
+        if (string.IsNullOrWhiteSpace(accountName))
+        {
+            return null;
+        }
+
+        _fileGate.Wait();
+        try
+        {
+            var document = ReadDocumentForWrite();
+            var item = FindExisting(document.Accounts, steamId, accountName);
+            if (item is null)
+            {
+                item = new SteamAccountHistoryItem
+                {
+                    AccountName = accountName,
+                    SteamId = steamId
+                };
+                document.Accounts.Add(item);
+            }
+
+            item.AccountName = accountName;
+            item.SteamId = steamId;
+            var updatedAt = DateTimeOffset.Now;
+            item.CooldownSeconds = cooldownSeconds;
+            item.CooldownReason = null;
+            item.CsStatusUpdatedAt = updatedAt;
+            item.BanExpiresAt = cooldownSeconds == 0
+                ? null
+                : updatedAt.AddSeconds(cooldownSeconds);
+            item.AccountQueryBanChecked = true;
+
+            document.Accounts = NormalizeAccounts(document.Accounts).ToList();
+            WriteDocument(document);
+            return updatedAt;
+        }
+        finally
+        {
+            _fileGate.Release();
+        }
+    }
+
+    /// <summary>
     /// 保存「账号查询」结果。失败状态也落盘，便于关闭软件后用「继续执行」只补查未完成账号。
     /// </summary>
     public void SaveAccountQueryResult(SteamAccountHistoryItem account, SteamAccountQueryResult result)

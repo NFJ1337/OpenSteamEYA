@@ -225,6 +225,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <StackPanel Spacing="8">
@@ -418,7 +419,12 @@
                         SelectionMode="None"
                         Background="{ThemeResource AuroraPaneBrush}"
                         CornerRadius="0,0,12,12"
-                        ItemsSource="{x:Bind Rows, Mode=OneWay}">
+                        ItemsSource="{x:Bind Rows, Mode=OneWay}"
+                        ScrollViewer.VerticalScrollBarVisibility="Visible"
+                        ScrollViewer.VerticalScrollMode="Enabled">
+                        <ListView.ItemContainerTransitions>
+                            <TransitionCollection />
+                        </ListView.ItemContainerTransitions>
                         <ListView.ItemContainerStyle>
                             <Style TargetType="ListViewItem">
                                 <Setter Property="Padding" Value="6,4,6,4" />
@@ -518,6 +524,35 @@
                         </ListView.ItemTemplate>
                     </ListView>
             </Grid>
+
+            <!-- 账号管理底栏：与账号查询底栏同模板，统计当前可见账号 -->
+            <Border Grid.Row="2" Background="{ThemeResource AuroraPaneBrush}" CornerRadius="12" Padding="12,8">
+                <StackPanel
+                    Orientation="Horizontal"
+                    Spacing="16"
+                    HorizontalAlignment="Right">
+                    <TextBlock
+                        x:Name="LegacyManagementSelectedCountText"
+                        VerticalAlignment="Center"
+                        Foreground="{StaticResource LegacyTextMutedBrush}" />
+                    <TextBlock
+                        x:Name="LegacyManagementTotalCountText"
+                        VerticalAlignment="Center"
+                        Foreground="{StaticResource LegacyTextSecondaryBrush}" />
+                    <TextBlock
+                        x:Name="LegacyManagementAvailableCountText"
+                        VerticalAlignment="Center"
+                        Foreground="{StaticResource LegacyStatusAvailableBrush}" />
+                    <TextBlock
+                        x:Name="LegacyManagementCooldownCountText"
+                        VerticalAlignment="Center"
+                        Foreground="{StaticResource LegacyStatusCooldownBrush}" />
+                    <TextBlock
+                        x:Name="LegacyManagementVacCountText"
+                        VerticalAlignment="Center"
+                        Foreground="{StaticResource LegacyStatusVacBrush}" />
+                </StackPanel>
+            </Border>
 
         </Grid>
 
@@ -827,8 +862,13 @@
                     Background="{ThemeResource AuroraPaneBrush}"
                     CornerRadius="0,0,12,12"
                     ItemsSource="{x:Bind AccountQueryRows, Mode=OneWay}"
+                    ScrollViewer.VerticalScrollBarVisibility="Visible"
+                    ScrollViewer.VerticalScrollMode="Enabled"
                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
                     ScrollViewer.HorizontalScrollMode="Enabled">
+                    <ListView.ItemContainerTransitions>
+                        <TransitionCollection />
+                    </ListView.ItemContainerTransitions>
                     <ListView.ItemContainerStyle>
                         <Style TargetType="ListViewItem">
                             <Setter Property="Padding" Value="6,4" />
