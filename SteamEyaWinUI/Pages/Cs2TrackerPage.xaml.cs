@@ -19,12 +19,16 @@ public sealed partial class Cs2TrackerPage : Page
 {
     private const string StatsRootUrl = Cs2TrackerWebSession.HomeUrl;
     private const string RequestKind = "cs2tracker-fetch";
+    private const double TrackerLandingMinimumHeight = 430;
+    private const double TrackerPageVerticalPadding = 40;
+    private const double TrackerLandingSpacingHeight = 28;
 
     private bool _requestBrowserInitialized;
     private TaskCompletionSource<bool>? _requestBrowserReady;
     private readonly Dictionary<string, TaskCompletionSource<WebFetchResult>> _pendingFetches =
         new(StringComparer.Ordinal);
     private bool _querying;
+    private int _trackerViewGeneration;
     private uint? _trackerPointerId;
     private double _trackerPointerStartX;
     private double _trackerPointerStartY;
@@ -63,6 +67,7 @@ public sealed partial class Cs2TrackerPage : Page
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+        UpdateTrackerLandingHeight(TrackerScrollViewer.ActualHeight);
         try
         {
             await EnsureRequestBrowserAsync();
@@ -74,8 +79,56 @@ public sealed partial class Cs2TrackerPage : Page
         }
     }
 
+    private void TrackerScrollViewer_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        UpdateTrackerLandingHeight(e.NewSize.Height);
+    }
+
+    private void UpdateTrackerLandingHeight(double viewportHeight)
+    {
+        if (viewportHeight <= 0)
+        {
+            return;
+        }
+
+        var queryHeight = TrackerQueryCard.ActualHeight > 0
+            ? TrackerQueryCard.ActualHeight
+            : TrackerQueryCard.Height;
+        var examplesHeight = TrackerExamplesRow.ActualHeight > 0
+            ? TrackerExamplesRow.ActualHeight
+            : 30;
+        var occupiedHeight =
+            TrackerPageVerticalPadding + queryHeight + examplesHeight + TrackerLandingSpacingHeight;
+
+        TrackerLandingHero.Height = Math.Max(
+            TrackerLandingMinimumHeight,
+            viewportHeight - occupiedHeight);
+    }
+
     private async void CheckStatsButton_Click(object sender, RoutedEventArgs e) =>
         await RunQueryAsync();
+
+    private async void TrackerExampleButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string steamId })
+        {
+            return;
+        }
+
+        TrackerIdBox.Text = steamId;
+        await RunQueryAsync();
+    }
+
+    private void TrackerIdBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (string.IsNullOrEmpty(TrackerIdBox.Text))
+        {
+            ResetTrackerToLanding();
+            return;
+        }
+
+        ClearTrackerInputError();
+    }
 
     private async void TrackerIdBox_KeyDown(object sender, KeyRoutedEventArgs e)
     {
@@ -86,6 +139,24 @@ public sealed partial class Cs2TrackerPage : Page
 
         e.Handled = true;
         await RunQueryAsync();
+    }
+
+    private void ResetTrackerToLanding()
+    {
+        _trackerViewGeneration++;
+        _querying = false;
+        CheckStatsButton.IsEnabled = true;
+        QueryProgress.IsActive = false;
+        QueryProgress.Visibility = Visibility.Collapsed;
+        QueryStatusText.Text = _requestBrowserInitialized
+            ? "已连接 CS2Tracker，可以输入 SteamID64 查询。"
+            : "正在连接 CS2Tracker…";
+        ClearTrackerInputError();
+        ErrorCard.Visibility = Visibility.Collapsed;
+        DetailsPanel.Visibility = Visibility.Collapsed;
+        TrackerModulesPanel.Visibility = Visibility.Collapsed;
+        TrackerLandingPanel.Visibility = Visibility.Visible;
+        TrackerScrollViewer.ChangeView(null, 0, null, disableAnimation: true);
     }
 
     private void TrackerContentPanel_PointerPressed(object sender, PointerRoutedEventArgs e)
@@ -163,23 +234,32 @@ public sealed partial class Cs2TrackerPage : Page
         var input = TrackerIdBox.Text.Trim();
         if (string.IsNullOrWhiteSpace(input))
         {
-            ShowError("请输入 SteamID64 或个人资料链接。");
+            ShowTrackerInputError("请输入 SteamID64 或 Steam 个人资料链接。");
             return;
         }
 
-        var lookupKey = ExtractSteamId64(input) ?? input;
+        if (!TryNormalizeTrackerInput(input, out var lookupKey, out var directSteamId))
+        {
+            ShowTrackerInputError(
+                "SteamID64 格式错误。请输入有效的 17 位 SteamID64，或 Steam 个人资料链接。");
+            return;
+        }
+
+        ClearTrackerInputError();
+        var viewGeneration = ++_trackerViewGeneration;
         _querying = true;
         CheckStatsButton.IsEnabled = false;
         QueryProgress.IsActive = true;
         QueryProgress.Visibility = Visibility.Visible;
         ErrorCard.Visibility = Visibility.Collapsed;
+        TrackerLandingPanel.Visibility = Visibility.Collapsed;
         DetailsPanel.Visibility = Visibility.Collapsed;
         TrackerModulesPanel.Visibility = Visibility.Collapsed;
         QueryStatusText.Text = "正在读取 CS2Tracker 数据，请稍候…";
         try
         {
             await EnsureRequestBrowserAsync();
-            var prefetchedSteamId = ExtractSteamId64(input);
+            var prefetchedSteamId = directSteamId;
             Task<WebFetchResult>? aimTask = null;
             Task<WebFetchResult>? highlightsTask = null;
             Task<WebFetchResult>? cheatRiskTask = null;
@@ -200,7 +280,7 @@ public sealed partial class Cs2TrackerPage : Page
                 $"/api/player/{Uri.EscapeDataString(lookupKey)}",
                 "application/x-ndjson");
             var profile = ParseProfilePayload(profileResponse);
-            var resolvedSteamId = GetString(profile, "steamid64") ?? ExtractSteamId64(input);
+            var resolvedSteamId = GetString(profile, "steamid64") ?? directSteamId;
             if (resolvedSteamId is { Length: 17 })
             {
                 SaveTrackerQueryHistory(
@@ -230,6 +310,11 @@ public sealed partial class Cs2TrackerPage : Page
             var aimStats = await ReadOptionalJsonAsync(aimTask, "Aim");
             var highlights = await ReadOptionalJsonAsync(highlightsTask, "Highlights");
             var cheatRisk = await ReadOptionalJsonAsync(cheatRiskTask, "实时作弊风险");
+            if (viewGeneration != _trackerViewGeneration)
+            {
+                return;
+            }
+
             RenderOverview(profile, aimStats, highlights, cheatRisk, resolvedSteamId ?? lookupKey);
             TrackerModulesPanel.Visibility = Visibility.Visible;
             QueryStatusText.Text = $"查询完成 · {DateTime.Now:HH:mm:ss}";
@@ -237,14 +322,20 @@ public sealed partial class Cs2TrackerPage : Page
         catch (Exception ex)
         {
             AppLog.Warn($"CS2Tracker 查询失败：{ex.Message}");
-            ShowError($"查询失败：{ex.Message}");
+            if (viewGeneration == _trackerViewGeneration)
+            {
+                ShowError($"查询失败：{ex.Message}");
+            }
         }
         finally
         {
-            _querying = false;
-            CheckStatsButton.IsEnabled = true;
-            QueryProgress.IsActive = false;
-            QueryProgress.Visibility = Visibility.Collapsed;
+            if (viewGeneration == _trackerViewGeneration)
+            {
+                _querying = false;
+                CheckStatsButton.IsEnabled = true;
+                QueryProgress.IsActive = false;
+                QueryProgress.Visibility = Visibility.Collapsed;
+            }
         }
     }
 
@@ -367,9 +458,17 @@ public sealed partial class Cs2TrackerPage : Page
             var script = $$"""
                 (async () => {
                   try {
-                    const response = await fetch({{quotedPath}}, {
+                    const requestPath = {{quotedPath}};
+                    const cacheBustedPath =
+                      requestPath + (requestPath.includes('?') ? '&' : '?') + '_ts=' + Date.now();
+                    const response = await fetch(cacheBustedPath, {
+                      cache: 'no-store',
                       credentials: 'include',
-                      headers: { Accept: {{quotedAccept}} }
+                      headers: {
+                        Accept: {{quotedAccept}},
+                        'Cache-Control': 'no-cache',
+                        Pragma: 'no-cache'
+                      }
                     });
                     const text = await response.text();
                     window.chrome.webview.postMessage(JSON.stringify({
@@ -1688,10 +1787,101 @@ public sealed partial class Cs2TrackerPage : Page
         return "CS2Tracker 没有返回可用的玩家数据。";
     }
 
+    private static bool TryNormalizeTrackerInput(
+        string input,
+        out string lookupKey,
+        out string? steamId64)
+    {
+        var trimmed = input.Trim();
+        lookupKey = trimmed;
+        steamId64 = null;
+
+        if (IsSteamId64(trimmed))
+        {
+            steamId64 = trimmed;
+            return true;
+        }
+
+        var candidate = trimmed.Contains("://", StringComparison.Ordinal)
+            ? trimmed
+            : $"https://{trimmed}";
+        if (!Uri.TryCreate(candidate, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            return false;
+        }
+
+        var host = uri.IdnHost.TrimEnd('.').ToLowerInvariant();
+        if (host is not ("steamcommunity.com" or "www.steamcommunity.com" or
+            "steamcommunity.ai" or "www.steamcommunity.ai"))
+        {
+            return false;
+        }
+
+        var segments = uri.AbsolutePath
+            .Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length < 2)
+        {
+            return false;
+        }
+
+        if (segments[0].Equals("profiles", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!IsSteamId64(segments[1]))
+            {
+                return false;
+            }
+
+            steamId64 = segments[1];
+            lookupKey = uri.GetLeftPart(UriPartial.Path).TrimEnd('/');
+            return true;
+        }
+
+        if (!segments[0].Equals("id", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var vanityName = Uri.UnescapeDataString(segments[1]);
+        if (!Regex.IsMatch(
+                vanityName,
+                @"^[A-Za-z0-9_.-]{1,64}$",
+                RegexOptions.CultureInvariant))
+        {
+            return false;
+        }
+
+        lookupKey = uri.GetLeftPart(UriPartial.Path).TrimEnd('/');
+        return true;
+    }
+
+    private static bool IsSteamId64(string value)
+    {
+        return Regex.IsMatch(value, @"^\d{17}$", RegexOptions.CultureInvariant) &&
+            ulong.TryParse(
+                value,
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var steamId) &&
+            steamId is >= 76561197960265728UL and <= 76561202255233023UL;
+    }
+
     private static string? ExtractSteamId64(string input)
     {
         var match = Regex.Match(input, @"(?<!\d)\d{17}(?!\d)");
-        return match.Success ? match.Value : null;
+        return match.Success && IsSteamId64(match.Value) ? match.Value : null;
+    }
+
+    private void ShowTrackerInputError(string message)
+    {
+        TrackerInputErrorText.Text = message;
+        TrackerInputErrorText.Visibility = Visibility.Visible;
+    }
+
+    private void ClearTrackerInputError()
+    {
+        TrackerInputErrorText.Text = string.Empty;
+        TrackerInputErrorText.Visibility = Visibility.Collapsed;
     }
 
     private static string JsonQuote(string value) =>
@@ -1882,6 +2072,11 @@ public sealed partial class Cs2TrackerPage : Page
     {
         QueryStatusText.Text = string.Empty;
         ErrorText.Text = message;
+        if (DetailsPanel.Visibility != Visibility.Visible &&
+            TrackerModulesPanel.Visibility != Visibility.Visible)
+        {
+            TrackerLandingPanel.Visibility = Visibility.Visible;
+        }
         ErrorCard.Visibility = Visibility.Visible;
     }
 

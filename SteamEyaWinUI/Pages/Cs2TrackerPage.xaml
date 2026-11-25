@@ -4,19 +4,37 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     NavigationCacheMode="Required">
 
+    <Page.Resources>
+        <Style x:Key="TrackerExampleButtonStyle" TargetType="Button">
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="Padding" Value="10,4" />
+            <Setter Property="CornerRadius" Value="15" />
+            <Setter Property="Background" Value="{ThemeResource AuroraGlassBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource AuroraGlassBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{ThemeResource AuroraTextHeadingBrush}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+    </Page.Resources>
+
     <Grid>
         <ScrollViewer
             x:Name="TrackerScrollViewer"
             HorizontalScrollBarVisibility="Disabled"
             VerticalScrollBarVisibility="Auto"
+            SizeChanged="TrackerScrollViewer_SizeChanged"
             Padding="32,24,32,16">
             <StackPanel
                 x:Name="TrackerContentPanel"
-                MaxWidth="1120"
                 Spacing="14"
                 HorizontalAlignment="Stretch"
                 Background="Transparent">
-                <Border Style="{StaticResource CardBorderStyle}">
+                <Border
+                    x:Name="TrackerQueryCard"
+                    Height="148"
+                    HorizontalAlignment="Stretch"
+                    Style="{StaticResource CardBorderStyle}">
                     <StackPanel Spacing="12">
                         <Grid ColumnSpacing="12">
                             <Grid.ColumnDefinitions>
@@ -27,10 +45,23 @@
                                 <TextBlock
                                     Text="CS2Tracker"
                                     Style="{StaticResource PageTitleTextStyle}" />
-                                <TextBlock
-                                    Text="输入 SteamID64 或 Steam 个人资料链接，查询公开的 CS2 统计。"
-                                    Foreground="{ThemeResource AuroraTextMutedBrush}"
-                                    TextWrapping="Wrap" />
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock
+                                        Text="输入 SteamID64 或 Steam 个人资料链接，查询公开的 CS2 统计。"
+                                        Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                        TextWrapping="Wrap" />
+                                    <TextBlock
+                                        x:Name="QueryStatusText"
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                        TextAlignment="Right"
+                                        TextWrapping="Wrap" />
+                                </Grid>
                             </StackPanel>
                             <ProgressRing
                                 x:Name="QueryProgress"
@@ -49,15 +80,14 @@
                             </Grid.ColumnDefinitions>
                             <TextBox
                                 x:Name="TrackerIdBox"
-                                Header="Steam ID 或个人资料链接"
-                                PlaceholderText="7656119xxxxxxxxxx"
                                 IsSpellCheckEnabled="False"
+                                TextChanged="TrackerIdBox_TextChanged"
                                 KeyDown="TrackerIdBox_KeyDown" />
                             <Button
                                 x:Name="CheckStatsButton"
                                 Grid.Column="1"
                                 MinWidth="110"
-                                VerticalAlignment="Bottom"
+                                VerticalAlignment="Center"
                                 Style="{StaticResource AccentButtonStyle}"
                                 Click="CheckStatsButton_Click"
                                 Content="查询" />
@@ -65,7 +95,7 @@
                                 x:Name="HistoryQueriesButton"
                                 Grid.Column="2"
                                 MinWidth="110"
-                                VerticalAlignment="Bottom"
+                                VerticalAlignment="Center"
                                 Style="{StaticResource AuroraGlassButtonStyle}"
                                 Click="HistoryQueriesButton_Click">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
@@ -75,15 +105,349 @@
                             </Button>
                         </Grid>
 
-                        <TextBlock
-                            x:Name="QueryStatusText"
-                            Foreground="{ThemeResource AuroraTextMutedBrush}"
-                            TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
 
+                <TextBlock
+                    x:Name="TrackerInputErrorText"
+                    Margin="18,0"
+                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                    TextWrapping="Wrap"
+                    Visibility="Collapsed" />
+
+                <StackPanel
+                    x:Name="TrackerLandingPanel"
+                    Spacing="14">
+                    <Grid
+                        x:Name="TrackerExamplesRow"
+                        ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            Margin="0,0,4,0"
+                            CharacterSpacing="140"
+                            FontSize="11"
+                            FontWeight="SemiBold"
+                            Foreground="#94A3B8"
+                            Text="试试看" />
+                        <ScrollViewer
+                            Grid.Column="1"
+                            HorizontalScrollBarVisibility="Hidden"
+                            HorizontalScrollMode="Enabled"
+                            VerticalScrollBarVisibility="Disabled"
+                            VerticalScrollMode="Disabled">
+                            <StackPanel
+                                Orientation="Horizontal"
+                                Spacing="8">
+                                <Button
+                                    Tag="76561198386265483"
+                                    Style="{StaticResource TrackerExampleButtonStyle}"
+                                    Click="TrackerExampleButton_Click">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="donk" />
+                                        <Border
+                                            Padding="5,1"
+                                            Background="#241B4A73"
+                                            CornerRadius="5">
+                                            <TextBlock
+                                                CharacterSpacing="60"
+                                                FontSize="7.5"
+                                                FontWeight="Bold"
+                                                Foreground="#2AA6FF"
+                                                Text="PRO" />
+                                        </Border>
+                                    </StackPanel>
+                                </Button>
+                                <Button
+                                    Tag="76561198074762801"
+                                    Style="{StaticResource TrackerExampleButtonStyle}"
+                                    Click="TrackerExampleButton_Click">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="m0NESY" />
+                                        <Border
+                                            Padding="5,1"
+                                            Background="#241B4A73"
+                                            CornerRadius="5">
+                                            <TextBlock
+                                                CharacterSpacing="60"
+                                                FontSize="7.5"
+                                                FontWeight="Bold"
+                                                Foreground="#2AA6FF"
+                                                Text="PRO" />
+                                        </Border>
+                                    </StackPanel>
+                                </Button>
+                                <Button
+                                    Tag="76561198041683378"
+                                    Style="{StaticResource TrackerExampleButtonStyle}"
+                                    Click="TrackerExampleButton_Click">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="NiKo" />
+                                        <Border
+                                            Padding="5,1"
+                                            Background="#241B4A73"
+                                            CornerRadius="5">
+                                            <TextBlock
+                                                CharacterSpacing="60"
+                                                FontSize="7.5"
+                                                FontWeight="Bold"
+                                                Foreground="#2AA6FF"
+                                                Text="PRO" />
+                                        </Border>
+                                    </StackPanel>
+                                </Button>
+                                <Button
+                                    Tag="76561198081484775"
+                                    Style="{StaticResource TrackerExampleButtonStyle}"
+                                    Click="TrackerExampleButton_Click">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="sh1ro" />
+                                        <Border
+                                            Padding="5,1"
+                                            Background="#241B4A73"
+                                            CornerRadius="5">
+                                            <TextBlock
+                                                CharacterSpacing="60"
+                                                FontSize="7.5"
+                                                FontWeight="Bold"
+                                                Foreground="#2AA6FF"
+                                                Text="PRO" />
+                                        </Border>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+
+                    <Border
+                        x:Name="TrackerLandingHero"
+                        Height="430"
+                        MinHeight="430"
+                        Padding="40,28"
+                        Background="#0A131F"
+                        BorderBrush="#1AFFFFFF"
+                        BorderThickness="1"
+                        CornerRadius="16"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Center">
+                        <Grid>
+                            <Image
+                                Source="ms-appx:///Assets/Cs2Tracker/landing/agent-cs2-background.jpg"
+                                Stretch="UniformToFill"
+                                Opacity="0.30"
+                                IsHitTestVisible="False" />
+                            <Border Background="#9E020B1A" IsHitTestVisible="False" />
+                            <Border IsHitTestVisible="False">
+                                <Border.Background>
+                                    <RadialGradientBrush
+                                        MappingMode="RelativeToBoundingBox"
+                                        Center="0.20,0.35"
+                                        GradientOrigin="0.20,0.35"
+                                        RadiusX="0.90"
+                                        RadiusY="0.42">
+                                        <GradientStop Color="#1A2AA6FF" Offset="0" />
+                                        <GradientStop Color="#29020B1A" Offset="0.42" />
+                                        <GradientStop Color="#57020B1A" Offset="1" />
+                                    </RadialGradientBrush>
+                                </Border.Background>
+                            </Border>
+
+                            <StackPanel
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Center"
+                                Spacing="0">
+                                <TextBlock
+                                    HorizontalAlignment="Center"
+                                    CharacterSpacing="300"
+                                    FontFamily="Bahnschrift"
+                                    FontSize="11"
+                                    FontWeight="SemiBold"
+                                    Foreground="#2AA6FF"
+                                    Text="全新上线" />
+
+                                <StackPanel
+                                    Margin="0,8,0,0"
+                                    HorizontalAlignment="Center"
+                                    Spacing="0">
+                                    <TextBlock
+                                        HorizontalAlignment="Center"
+                                        CharacterSpacing="-10"
+                                        FontFamily="Bahnschrift"
+                                        FontSize="40"
+                                        FontWeight="ExtraBold"
+                                        Foreground="White"
+                                        Text="追踪 CS2 玩家数据" />
+                                    <TextBlock
+                                        HorizontalAlignment="Center"
+                                        CharacterSpacing="-10"
+                                        FontFamily="Bahnschrift"
+                                        FontSize="35"
+                                        FontWeight="ExtraBold"
+                                        Foreground="White">
+                                        <Run Foreground="#2AA6FF" Text="AI 驱动的" />
+                                        <Run Text="作弊检测器" />
+                                    </TextBlock>
+                                </StackPanel>
+
+                                <TextBlock
+                                    MaxWidth="720"
+                                    Margin="0,12,0,0"
+                                    HorizontalAlignment="Center"
+                                    FontFamily="Bahnschrift"
+                                    FontSize="15"
+                                    Foreground="#8CFFFFFF"
+                                    LineHeight="22"
+                                    LineStackingStrategy="BlockLineHeight"
+                                    Text="全网最强的 CS2 数据追踪。借助 AI 驱动的作弊检测，看看最近都是谁在坑你。"
+                                    TextAlignment="Center"
+                                    TextWrapping="Wrap" />
+
+                                <Grid
+                                    MaxWidth="620"
+                                    Margin="0,16,0,0"
+                                    HorizontalAlignment="Center">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Padding="24,10">
+                                        <StackPanel
+                                            HorizontalAlignment="Center"
+                                            Orientation="Horizontal"
+                                            Spacing="12">
+                                            <Image
+                                                Width="20"
+                                                Height="20"
+                                                Source="ms-appx:///Assets/Cs2Tracker/landing/matches.svg"
+                                                Stretch="Uniform"
+                                                Opacity="0.9" />
+                                            <StackPanel>
+                                                <TextBlock
+                                                    CharacterSpacing="-25"
+                                                    FontFamily="Bahnschrift"
+                                                    FontSize="22"
+                                                    FontWeight="ExtraBold"
+                                                    Foreground="White"
+                                                    Text="1B+" />
+                                                <TextBlock
+                                                    FontFamily="Bahnschrift"
+                                                    FontSize="13"
+                                                    Foreground="#73FFFFFF"
+                                                    Text="已分析比赛" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Grid.Column="1" Padding="24,10">
+                                        <StackPanel
+                                            HorizontalAlignment="Center"
+                                            Orientation="Horizontal"
+                                            Spacing="12">
+                                            <Image
+                                                Width="20"
+                                                Height="20"
+                                                Source="ms-appx:///Assets/Cs2Tracker/landing/users.svg"
+                                                Stretch="Uniform"
+                                                Opacity="0.9" />
+                                            <StackPanel>
+                                                <TextBlock
+                                                    CharacterSpacing="-25"
+                                                    FontFamily="Bahnschrift"
+                                                    FontSize="22"
+                                                    FontWeight="ExtraBold"
+                                                    Foreground="White"
+                                                    Text="11M+" />
+                                                <TextBlock
+                                                    FontFamily="Bahnschrift"
+                                                    FontSize="13"
+                                                    Foreground="#73FFFFFF"
+                                                    Text="已追踪用户" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Grid.Column="2" Padding="24,10">
+                                        <StackPanel
+                                            HorizontalAlignment="Center"
+                                            Orientation="Horizontal"
+                                            Spacing="12">
+                                            <Image
+                                                Width="20"
+                                                Height="20"
+                                                Source="ms-appx:///Assets/Cs2Tracker/landing/cheaters.svg"
+                                                Stretch="Uniform"
+                                                Opacity="0.9" />
+                                            <StackPanel>
+                                                <TextBlock
+                                                    CharacterSpacing="-25"
+                                                    FontFamily="Bahnschrift"
+                                                    FontSize="22"
+                                                    FontWeight="ExtraBold"
+                                                    Foreground="White"
+                                                    Text="650k+" />
+                                                <TextBlock
+                                                    FontFamily="Bahnschrift"
+                                                    FontSize="13"
+                                                    Foreground="#73FFFFFF"
+                                                    Text="已检测到作弊者" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+
+                                <StackPanel
+                                    MaxWidth="760"
+                                    Margin="0,16,0,0"
+                                    HorizontalAlignment="Center">
+                                    <TextBlock
+                                        HorizontalAlignment="Center"
+                                        CharacterSpacing="-25"
+                                        FontFamily="Bahnschrift"
+                                        FontSize="24"
+                                        FontWeight="ExtraBold"
+                                        Foreground="White"
+                                        Text="就这么简单" />
+                                    <StackPanel
+                                        Margin="0,8,0,0"
+                                        HorizontalAlignment="Center"
+                                        Orientation="Horizontal"
+                                        Spacing="12">
+                                        <Border Padding="10,6">
+                                            <TextBlock
+                                                FontFamily="Cascadia Mono"
+                                                FontSize="16"
+                                                Foreground="#73FFFFFF">
+                                                <Run Text="https://steamcommunity" />
+                                                <Run Foreground="#FF5A5A" Text=".com" />
+                                            </TextBlock>
+                                        </Border>
+                                        <TextBlock
+                                            VerticalAlignment="Center"
+                                            FontSize="24"
+                                            Foreground="#59FFFFFF"
+                                            Text="→" />
+                                        <Border Padding="10,6">
+                                            <TextBlock
+                                                FontFamily="Cascadia Mono"
+                                                FontSize="16"
+                                                Foreground="#73FFFFFF">
+                                                <Run Text="https://steamcommunity" />
+                                                <Run Foreground="#57E6B5" Text=".ai" />
+                                            </TextBlock>
+                                        </Border>
+                                    </StackPanel>
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+
                 <Border
                     x:Name="ErrorCard"
+                    MaxWidth="1120"
+                    HorizontalAlignment="Center"
                     Style="{StaticResource CardBorderStyle}"
                     Visibility="Collapsed">
                     <TextBlock
@@ -92,7 +456,12 @@
                         TextWrapping="Wrap" />
                 </Border>
 
-                <StackPanel x:Name="DetailsPanel" Spacing="14" Visibility="Collapsed">
+                <StackPanel
+                    x:Name="DetailsPanel"
+                    MaxWidth="1120"
+                    HorizontalAlignment="Center"
+                    Spacing="14"
+                    Visibility="Collapsed">
                     <Border Style="{StaticResource CardBorderStyle}">
                         <StackPanel Spacing="14">
                             <Grid ColumnSpacing="16">
@@ -250,7 +619,11 @@
                 </StackPanel>
 
                 <!-- CS2Tracker Overview 原生 1:1 渲染区。 -->
-                <StackPanel x:Name="TrackerModulesPanel" Spacing="14" Visibility="Collapsed" />
+                <StackPanel
+                    x:Name="TrackerModulesPanel"
+                    HorizontalAlignment="Stretch"
+                    Spacing="14"
+                    Visibility="Collapsed" />
             </StackPanel>
         </ScrollViewer>
 
