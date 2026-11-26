@@ -20,7 +20,7 @@ public sealed partial class AboutPage : Page, INotifyPropertyChanged
     private long? _downloadTotalBytes;
     private CancellationTokenSource? _downloadCts;
 
-    // 更新日志卡片：内容实时来自 GitHub Releases 的说明正文（点刷新/进页面时拉一次）。
+    // 更新日志卡片：优先读取随安装包分发的本地 TXT；缺失时才回退 GitHub Releases。
     private GitHubUpdateService.ReleaseChangelogInfo? _changelog;
     private bool _changelogLoading;
     private string? _changelogError;
@@ -87,7 +87,7 @@ public sealed partial class AboutPage : Page, INotifyPropertyChanged
     private async void MoreHistoryButton_Click(object sender, RoutedEventArgs e) =>
         await AppState.OpenUrlAsync(GitHubUpdateService.ReleasesUrl);
 
-    /// <summary>读取最新 release 的更新日志（说明正文）。force=false 时已有内容就跳过。</summary>
+    /// <summary>读取当前版本的本地更新日志；文件缺失时才回退到 GitHub Releases。</summary>
     private async Task LoadChangelogAsync(bool force = false)
     {
         if (_changelogLoading || (!force && _changelog is not null))
@@ -99,7 +99,12 @@ public sealed partial class AboutPage : Page, INotifyPropertyChanged
         RenderChangelog();
         try
         {
-            _changelog = await AppState.UpdateService.FetchChangelogAsync();
+            _changelog = LocalReleaseNotesService.TryLoad();
+            if (_changelog is null)
+            {
+                _changelog = await AppState.UpdateService.FetchChangelogAsync();
+            }
+
             _changelogError = null;
             _changelogFailedByNetwork = false;
         }

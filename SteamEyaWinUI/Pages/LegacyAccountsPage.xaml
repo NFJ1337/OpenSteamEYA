@@ -440,8 +440,9 @@
                             <ColumnDefinition Width="110" />
                             <ColumnDefinition Width="95" />
                             <ColumnDefinition Width="70" />
-                            <ColumnDefinition Width="2*" MinWidth="250" />
-                            <ColumnDefinition Width="160" />
+                            <ColumnDefinition Width="2*" MinWidth="214" />
+                            <ColumnDefinition Width="112" />
+                            <ColumnDefinition Width="140" />
                             <ColumnDefinition Width="*" MinWidth="60" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="1" Text="{x:Bind Strings.Get('Legacy_Col_Index'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
@@ -449,8 +450,9 @@
                         <TextBlock Grid.Column="3" Text="{x:Bind Strings.Get('Legacy_Col_Password'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
                         <TextBlock Grid.Column="4" Text="{x:Bind Strings.Get('Legacy_Col_Status'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
                         <TextBlock Grid.Column="5" Text="{x:Bind Strings.Get('Legacy_Col_Cooldown'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
-                        <TextBlock Grid.Column="6" Text="{x:Bind Strings.Get('Legacy_Col_Note'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
-                        <TextBlock Grid.Column="7" Text="{x:Bind Strings.Get('Legacy_Col_Others'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                        <TextBlock Grid.Column="6" Text="{x:Bind Strings.Get('Legacy_Col_Cs2Playtime'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                        <TextBlock Grid.Column="7" Text="{x:Bind Strings.Get('Legacy_Col_Note'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                        <TextBlock Grid.Column="8" Text="{x:Bind Strings.Get('Legacy_Col_Others'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
                     </Grid>
 
                     <ListView
@@ -487,12 +489,13 @@
                                         <ColumnDefinition Width="110" />
                                         <ColumnDefinition Width="95" />
                                         <ColumnDefinition Width="70" />
-                                        <ColumnDefinition Width="2*" MinWidth="250" />
-                                        <ColumnDefinition Width="160" />
+                                        <ColumnDefinition Width="2*" MinWidth="214" />
+                                        <ColumnDefinition Width="112" />
+                                        <ColumnDefinition Width="140" />
                                         <ColumnDefinition Width="*" MinWidth="60" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.ColumnSpan="8" Background="{x:Bind HoverBrush, Mode=OneWay}" CornerRadius="8" IsHitTestVisible="False" />
-                                    <Border Grid.ColumnSpan="8" Background="{x:Bind HighlightBrush, Mode=OneWay}" CornerRadius="8" IsHitTestVisible="False" />
+                                    <Border Grid.ColumnSpan="9" Background="{x:Bind HoverBrush, Mode=OneWay}" CornerRadius="8" IsHitTestVisible="False" />
+                                    <Border Grid.ColumnSpan="9" Background="{x:Bind HighlightBrush, Mode=OneWay}" CornerRadius="8" IsHitTestVisible="False" />
                                     <CheckBox
                                         Grid.Column="0"
                                         MinWidth="0"
@@ -528,7 +531,7 @@
                                         />
                                     <TextBlock Grid.Column="4" Text="{x:Bind StatusText, Mode=OneWay}" Foreground="{x:Bind StatusBrush, Mode=OneWay}" TextTrimming="CharacterEllipsis" Style="{StaticResource LegacyTableTextStyle}" />
                                     <TextBlock
-                                        Grid.Column="6"
+                                        Grid.Column="7"
                                         Text="{x:Bind Note, Mode=OneWay}"
                                         TextTrimming="CharacterEllipsis"
                                         Style="{StaticResource LegacyTableTextStyle}"
@@ -537,7 +540,7 @@
                                         MinHeight="20"
                                         />
                                     <TextBlock
-                                        Grid.Column="7"
+                                        Grid.Column="8"
                                         Text="{x:Bind OthersText}"
                                         TextTrimming="CharacterEllipsis"
                                         Style="{StaticResource LegacyTableTextStyle}"
@@ -547,6 +550,12 @@
                                         HorizontalAlignment="Stretch"
                                         MinHeight="20"
                                         />
+                                    <TextBlock
+                                        Grid.Column="6"
+                                        Text="{x:Bind Cs2PlaytimeText, Mode=OneWay}"
+                                        TextTrimming="CharacterEllipsis"
+                                        HorizontalAlignment="Left"
+                                        Style="{StaticResource LegacyTableTextStyle}" />
                                     <!-- 冷却时间（冷却结束的绝对时间）：右键可改冷却 -->
                                     <TextBlock
                                         Grid.Column="5"
@@ -865,32 +874,34 @@
 
                 <Grid
                     x:Name="LegacyAccountQueryHeaderGrid"
-                    ColumnSpacing="6"
+                    ColumnSpacing="8"
                     Padding="6,8"
                     Background="{ThemeResource AuroraPaneBrush}"
                     CornerRadius="12,12,0,0">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="36" />
-                        <ColumnDefinition Width="104" />
-                        <ColumnDefinition Width="92" />
-                        <ColumnDefinition Width="1.2*" MinWidth="90" />
-                        <ColumnDefinition Width="44" />
-                        <ColumnDefinition Width="1.1*" MinWidth="92" />
-                        <ColumnDefinition Width="44" />
-                        <ColumnDefinition Width="44" />
-                        <ColumnDefinition Width="1.4*" MinWidth="120" />
-                        <ColumnDefinition Width="1.2*" MinWidth="100" />
+                        <ColumnDefinition Width="32" />
+                        <ColumnDefinition Width="1*" />
+                        <ColumnDefinition Width="0.8*" />
+                        <ColumnDefinition Width="1.2*" />
+                        <ColumnDefinition Width="1.25*" />
+                        <ColumnDefinition Width="0.45*" />
+                        <ColumnDefinition Width="1.35*" />
+                        <ColumnDefinition Width="0.5*" />
+                        <ColumnDefinition Width="0.55*" />
+                        <ColumnDefinition Width="1.5*" />
+                        <ColumnDefinition Width="1.35*" />
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="{x:Bind Strings.Get('Legacy_Query_Col_Select'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" HorizontalAlignment="Center" />
                     <TextBlock Grid.Column="1" Text="{x:Bind Strings.Get('Legacy_Col_Account'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
                     <TextBlock Grid.Column="2" Text="{x:Bind Strings.Get('Legacy_Col_Status'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
                     <TextBlock Grid.Column="3" Text="{x:Bind Strings.Get('Legacy_Query_Col_Persona'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
-                    <TextBlock Grid.Column="4" Text="{x:Bind Strings.Get('Legacy_Query_Col_Rank'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
-                    <TextBlock Grid.Column="5" Text="{x:Bind Strings.Get('Legacy_Query_Col_LastLogin'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
-                    <TextBlock Grid.Column="6" Text="{x:Bind Strings.Get('Legacy_Query_Col_Region'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
-                    <TextBlock Grid.Column="7" Text="{x:Bind Strings.Get('Legacy_Query_Col_China'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
-                    <TextBlock Grid.Column="8" Text="{x:Bind Strings.Get('Legacy_Query_Col_SteamId'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
-                    <TextBlock Grid.Column="9" Text="{x:Bind Strings.Get('Legacy_Query_Col_BanTime'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                    <TextBlock Grid.Column="4" Text="{x:Bind Strings.Get('Legacy_Col_Cs2Playtime'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                    <TextBlock Grid.Column="5" Text="{x:Bind Strings.Get('Legacy_Query_Col_Rank'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                    <TextBlock Grid.Column="6" Text="{x:Bind Strings.Get('Legacy_Query_Col_LastLogin'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                    <TextBlock Grid.Column="7" Text="{x:Bind Strings.Get('Legacy_Query_Col_Region'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                    <TextBlock Grid.Column="8" Text="{x:Bind Strings.Get('Legacy_Query_Col_China'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                    <TextBlock Grid.Column="9" Text="{x:Bind Strings.Get('Legacy_Query_Col_SteamId'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                    <TextBlock Grid.Column="10" Text="{x:Bind Strings.Get('Legacy_Query_Col_BanTime'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
                 </Grid>
 
                 <ListView
@@ -904,8 +915,8 @@
                     ItemsSource="{x:Bind AccountQueryRows, Mode=OneWay}"
                     ScrollViewer.VerticalScrollBarVisibility="Visible"
                     ScrollViewer.VerticalScrollMode="Enabled"
-                    ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                    ScrollViewer.HorizontalScrollMode="Enabled">
+                    ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                    ScrollViewer.HorizontalScrollMode="Disabled">
                     <ListView.ItemContainerTransitions>
                         <TransitionCollection />
                     </ListView.ItemContainerTransitions>
@@ -920,21 +931,22 @@
                     </ListView.ItemContainerStyle>
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="local:LegacyAccountQueryRow">
-                            <Grid ColumnSpacing="6">
+                            <Grid ColumnSpacing="8">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="36" />
-                                    <ColumnDefinition Width="104" />
-                                    <ColumnDefinition Width="92" />
-                                    <ColumnDefinition Width="1.2*" MinWidth="90" />
-                                    <ColumnDefinition Width="44" />
-                                    <ColumnDefinition Width="1.1*" MinWidth="92" />
-                                    <ColumnDefinition Width="44" />
-                                    <ColumnDefinition Width="44" />
-                                    <ColumnDefinition Width="1.4*" MinWidth="120" />
-                                    <ColumnDefinition Width="1.2*" MinWidth="100" />
+                                    <ColumnDefinition Width="32" />
+                                    <ColumnDefinition Width="1*" />
+                                    <ColumnDefinition Width="0.8*" />
+                                    <ColumnDefinition Width="1.2*" />
+                                    <ColumnDefinition Width="1.25*" />
+                                    <ColumnDefinition Width="0.45*" />
+                                    <ColumnDefinition Width="1.35*" />
+                                    <ColumnDefinition Width="0.5*" />
+                                    <ColumnDefinition Width="0.55*" />
+                                    <ColumnDefinition Width="1.5*" />
+                                    <ColumnDefinition Width="1.35*" />
                                 </Grid.ColumnDefinitions>
                                 <Border
-                                    Grid.ColumnSpan="10"
+                                    Grid.ColumnSpan="11"
                                     Background="{x:Bind HighlightBrush, Mode=OneWay}"
                                     CornerRadius="8"
                                     IsHitTestVisible="False" />
@@ -956,6 +968,8 @@
                                     Style="{StaticResource LegacyTableTextStyle}"
                                     Tag="account"
                                     RightTapped="LegacyAccountQueryAccountCell_RightTapped"
+                                    IsDoubleTapEnabled="True"
+                                    DoubleTapped="LegacyAccountQueryAccountCell_DoubleTapped"
                                     HorizontalAlignment="Stretch"
                                     MinHeight="20" />
                                 <TextBlock
@@ -966,23 +980,22 @@
                                     ToolTipService.ToolTip="{x:Bind StatusDetail, Mode=OneWay}"
                                     Style="{StaticResource LegacyTableTextStyle}" />
                                 <TextBlock Grid.Column="3" Text="{x:Bind PersonaName, Mode=OneWay}" TextTrimming="CharacterEllipsis" Style="{StaticResource LegacyTableTextStyle}" />
-                                <TextBlock Grid.Column="4" Text="{x:Bind RankText, Mode=OneWay}" HorizontalAlignment="Center" Style="{StaticResource LegacyTableTextStyle}" />
-                                <TextBlock Grid.Column="5" Text="{x:Bind LastLoginText, Mode=OneWay}" TextTrimming="CharacterEllipsis" Style="{StaticResource LegacyTableTextStyle}" />
-                                <TextBlock Grid.Column="6" Text="{x:Bind RegionText, Mode=OneWay}" HorizontalAlignment="Center" Style="{StaticResource LegacyTableTextStyle}" />
-                                <TextBlock Grid.Column="7" Text="{x:Bind ChinaSteamText, Mode=OneWay}" HorizontalAlignment="Center" Style="{StaticResource LegacyTableTextStyle}" />
+                                <TextBlock Grid.Column="4" Text="{x:Bind Cs2PlaytimeText, Mode=OneWay}" HorizontalAlignment="Left" Style="{StaticResource LegacyTableTextStyle}" />
+                                <TextBlock Grid.Column="5" Text="{x:Bind RankText, Mode=OneWay}" HorizontalAlignment="Left" Style="{StaticResource LegacyTableTextStyle}" />
+                                <TextBlock Grid.Column="6" Text="{x:Bind LastLoginText, Mode=OneWay}" Style="{StaticResource LegacyTableTextStyle}" />
+                                <TextBlock Grid.Column="7" Text="{x:Bind RegionText, Mode=OneWay}" HorizontalAlignment="Left" Style="{StaticResource LegacyTableTextStyle}" />
+                                <TextBlock Grid.Column="8" Text="{x:Bind ChinaSteamText, Mode=OneWay}" HorizontalAlignment="Left" Style="{StaticResource LegacyTableTextStyle}" />
                                 <TextBlock
-                                    Grid.Column="8"
+                                    Grid.Column="9"
                                     Text="{x:Bind SteamIdText, Mode=OneWay}"
-                                    TextTrimming="CharacterEllipsis"
                                     Style="{StaticResource LegacyTableTextStyle}"
                                     HorizontalAlignment="Stretch"
                                     IsDoubleTapEnabled="True"
                                     DoubleTapped="LegacyAccountQuerySteamId_DoubleTapped" />
                                 <TextBlock
-                                    Grid.Column="9"
+                                    Grid.Column="10"
                                     Text="{x:Bind BanTimeText, Mode=OneWay}"
                                     Foreground="{x:Bind BanTimeBrush, Mode=OneWay}"
-                                    TextTrimming="CharacterEllipsis"
                                     Style="{StaticResource LegacyTableTextStyle}" />
                             </Grid>
                         </DataTemplate>

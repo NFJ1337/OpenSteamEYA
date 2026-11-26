@@ -42,9 +42,10 @@ internal sealed class SettingsService
     {
         lock (_gate)
         {
+            var hasPersistedSettings = File.Exists(SettingsFilePath);
             try
             {
-                if (File.Exists(SettingsFilePath))
+                if (hasPersistedSettings)
                 {
                     var json = File.ReadAllText(SettingsFilePath);
                     var settings = JsonSerializer.Deserialize(json, AppSettingsJsonContext.Default.AppSettings);
@@ -80,7 +81,9 @@ internal sealed class SettingsService
             return new AppSettings
             {
                 WhiteAccountGroups = [],
-                AutoBackgroundImageApiPaths = []
+                AutoBackgroundImageApiPaths = [],
+                // 仅全新数据目录视为首次安装；已有 settings.json 的升级用户保持 true，不再补弹。
+                HasShownInitialReleaseNotes = hasPersistedSettings
             };
         }
     }
@@ -482,6 +485,12 @@ internal sealed class AppSettings
 
     /// <summary>最近一次「每日数据备份」的日期（本地 yyyy-MM-dd）：同一天只备份一次。</summary>
     public string? LastDailyBackupDate { get; set; }
+
+    /// <summary>
+    /// 首次安装后是否已经展示过 GitHub Releases 最新更新日志。
+    /// 默认 true，让缺少此字段的既有用户升级时不补弹；全新数据目录会在首次读取时显式设为 false。
+    /// </summary>
+    public bool HasShownInitialReleaseNotes { get; set; } = true;
 }
 
 // 与账号历史一致用 source generator：JsonSerializerDefaults.Web（camelCase、大小写不敏感），AOT 下可读写。

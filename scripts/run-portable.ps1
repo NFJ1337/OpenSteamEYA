@@ -87,6 +87,13 @@ if (-not $NoPublish) {
 
     # 免安装目录不留调试符号（体积）；版本标记与历史格式保持一致。
     Get-ChildItem -LiteralPath $publishDir -Filter "*.pdb" -File -ErrorAction SilentlyContinue | Remove-Item -Force
+    $releaseNotesSource = Join-Path $repoRoot "artifacts\release-notes-$Version.txt"
+    if (Test-Path -LiteralPath $releaseNotesSource) {
+        $assetDir = Join-Path $publishDir "Assets"
+        New-Item -ItemType Directory -Force -Path $assetDir | Out-Null
+        Copy-Item -LiteralPath $releaseNotesSource -Destination (Join-Path $assetDir "ReleaseNotes.txt") -Force
+    }
+
     $versionText = @(
         "SteamEYA v$Version",
         "主程序：$exeName",

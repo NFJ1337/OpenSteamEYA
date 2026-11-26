@@ -30,6 +30,9 @@ public sealed partial class SteamAccountHistoryItem : INotifyPropertyChanged
     /// <summary>账号查询页读取到的 CS:GO/CS2 资料等级（勋章等级，不是优先段位）。</summary>
     public int? CsProfileRank { get; set; }
 
+    /// <summary>Steam 游戏列表里 AppID 730 显示的游戏时间，单位为小时。</summary>
+    public double? Cs2PlaytimeHours { get; set; }
+
     /// <summary>Steam 资料地区代码；账号查询页从社区资料读取。</summary>
     public string? Region { get; set; }
 
@@ -276,6 +279,9 @@ public sealed partial class SteamAccountHistoryItem : INotifyPropertyChanged
     [JsonIgnore]
     public string CooldownEndText =>
         CooldownEndTime?.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
+
+    [JsonIgnore]
+    public string Cs2PlaytimeText => FormatHelper.FormatCs2PlaytimeText(Cs2PlaytimeHours);
 
     /// <summary>冷却时间列：在冷却结束时间后追加“结束时间 − 当前时间”的剩余时长。</summary>
     [JsonIgnore]

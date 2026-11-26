@@ -59,6 +59,8 @@ public sealed partial class MainWindow : Window
     private Task? _cs2TrackerWarmupTask;
     private CancellationTokenSource? _autoBackgroundRefreshCts;
     private string? _currentAutomaticBackgroundFile;
+    private int _backgroundImageLoadGeneration;
+    private bool _initialReleaseNotesDialogShown;
 
     public static MainWindow? Instance { get; private set; }
 
@@ -186,9 +188,13 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private async Task RunStartupUpdateCheckAsync()
     {
+        var startupSettings = AppState.SettingsService.Load();
+        var initialDelay = startupSettings.HasShownInitialReleaseNotes
+            ? TimeSpan.FromSeconds(8)
+            : TimeSpan.FromSeconds(2);
         try
         {
-            await Task.Delay(TimeSpan.FromSeconds(8));
+            await Task.Delay(initialDelay);
         }
         catch
         {
@@ -223,6 +229,133 @@ public sealed partial class MainWindow : Window
             catch
             {
                 return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 首次安装后的首次启动展示一次随安装包分发的本地更新日志。
+    /// 不依赖网络；文件缺失时不写已读标记，后续版本补回文件后仍可提示。
+    /// </summary>
+    private async Task ShowInitialReleaseNotesIfNeededAsync()
+    {
+        var installNoticePending = LocalReleaseNotesService.HasPendingInstallNotice();
+        if (!installNoticePending &&
+            AppState.SettingsService.Load().HasShownInitialReleaseNotes)
+        {
+            return;
+        }
+
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2));
+        }
+        catch
+        {
+            return;
+        }
+
+        await TryShowInitialReleaseNotesAsync();
+    }
+
+    private async Task TryShowInitialReleaseNotesAsync()
+    {
+        if (_initialReleaseNotesDialogShown)
+        {
+            return;
+        }
+
+        var settings = AppState.SettingsService.Load();
+        if (!LocalReleaseNotesService.HasPendingInstallNotice() &&
+            settings.HasShownInitialReleaseNotes)
+        {
+            return;
+        }
+
+        var releaseNotes = LocalReleaseNotesService.TryLoad();
+        if (releaseNotes is null)
+        {
+            AppLog.Warn($"首次安装更新日志未显示：找不到本地文件 {LocalReleaseNotesService.FilePath}");
+            return;
+        }
+
+        _initialReleaseNotesDialogShown = true;
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            if (attempt > 0)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(2));
+            }
+
+            if (RootLayoutGrid.XamlRoot is not { } xamlRoot)
+            {
+                continue;
+            }
+
+            var content = new StackPanel
+            {
+                Spacing = 10
+            };
+            content.Children.Add(new TextBlock
+            {
+                Text = Loc.Tf(
+                    "About_Changelog_Version_Format",
+                    releaseNotes.Tag ?? releaseNotes.Version),
+                Style = (Style)Application.Current.Resources["SectionTitleTextStyle"]
+            });
+
+            if (releaseNotes.Lines.Count == 0)
+            {
+                content.Children.Add(new TextBlock
+                {
+                    Text = Loc.T("About_Changelog_Empty"),
+                    TextWrapping = TextWrapping.Wrap
+                });
+            }
+            else
+            {
+                var lines = new StackPanel
+                {
+                    Spacing = 8
+                };
+                foreach (var line in releaseNotes.Lines)
+                {
+                    lines.Children.Add(new TextBlock
+                    {
+                        Text = $"• {line}",
+                        TextWrapping = TextWrapping.Wrap
+                    });
+                }
+
+                content.Children.Add(new ScrollViewer
+                {
+                    Content = lines,
+                    MaxHeight = 360,
+                    HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                    VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+                });
+            }
+
+            var dialog = new ContentDialog
+            {
+                Title = Loc.T("About_Changelog_Title"),
+                Content = content,
+                CloseButtonText = Loc.T("Common_Close"),
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = xamlRoot
+            };
+
+            try
+            {
+                await dialog.ShowAsync();
+                settings.HasShownInitialReleaseNotes = true;
+                AppState.SettingsService.Save(settings);
+                LocalReleaseNotesService.ClearPendingInstallNotice();
+                return;
+            }
+            catch (Exception ex)
+            {
+                AppLog.Warn($"首次安装更新日志弹窗未能显示：{ex.Message}");
             }
         }
     }
@@ -558,7 +691,13 @@ public sealed partial class MainWindow : Window
         }
 
         _startupInitializationStarted = true;
-        _ = ResolveSteamPathAfterStartupAsync();
+        _ = CompleteStartupInitializationAsync();
+    }
+
+    private async Task CompleteStartupInitializationAsync()
+    {
+        await ResolveSteamPathAfterStartupAsync();
+        await ShowInitialReleaseNotesIfNeededAsync();
     }
 
     /// <summary>启动后台解析 Steam 安装路径（失败只记日志，不打扰用户）。</summary>
@@ -996,20 +1135,115 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            CustomBackgroundImage.Source = new BitmapImage
-            {
-                UriSource = new Uri(Path.GetFullPath(path), UriKind.Absolute),
-                CreateOptions = BitmapCreateOptions.IgnoreImageCache,
-                DecodePixelWidth = 1920
-            };
-            CustomBackgroundImage.Opacity = Math.Clamp(opacity, 0.1, 0.9);
-            CustomBackgroundImage.Visibility = Visibility.Visible;
             _currentAutomaticBackgroundFile = Path.GetFullPath(path);
+            LoadBackgroundImage(
+                _currentAutomaticBackgroundFile,
+                opacity,
+                decodePixelWidth: 1920);
         }
         catch (Exception ex)
         {
             AppLog.Warn($"加载自动背景图缓存失败：{ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// 图片可能来自刚执行完安装器的进程，文件/解码器会短暂繁忙；失败时做三次短重试，
+    /// 避免首次启动必须手动重启才能恢复背景。
+    /// </summary>
+    private void LoadBackgroundImage(
+        string path,
+        double opacity,
+        int? decodePixelWidth = null)
+    {
+        var fullPath = Path.GetFullPath(path);
+        var generation = ++_backgroundImageLoadGeneration;
+        TryLoadBackgroundImage(
+            fullPath,
+            opacity,
+            decodePixelWidth,
+            generation,
+            attempt: 0);
+    }
+
+    private void TryLoadBackgroundImage(
+        string fullPath,
+        double opacity,
+        int? decodePixelWidth,
+        int generation,
+        int attempt)
+    {
+        if (generation != _backgroundImageLoadGeneration || !File.Exists(fullPath))
+        {
+            return;
+        }
+
+        try
+        {
+            var image = new BitmapImage
+            {
+                CreateOptions = BitmapCreateOptions.IgnoreImageCache
+            };
+            if (decodePixelWidth is { } width)
+            {
+                image.DecodePixelWidth = width;
+            }
+
+            image.ImageOpened += (_, _) =>
+            {
+                if (generation != _backgroundImageLoadGeneration)
+                {
+                    return;
+                }
+
+                CustomBackgroundImage.Opacity = Math.Clamp(opacity, 0.1, 0.9);
+                CustomBackgroundImage.Visibility = Visibility.Visible;
+            };
+            image.ImageFailed += (_, _) =>
+            {
+                if (generation != _backgroundImageLoadGeneration || attempt >= 3)
+                {
+                    return;
+                }
+
+                AppLog.Warn($"背景图加载失败，准备第 {attempt + 1} 次重试：{fullPath}");
+                _ = RetryBackgroundImageAsync(
+                    fullPath,
+                    opacity,
+                    decodePixelWidth,
+                    generation,
+                    attempt + 1);
+            };
+            image.UriSource = new Uri(fullPath, UriKind.Absolute);
+            CustomBackgroundImage.Source = image;
+            CustomBackgroundImage.Opacity = Math.Clamp(opacity, 0.1, 0.9);
+            CustomBackgroundImage.Visibility = Visibility.Visible;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"设置背景图源失败：{ex.Message}");
+        }
+    }
+
+    private async Task RetryBackgroundImageAsync(
+        string fullPath,
+        double opacity,
+        int? decodePixelWidth,
+        int generation,
+        int attempt)
+    {
+        await Task.Delay(TimeSpan.FromMilliseconds(500 * attempt));
+        if (generation != _backgroundImageLoadGeneration)
+        {
+            return;
+        }
+
+        TryLoadBackgroundImage(
+            fullPath,
+            opacity,
+            decodePixelWidth,
+            generation,
+            attempt);
     }
 
     private void CancelAutomaticBackgroundRefresh()
@@ -1061,13 +1295,7 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            CustomBackgroundImage.Source = new BitmapImage
-            {
-                UriSource = new Uri(Path.GetFullPath(path), UriKind.Absolute),
-                CreateOptions = BitmapCreateOptions.IgnoreImageCache
-            };
-            CustomBackgroundImage.Opacity = clamped;
-            CustomBackgroundImage.Visibility = Visibility.Visible;
+            LoadBackgroundImage(path, clamped);
         }
         catch (Exception ex)
         {
@@ -1117,6 +1345,7 @@ public sealed partial class MainWindow : Window
 
     private void HideBackgroundImage()
     {
+        _backgroundImageLoadGeneration++;
         _currentAutomaticBackgroundFile = null;
         CustomBackgroundImage.Source = null;
         CustomBackgroundImage.Opacity = 0;

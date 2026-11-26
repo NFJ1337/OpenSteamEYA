@@ -36,6 +36,9 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
     /// <summary>上一轮是否还有活着的冷却，用于判断「刚刚全部到期」需要重建一次列表。</summary>
     private bool _lastTickHadLiveCooldown;
 
+    /// <summary>账号管理表当前内容指纹：相同内容不再 Clear/Add，避免切页返回时滚动条反复伸缩。</summary>
+    private int? _managementRowsFingerprint;
+
     public LegacyAccountsPage()
     {
         InitializeComponent();
@@ -90,14 +93,14 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
     {
         base.OnNavigatedTo(e);
         RefreshHighlightBrush();
-        AppState.ReloadWhiteAccounts();
-        LoadLegacyGroups();
-        UpdateBatchButtonsState();
-        RebuildRows(highlightFirst: false);
         ApplyLegacyPageMode(string.Equals(
             e.Parameter as string,
             "accountQuery",
             StringComparison.Ordinal));
+        AppState.ReloadWhiteAccounts();
+        LoadLegacyGroups();
+        UpdateBatchButtonsState();
+        RebuildRows(highlightFirst: false);
         RefreshAccountQueryRows();
 
         // 白号库是账号管理页统一读写的账号库：订阅变化事件后，
@@ -226,6 +229,20 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         var keyword = SearchText;
         var availableOnly = LegacyShowAvailableCheck?.IsChecked == true;
         var remarkedOnly = LegacyShowRemarkedCheck?.IsChecked == true;
+        var revealHiddenContent = RevealHiddenContent;
+        var fingerprint = ComputeWhiteAccountsFingerprint(
+            "management",
+            keyword,
+            _legacyGroupFilter,
+            availableOnly,
+            remarkedOnly,
+            revealHiddenContent);
+        if (_managementRowsFingerprint == fingerprint)
+        {
+            UpdateBatchButtonsState();
+            return;
+        }
+
         var preserveScroll = !highlightFirst;
         var scrollOffset = preserveScroll ? FindDescendant<ScrollViewer>(LegacyAccountList)?.VerticalOffset : null;
 
@@ -257,7 +274,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             var row = new LegacyAccountRow(
                 account,
                 index,
-                RevealHiddenContent,
+                revealHiddenContent,
                 _rowHoverBrush,
                 _statusAvailableBrush,
                 _statusCooldownBrush,
@@ -266,6 +283,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             Rows.Add(row);
         }
 
+        _managementRowsFingerprint = fingerprint;
         UpdateBatchButtonsState();
 
         // 仅首次/筛选重建时高亮第一行；右键操作后的行重建由 FocusRowForAccount 恢复原行。
@@ -287,6 +305,72 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
                 scrollViewer?.ChangeView(null, offset, null, disableAnimation: true);
             });
         }
+    }
+
+    /// <summary>
+    /// 生成账号库内容指纹。用于区分「切页返回但数据没变」和「后台确实改过账号数据」。
+    /// </summary>
+    private static int ComputeWhiteAccountsFingerprint(params object?[] filters)
+    {
+        var hash = new HashCode();
+        hash.Add(Loc.CurrentCode);
+        foreach (var filter in filters)
+        {
+            hash.Add(filter);
+        }
+
+        foreach (var account in AppState.WhiteAccounts)
+        {
+            hash.Add(account.AccountName);
+            hash.Add(account.SteamId);
+            hash.Add(account.EyaToken);
+            hash.Add(account.Password);
+            hash.Add(account.SharedSecret);
+            hash.Add(account.Email);
+            hash.Add(account.EmailPassword);
+            hash.Add(account.IsWhiteAccount);
+            hash.Add(account.PersonaName);
+            hash.Add(account.CsProfileRank);
+            hash.Add(account.Cs2PlaytimeHours);
+            hash.Add(account.Region);
+            hash.Add(account.LastGameLoginText);
+            hash.Add(account.BanExpiresAt);
+            hash.Add(account.AccountQueryBanChecked);
+            hash.Add(account.AccountQueryStatus);
+            hash.Add(account.AccountQueryMessage);
+            hash.Add(account.AccountQueryUpdatedAt);
+            hash.Add(account.AvatarUrl);
+            hash.Add(account.AvatarPath);
+            hash.Add(account.LastLoginAt);
+            hash.Add(account.LastSteamLoginAt);
+            hash.Add(account.TokenExpiresAt);
+            hash.Add(account.CompetitiveScore);
+            hash.Add(account.AccountStatus);
+            hash.Add(account.JwtAvailable);
+            hash.Add(account.JwtStatus);
+            hash.Add(account.JwtValidatedAt);
+            hash.Add(account.PremierScore);
+            hash.Add(account.PremierWins);
+            hash.Add(account.PremierScoreUpdatedAt);
+            hash.Add(account.CooldownSeconds);
+            hash.Add(account.CooldownReason);
+            hash.Add(account.GcVacBanned);
+            hash.Add(account.CsPlayerLevel);
+            hash.Add(account.InCsMatch);
+            hash.Add(account.Cs2IsChina);
+            hash.Add(account.CsStatusUpdatedAt);
+            hash.Add(account.Note);
+            hash.Add(account.GroupIds?.Count ?? -1);
+            if (account.GroupIds is { Count: > 0 } groupIds)
+            {
+                foreach (var groupId in groupIds)
+                {
+                    hash.Add(groupId);
+                }
+            }
+        }
+
+        return hash.ToHashCode();
     }
 
     private static T? FindDescendant<T>(DependencyObject? root) where T : DependencyObject
@@ -422,6 +506,8 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
     private bool _checkboxDragActive;
     private bool _checkboxDragSelectValue;
     private uint _checkboxDragPointerId;
+    private readonly HashSet<string> _vacPlaytimeQueriesInFlight =
+        new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// 列表上的指针按下：左键、右键一视同仁，都把那行切成高亮（不滚动列表），
@@ -1391,6 +1477,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             string.Equals(candidate.Item.AccountName, account.AccountName, StringComparison.OrdinalIgnoreCase));
         queryRow?.RefreshBanTimeFromItem();
         UpdateAccountManagementFooter();
+        QueueCs2PlaytimeQueryAfterCooldown(account);
     }
 
     private async Task PromptCustomCooldownAsync(LegacyAccountRow row)
@@ -1528,6 +1615,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
                 cancellationToken);
 
             SaveValidationResult(account, result);
+            QueueCs2PlaytimeQueryAfterVac(account, result.WebSession);
             if (!string.IsNullOrWhiteSpace(result.SteamId))
             {
                 try
@@ -1570,6 +1658,13 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         if (!string.IsNullOrWhiteSpace(result.RefreshToken))
         {
             tokenExpiresAt = AppState.JwtTokenService.Inspect(result.RefreshToken).ExpiresAt;
+            account.EyaToken = result.RefreshToken;
+            account.TokenExpiresAt = tokenExpiresAt;
+        }
+
+        if (!string.IsNullOrWhiteSpace(result.SteamId))
+        {
+            account.SteamId = result.SteamId;
         }
 
         AppState.WhiteAccountService.SaveValidationStatus(
@@ -1579,6 +1674,148 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             result.VacBanned,
             result.RefreshToken,
             tokenExpiresAt);
+    }
+
+    private void QueueCs2PlaytimeQueryAfterVac(
+        SteamAccountHistoryItem account,
+        SteamWebSession? webSession)
+    {
+        if (string.IsNullOrWhiteSpace(account.SteamId) || webSession is null)
+        {
+            return;
+        }
+
+        var key = account.SteamId;
+        if (!_vacPlaytimeQueriesInFlight.Add(key))
+        {
+            return;
+        }
+
+        _ = QueryCs2PlaytimeAfterVacAsync(account, key, webSession);
+        AppLog.Info($"VAC 设置完成，已开始异步查询 CS2 游戏时间：{account.AccountName}");
+    }
+
+    private async Task QueryCs2PlaytimeAfterVacAsync(
+        SteamAccountHistoryItem account,
+        string queryKey,
+        SteamWebSession webSession)
+    {
+        try
+        {
+            var hours = await AppState.AccountQueryService.QueryCs2PlaytimeAsync(
+                webSession,
+                account.SteamId,
+                CancellationToken.None);
+            if (!hours.HasValue)
+            {
+                AppLog.Warn($"VAC 设置后未获取到 CS2 游戏时间：{account.AccountName}");
+                return;
+            }
+
+            var playtimeHours = hours.Value;
+            ApplyCs2PlaytimeResult(account, playtimeHours, "VAC 设置后");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"VAC 设置后异步查询 CS2 游戏时间失败（{account.AccountName}）：{ex.Message}");
+        }
+        finally
+        {
+            _vacPlaytimeQueriesInFlight.Remove(queryKey);
+        }
+    }
+
+    private void QueueCs2PlaytimeQueryAfterCooldown(SteamAccountHistoryItem account)
+    {
+        if (string.IsNullOrWhiteSpace(account.SteamId) ||
+            (string.IsNullOrWhiteSpace(account.Password) &&
+             string.IsNullOrWhiteSpace(account.EyaToken)))
+        {
+            return;
+        }
+
+        var key = account.SteamId;
+        if (!_vacPlaytimeQueriesInFlight.Add(key))
+        {
+            return;
+        }
+
+        AppLog.Info($"冷却设置完成，已开始异步查询 CS2 游戏时间：{account.AccountName}");
+        _ = QueryCs2PlaytimeAfterCooldownAsync(account, key);
+    }
+
+    private async Task QueryCs2PlaytimeAfterCooldownAsync(
+        SteamAccountHistoryItem account,
+        string queryKey)
+    {
+        try
+        {
+            var hours = await AppState.AccountQueryService.QueryCs2PlaytimeAsync(
+                account,
+                (prompt, token) => PromptGuardCodeAsync(prompt, token, account),
+                CancellationToken.None);
+            if (!hours.HasValue)
+            {
+                AppLog.Warn($"冷却设置后未获取到 CS2 游戏时间：{account.AccountName}");
+                return;
+            }
+
+            ApplyCs2PlaytimeResult(account, hours.Value, "冷却设置后");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"冷却设置后异步查询 CS2 游戏时间失败（{account.AccountName}）：{ex.Message}");
+        }
+        finally
+        {
+            _vacPlaytimeQueriesInFlight.Remove(queryKey);
+        }
+    }
+
+    private void ApplyCs2PlaytimeResult(
+        SteamAccountHistoryItem account,
+        double playtimeHours,
+        string operation)
+    {
+        if (!AppState.WhiteAccountService.SetCs2Playtime(
+                account.AccountName,
+                account.SteamId,
+                playtimeHours))
+        {
+            AppLog.Warn($"{operation}保存 CS2 游戏时间失败：{account.AccountName}");
+            return;
+        }
+
+        account.Cs2PlaytimeHours = playtimeHours;
+        var stateItem = AppState.WhiteAccounts.FirstOrDefault(item =>
+            string.Equals(item.SteamId, account.SteamId, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(item.AccountName, account.AccountName, StringComparison.OrdinalIgnoreCase));
+        if (stateItem is not null)
+        {
+            stateItem.Cs2PlaytimeHours = playtimeHours;
+        }
+
+        var managementRow = Rows.FirstOrDefault(row =>
+            string.Equals(row.Item.SteamId, account.SteamId, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(row.Item.AccountName, account.AccountName, StringComparison.OrdinalIgnoreCase));
+        if (managementRow is not null)
+        {
+            managementRow.Item.Cs2PlaytimeHours = playtimeHours;
+            managementRow.RefreshCs2PlaytimeFromItem();
+        }
+
+        var queryRow = AccountQueryRows.FirstOrDefault(row =>
+            string.Equals(row.Item.SteamId, account.SteamId, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(row.Item.AccountName, account.AccountName, StringComparison.OrdinalIgnoreCase));
+        if (queryRow is not null)
+        {
+            queryRow.Item.Cs2PlaytimeHours = playtimeHours;
+            queryRow.RefreshCs2PlaytimeFromItem();
+        }
+
+        AppLog.Info(
+            $"{operation}CS2 游戏时间已更新：{account.AccountName}，" +
+            $"{FormatHelper.FormatCs2PlaytimeText(playtimeHours)}");
     }
 
     /// <summary>需要 Steam Guard 时弹框要验证码（与历史页同一套交互，页面各自持有）。</summary>
@@ -2177,6 +2414,11 @@ public sealed partial class LegacyAccountRow : INotifyPropertyChanged
 
     /// <summary>密码列显示内容：默认 ********，勾选「显示隐藏」后是真实密码。</summary>
     public string PasswordText { get; }
+
+    public string Cs2PlaytimeText => Item.Cs2PlaytimeText;
+
+    public void RefreshCs2PlaytimeFromItem() =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Cs2PlaytimeText)));
 
     private string _statusText = string.Empty;
 

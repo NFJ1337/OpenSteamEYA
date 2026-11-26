@@ -28,6 +28,31 @@ internal static class FormatHelper
             : value.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss");
     }
 
+    public static string FormatCs2PlaytimeText(double? hours)
+    {
+        if (!hours.HasValue || double.IsNaN(hours.Value) || double.IsInfinity(hours.Value))
+        {
+            return "-";
+        }
+
+        var totalMinutes = Math.Max(
+            0,
+            (long)Math.Round(hours.Value * 60d, MidpointRounding.AwayFromZero));
+        if (totalMinutes < 60)
+        {
+            return Loc.Tf("Legacy_Cs2Playtime_Minutes_Format", totalMinutes);
+        }
+
+        var wholeHours = totalMinutes / 60;
+        var remainingMinutes = totalMinutes % 60;
+        return remainingMinutes == 0
+            ? Loc.Tf("Legacy_Cs2Playtime_Hours_Format", wholeHours)
+            : Loc.Tf(
+                "Legacy_Cs2Playtime_HoursMinutes_Format",
+                wholeHours,
+                remainingMinutes);
+    }
+
     /// <summary>优先分达到此等级才能打优先匹配。</summary>
     public const int MinimumPremierLevel = 10;
 

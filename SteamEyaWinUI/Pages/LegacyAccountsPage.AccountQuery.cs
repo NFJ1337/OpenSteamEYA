@@ -31,6 +31,7 @@ public sealed partial class LegacyAccountsPage
     private bool _accountQueryCheckboxDragActive;
     private bool _accountQueryCheckboxDragSelectValue;
     private uint _accountQueryCheckboxDragPointerId;
+    private int? _accountQueryRowsFingerprint;
 
     /// <summary>账号查询标签的独立行集合，不改变原账号管理表的筛选与选择。</summary>
     public ObservableCollection<LegacyAccountQueryRow> AccountQueryRows { get; } = [];
@@ -60,6 +61,14 @@ public sealed partial class LegacyAccountsPage
             return;
         }
 
+        var failedOnly = LegacyAccountQueryFailedOnlyCheck?.IsChecked == true;
+        var fingerprint = ComputeWhiteAccountsFingerprint("account-query", failedOnly);
+        if (_accountQueryRowsFingerprint == fingerprint)
+        {
+            UpdateAccountQueryFooter();
+            return;
+        }
+
         var scrollViewer = FindDescendant<ScrollViewer>(LegacyAccountQueryList);
         (double Vertical, double Horizontal)? scrollOffset = scrollViewer is null
             ? null
@@ -75,7 +84,6 @@ public sealed partial class LegacyAccountsPage
             oldRow.PropertyChanged -= OnAccountQueryRowPropertyChanged;
         }
 
-        var failedOnly = LegacyAccountQueryFailedOnlyCheck?.IsChecked == true;
         var accounts = failedOnly
             ? AppState.WhiteAccounts.Where(account =>
                 IsFailedAccountQueryStatus(account.AccountQueryStatus))
@@ -113,6 +121,7 @@ public sealed partial class LegacyAccountsPage
             _accountQueryHighlightedRow = null;
         }
 
+        _accountQueryRowsFingerprint = fingerprint;
         UpdateAccountQueryFooter();
         if (scrollOffset is { } offset)
         {
@@ -146,6 +155,19 @@ public sealed partial class LegacyAccountsPage
         }
 
         CopyToClipboard(row.Item.SteamId);
+        AppState.ShowStatus(Loc.T("Common_CopiedToClipboard"), InfoBarSeverity.Success);
+        e.Handled = true;
+    }
+
+    private void LegacyAccountQueryAccountCell_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: LegacyAccountQueryRow row } ||
+            string.IsNullOrWhiteSpace(row.AccountName))
+        {
+            return;
+        }
+
+        CopyToClipboard(row.AccountName);
         AppState.ShowStatus(Loc.T("Common_CopiedToClipboard"), InfoBarSeverity.Success);
         e.Handled = true;
     }
@@ -1329,6 +1351,8 @@ public sealed partial class LegacyAccountQueryRow : INotifyPropertyChanged
 
     public string PersonaName => string.IsNullOrWhiteSpace(Item.PersonaName) ? "-" : Item.PersonaName!;
 
+    public string Cs2PlaytimeText => Item.Cs2PlaytimeText;
+
     public string RankText => Item.CsProfileRank?.ToString(
         System.Globalization.CultureInfo.InvariantCulture)
         ?? Item.CsPlayerLevel?.ToString(System.Globalization.CultureInfo.InvariantCulture)
@@ -1407,6 +1431,8 @@ public sealed partial class LegacyAccountQueryRow : INotifyPropertyChanged
         Raise(nameof(IsBanned));
     }
 
+    internal void RefreshCs2PlaytimeFromItem() => Raise(nameof(Cs2PlaytimeText));
+
     internal void ApplyResult(SteamAccountQueryResult result)
     {
         if (!string.IsNullOrWhiteSpace(result.SteamId))
@@ -1424,6 +1450,11 @@ public sealed partial class LegacyAccountQueryRow : INotifyPropertyChanged
         {
             Item.CsProfileRank = result.CsProfileRank;
             Item.LastGameLoginText = result.LastGameLoginText;
+        }
+
+        if (result.PlaytimeChecked)
+        {
+            Item.Cs2PlaytimeHours = result.Cs2PlaytimeHours;
         }
 
         if (result.UserInfoChecked && !string.IsNullOrWhiteSpace(result.PersonaName))
@@ -1463,6 +1494,7 @@ public sealed partial class LegacyAccountQueryRow : INotifyPropertyChanged
         _message = result.Message;
         RaiseStatus();
         Raise(nameof(PersonaName));
+        Raise(nameof(Cs2PlaytimeText));
         Raise(nameof(RankText));
         Raise(nameof(LastLoginText));
         Raise(nameof(RegionText));

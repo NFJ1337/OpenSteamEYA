@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "2.0.4"
+  #define AppVersion "2.0.5"
 #endif
 
 #ifndef PublishDir
@@ -77,4 +77,16 @@ begin
   { 给 Windows 释放 EXE / DLL / WebView2 文件句柄留一点时间。 }
   Sleep(800);
   Result := '';
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+  begin
+    { 每次安装/重装都写入一次性标记；程序成功展示日志后自行删除。 }
+    SaveStringToFile(
+      ExpandConstant('{app}\show-release-notes.flag'),
+      GetDateTimeString('yyyy-mm-dd hh:nn:ss', '-', ':'),
+      False);
+  end;
 end;

@@ -1,5 +1,5 @@
 ﻿param(
-    [string]$Version = "2.0.4",
+    [string]$Version = "2.0.5",
     [string]$Configuration = "Release",
     [string]$Runtime = "win-x64",
     # 先按「末位 +1，满 10 进位」自增版本号（同步写回 csproj / 本脚本 / iss），再打包。
@@ -70,6 +70,14 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Get-ChildItem -LiteralPath $publishDir -Filter "*.pdb" -File | Remove-Item -Force
+
+# 当前版本的发布说明随安装包分发。源码资产是跨版本兜底，这里优先用本次构建的版本说明覆盖。
+$releaseNotesSource = Join-Path $repoRoot "artifacts\release-notes-$Version.txt"
+if (Test-Path -LiteralPath $releaseNotesSource) {
+    $assetDir = Join-Path $publishDir "Assets"
+    New-Item -ItemType Directory -Force -Path $assetDir | Out-Null
+    Copy-Item -LiteralPath $releaseNotesSource -Destination (Join-Path $assetDir "ReleaseNotes.txt") -Force
+}
 
 # 注意：WebView2 的两个 DLL（Microsoft.Web.WebView2.Core.dll / WebView2Loader.dll）必须留在产物里 ——
 # 「轻松音乐」标签用 WebView2 内嵌平台网页，缺了它们运行时会初始化失败。

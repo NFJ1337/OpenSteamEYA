@@ -32,6 +32,9 @@ internal sealed class SteamAccountQueryResult
     public int? CsProfileRank { get; set; }
     public string? LastGameLoginText { get; set; }
 
+    public bool PlaytimeChecked { get; set; }
+    public double? Cs2PlaytimeHours { get; set; }
+
     public bool UserInfoChecked { get; set; }
     public string? PersonaName { get; set; }
     public string? Region { get; set; }
@@ -57,6 +60,12 @@ internal sealed partial class SteamAccountQueryService
 {
     private const string RankPageFormat = "https://steamcommunity.com/profiles/{0}/gcpd/730/";
     private const string UserInfoPageFormat = "https://steamcommunity.com/profiles/{0}/friends/add";
+    private const string MyGamesPage = "https://steamcommunity.com/my/games/?tab=all";
+    private const string Cs2GamesPageFormat = "https://steamcommunity.com/profiles/{0}/games/?tab=all";
+    private const string Cs2StatsJsonPageFormat =
+        "https://steamcommunity.com/profiles/{0}/stats/730/?json=1&l=english";
+    private const string StoreExplorePage = "https://store.steampowered.com/explore/";
+    private const string OwnedGamesApiUrl = "https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/";
     private const string ChinaSteamPage = "https://store.steampowered.com/account/";
     private const string CooldownPage =
         "https://help.steampowered.com/zh-cn/wizard/HelpWithGameIssue/?appid=730&issueid=131";
@@ -170,6 +179,32 @@ internal sealed partial class SteamAccountQueryService
                 }
             }
 
+            if (options.QueryRank || options.QueryUserInfo || options.QueryBanTime)
+            {
+                progress?.Report(Loc.T("Legacy_Query_StatusCs2Playtime"));
+                try
+                {
+                    var hours = await ReadCs2PlaytimeHoursAsync(
+                        auth.Session,
+                        auth.SteamId,
+                        cancellationToken);
+                    if (hours.HasValue)
+                    {
+                        result.Cs2PlaytimeHours = hours;
+                        result.PlaytimeChecked = true;
+                    }
+                    else
+                    {
+                        AppLog.Warn($"CS2 游戏时间未读取到（{account.AccountName}），保留原值。");
+                    }
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // 游戏详情可能是私密状态；不能因为附加信息缺失把主要查询判成失败。
+                    AppLog.Warn($"CS2 游戏时间读取失败（{account.AccountName}）：{ex.Message}");
+                }
+            }
+
             if (!string.IsNullOrWhiteSpace(options.ChangeNameTo) ||
                 !string.IsNullOrWhiteSpace(options.ChangeAvatarFrom) ||
                 !string.IsNullOrWhiteSpace(options.ChangeSummaryTo))
@@ -243,6 +278,31 @@ internal sealed partial class SteamAccountQueryService
         }
 
         return result;
+    }
+
+    /// <summary>复用 VAC 查询刚建立的 Web 会话读取 CS2 游戏时间，避免再次连接 Steam CM。</summary>
+    public Task<double?> QueryCs2PlaytimeAsync(
+        SteamWebSession session,
+        string steamId,
+        CancellationToken cancellationToken)
+    {
+        return ReadCs2PlaytimeHoursAsync(session, steamId, cancellationToken);
+    }
+
+    public async Task<double?> QueryCs2PlaytimeAsync(
+        SteamAccountHistoryItem account,
+        Func<SteamGuardPrompt, CancellationToken, Task<string?>> guardCodeProvider,
+        CancellationToken cancellationToken)
+    {
+        var auth = await ResolveSessionAsync(
+            account,
+            guardCodeProvider,
+            progress: null,
+            cancellationToken);
+        return await ReadCs2PlaytimeHoursAsync(
+            auth.Session,
+            auth.SteamId,
+            cancellationToken);
     }
 
     private static async Task<AuthenticatedWebSession> ResolveSessionAsync(
@@ -471,6 +531,290 @@ internal sealed partial class SteamAccountQueryService
         return new BanState(permanentVac, null, 0);
     }
 
+    private static async Task<double?> ReadCs2PlaytimeHoursAsync(
+        SteamWebSession session,
+        string steamId,
+        CancellationToken cancellationToken)
+    {
+        var apiHours = await TryReadCs2PlaytimeHoursFromApiAsync(
+            session,
+            steamId,
+            cancellationToken);
+        return apiHours
+            ?? await TryReadCs2PlaytimeHoursFromStatsAsync(
+                session,
+                steamId,
+                cancellationToken)
+            ?? await TryReadCs2PlaytimeHoursFromPagesAsync(
+                session,
+                steamId,
+                cancellationToken);
+    }
+
+    private static async Task<double?> TryReadCs2PlaytimeHoursFromApiAsync(
+        SteamWebSession session,
+        string steamId,
+        CancellationToken cancellationToken)
+    {
+        var webApiToken = await ReadSteamWebApiTokenAsync(session, cancellationToken);
+        if (string.IsNullOrWhiteSpace(webApiToken))
+        {
+            AppLog.Warn("CS2 游戏时间 API 未获取到 webapi_token，尝试网页回退。");
+            return null;
+        }
+
+        var url =
+            $"{OwnedGamesApiUrl}?access_token={Uri.EscapeDataString(webApiToken)}" +
+            $"&steamid={Uri.EscapeDataString(steamId)}&format=json" +
+            "&include_appinfo=0&include_played_free_games=1";
+        try
+        {
+            using var response = await HttpClient.GetAsync(url, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                AppLog.Warn(
+                    $"CS2 游戏时间 API 返回 HTTP {(int)response.StatusCode}：" +
+                    $"{errorBody[..Math.Min(errorBody.Length, 300)]}，尝试网页回退。");
+                return null;
+            }
+
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
+            using var document = JsonDocument.Parse(json);
+            if (!document.RootElement.TryGetProperty("response", out var apiResponse) ||
+                !apiResponse.TryGetProperty("games", out var games) ||
+                games.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            foreach (var game in games.EnumerateArray())
+            {
+                if (game.ValueKind != JsonValueKind.Object ||
+                    !game.TryGetProperty("appid", out var appId) ||
+                    !IsCs2AppId(appId) ||
+                    !game.TryGetProperty("playtime_forever", out var playtime) ||
+                    !playtime.TryGetDouble(out var minutes))
+                {
+                    continue;
+                }
+
+                return minutes / 60d;
+            }
+        }
+        catch (JsonException ex)
+        {
+            AppLog.Warn($"CS2 游戏时间 API 数据解析失败：{ex.Message}");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            AppLog.Warn($"CS2 游戏时间 API 请求失败：{ex.Message}");
+        }
+
+        return null;
+    }
+
+    private static async Task<double?> TryReadCs2PlaytimeHoursFromStatsAsync(
+        SteamWebSession session,
+        string steamId,
+        CancellationToken cancellationToken)
+    {
+        var (json, finalUri) = await GetHtmlAsync(
+            string.Format(CultureInfo.InvariantCulture, Cs2StatsJsonPageFormat, steamId),
+            session,
+            "en-US,en;q=0.9",
+            cancellationToken);
+        if (finalUri.AbsolutePath.Contains("/login", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(
+                json.TrimStart('\uFEFF', ' ', '\r', '\n'));
+            if (!document.RootElement.TryGetProperty("playerstats", out var playerStats) ||
+                !playerStats.TryGetProperty("stats", out var stats) ||
+                stats.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            foreach (var stat in stats.EnumerateArray())
+            {
+                if (stat.ValueKind == JsonValueKind.Object &&
+                    stat.TryGetProperty("name", out var name) &&
+                    string.Equals(
+                        name.GetString(),
+                        "total_time_played",
+                        StringComparison.OrdinalIgnoreCase) &&
+                    stat.TryGetProperty("value", out var value) &&
+                    value.TryGetDouble(out var seconds))
+                {
+                    return seconds / 3600d;
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // json=1 返回登录/错误页时继续尝试游戏页兜底。
+        }
+
+        return null;
+    }
+
+    private static async Task<string?> ReadSteamWebApiTokenAsync(
+        SteamWebSession session,
+        CancellationToken cancellationToken)
+    {
+        var (html, finalUri) = await GetHtmlAsync(
+            StoreExplorePage,
+            session,
+            "en-US,en;q=0.9",
+            cancellationToken);
+        EnsureAuthenticatedPage(finalUri);
+
+        var match = StoreUserConfigRegex().Match(html);
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        try
+        {
+            var json = WebUtility.HtmlDecode(match.Groups["json"].Value);
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.TryGetProperty("webapi_token", out var token) &&
+                token.ValueKind == JsonValueKind.String
+                ? token.GetString()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static async Task<double?> TryReadCs2PlaytimeHoursFromPagesAsync(
+        SteamWebSession session,
+        string steamId,
+        CancellationToken cancellationToken)
+    {
+        var urls = new[]
+        {
+            MyGamesPage,
+            string.Format(CultureInfo.InvariantCulture, Cs2GamesPageFormat, steamId)
+        };
+        string? lastHtml = null;
+        foreach (var url in urls)
+        {
+            var (html, finalUri) = await GetHtmlAsync(
+                url,
+                session,
+                "en-US,en;q=0.9",
+                cancellationToken);
+            lastHtml = html;
+            if (finalUri.AbsolutePath.Contains("/login", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var hours = TryReadCs2HoursFromGamesHtml(html);
+            if (hours.HasValue)
+            {
+                return hours;
+            }
+        }
+
+        if (lastHtml is not null)
+        {
+            AppLog.Warn(
+                "CS2 游戏时间页面未匹配：" +
+                $"长度={lastHtml.Length}，" +
+                $"rgGames={lastHtml.Contains("rgGames", StringComparison.OrdinalIgnoreCase)}，" +
+                $"hours_forever={lastHtml.Contains("hours_forever", StringComparison.OrdinalIgnoreCase)}，" +
+                $"appid730={lastHtml.Contains("730", StringComparison.Ordinal)}");
+        }
+
+        return null;
+    }
+
+    private static double? TryReadCs2HoursFromGamesHtml(string html)
+    {
+        var gamesMarker = html.IndexOf("rgGames", StringComparison.OrdinalIgnoreCase);
+        if (gamesMarker >= 0)
+        {
+            var arrayStart = html.IndexOf('[', gamesMarker);
+            var arrayEnd = arrayStart < 0 ? -1 : html.IndexOf("];", arrayStart, StringComparison.Ordinal);
+            if (arrayStart >= 0 && arrayEnd > arrayStart)
+            {
+                try
+                {
+                    var json = html[arrayStart..(arrayEnd + 1)];
+                    using var document = JsonDocument.Parse(json);
+                    if (document.RootElement.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var game in document.RootElement.EnumerateArray())
+                        {
+                            if (game.ValueKind != JsonValueKind.Object ||
+                                !game.TryGetProperty("appid", out var appId) ||
+                                !IsCs2AppId(appId) ||
+                                !game.TryGetProperty("hours_forever", out var hoursValue))
+                            {
+                                continue;
+                            }
+
+                            var raw = hoursValue.ValueKind switch
+                            {
+                                JsonValueKind.String => hoursValue.GetString(),
+                                JsonValueKind.Number => hoursValue.GetRawText(),
+                                _ => null
+                            };
+                            if (!string.IsNullOrWhiteSpace(raw) &&
+                                double.TryParse(
+                                    raw.Replace(",", string.Empty, StringComparison.Ordinal),
+                                    NumberStyles.Float,
+                                    CultureInfo.InvariantCulture,
+                                    out var parsedHours))
+                            {
+                                return parsedHours;
+                            }
+                        }
+                    }
+                }
+                catch (JsonException)
+                {
+                    // Steam 页面偶尔混入非标准 JS，交给下方正则兜底。
+                }
+            }
+        }
+
+        var match = Cs2PlaytimeHoursRegex().Match(html);
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        var regexRaw = match.Groups["hours"].Value.Replace(",", string.Empty);
+        return double.TryParse(
+            regexRaw,
+            NumberStyles.Float,
+            CultureInfo.InvariantCulture,
+            out var regexHours)
+            ? regexHours
+            : null;
+    }
+
+    private static bool IsCs2AppId(JsonElement value)
+    {
+        return value.ValueKind switch
+        {
+            JsonValueKind.Number => value.TryGetInt32(out var number) && number == 730,
+            JsonValueKind.String => string.Equals(value.GetString(), "730", StringComparison.Ordinal),
+            _ => false
+        };
+    }
+
     private static async Task<(string Html, Uri FinalUri)> GetHtmlAsync(
         string url,
         SteamWebSession session,
@@ -679,6 +1023,16 @@ internal sealed partial class SteamAccountQueryService
         @"Logged\s+out\s+of\s+CS:GO[\s\S]{0,1000}?<td[^>]*>(?<value>[\s\S]*?)</td>",
         RegexOptions.IgnoreCase)]
     private static partial Regex LastGameLoginRegex();
+
+    [GeneratedRegex(
+        @"data-store_user_config=""(?<json>[^""]+)""",
+        RegexOptions.IgnoreCase)]
+    private static partial Regex StoreUserConfigRegex();
+
+    [GeneratedRegex(
+        @"""appid""\s*:\s*""?730""?\s*,[\s\S]{0,8000}?""hours_forever""\s*:\s*""?(?<hours>[\d,.]+)""?",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex Cs2PlaytimeHoursRegex();
 
     [GeneratedRegex(
         @"<div\s+class=""friends_header_name""[^>]*>[\s\S]*?<a[^>]*>(?<name>[^<]+)</a>",

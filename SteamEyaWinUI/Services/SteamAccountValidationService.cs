@@ -10,7 +10,8 @@ internal sealed record SteamAccountValidationResult(
     uint? CooldownSeconds,
     bool? VacBanned,
     string SummaryText,
-    string? RefreshToken = null);
+    string? RefreshToken = null,
+    SteamWebSession? WebSession = null);
 
 /// <summary>
 /// 与本地 SteamAccountManager 的账号管理验证保持一致：
@@ -156,7 +157,8 @@ internal sealed class SteamAccountValidationService
                     activeCooldownSeconds,
                     false,
                     Loc.Tf("Account_Cooldown_Summary_Format", cooldownText),
-                    refreshToken);
+                    refreshToken,
+                    session);
             }
 
             var (vacHtml, _) = await GetHtmlAsync(VacUrl, session, cancellationToken);
@@ -170,7 +172,8 @@ internal sealed class SteamAccountValidationService
                     0,
                     true,
                     Loc.T("Format_RedLockPermanentVac"),
-                    refreshToken);
+                    refreshToken,
+                    session);
             }
 
             var vacBanned = vacHtml.Contains("Counter-Strike 2", StringComparison.OrdinalIgnoreCase);
@@ -179,7 +182,8 @@ internal sealed class SteamAccountValidationService
                 0,
                 vacBanned,
                 vacBanned ? Loc.T("WhiteAccounts_Filter_Vac") : Loc.T("Cs_Premier_NoRestrictions"),
-                refreshToken);
+                refreshToken,
+                session);
         }
         finally
         {

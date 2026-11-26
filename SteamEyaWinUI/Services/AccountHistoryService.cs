@@ -447,6 +447,38 @@ internal sealed class AccountHistoryService
         }
     }
 
+    /// <summary>VAC 设置后异步刷新 CS2 游戏时间；只改目标账号并立即落盘。</summary>
+    public bool SetCs2Playtime(string accountName, string steamId, double hours)
+    {
+        if (string.IsNullOrWhiteSpace(accountName) ||
+            double.IsNaN(hours) ||
+            double.IsInfinity(hours) ||
+            hours < 0)
+        {
+            return false;
+        }
+
+        _fileGate.Wait();
+        try
+        {
+            var document = ReadDocumentForWrite();
+            var item = FindExisting(document.Accounts, steamId, accountName);
+            if (item is null)
+            {
+                return false;
+            }
+
+            item.Cs2PlaytimeHours = hours;
+            document.Accounts = NormalizeAccounts(document.Accounts).ToList();
+            WriteDocument(document);
+            return true;
+        }
+        finally
+        {
+            _fileGate.Release();
+        }
+    }
+
     /// <summary>
     /// 账号管理右键手动设置冷却：同步冷却结束时间与账号查询的封禁时间，只写 JSON，不触发整表刷新。
     /// </summary>
@@ -537,6 +569,11 @@ internal sealed class AccountHistoryService
             {
                 item.CsProfileRank = result.CsProfileRank;
                 item.LastGameLoginText = result.LastGameLoginText;
+            }
+
+            if (result.PlaytimeChecked)
+            {
+                item.Cs2PlaytimeHours = result.Cs2PlaytimeHours;
             }
 
             if (result.UserInfoChecked)

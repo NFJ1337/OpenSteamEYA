@@ -280,6 +280,8 @@ internal static class AlcyBackgroundService
 
     /// <summary>
     /// 一张缓存图被使用后，只下载 1 张新图补回缓存；下载失败时保留正在使用的旧图。
+    /// 正在显示的旧图不在下载线程里立刻删除，等下一次读取缓存时再统一裁剪，
+    /// 避免安装后首次启动时 BitmapImage 尚未解码完、源文件就被移走。
     /// </summary>
     public static async Task<string?> ReplenishOneBackgroundAsync(
         IReadOnlyList<string> apiPaths,
@@ -340,22 +342,6 @@ internal static class AlcyBackgroundService
             refreshToken.ThrowIfCancellationRequested();
             var finalPath = Path.Combine(cacheFolder, Path.GetFileName(downloaded));
             File.Move(downloaded, finalPath, overwrite: true);
-
-            var consumedFullPath = Path.GetFullPath(consumedFile);
-            var cacheRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(cacheFolder));
-            if (string.Equals(
-                    Path.GetDirectoryName(consumedFullPath),
-                    cacheRoot,
-                    StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(
-                    consumedFullPath,
-                    Path.GetFullPath(finalPath),
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                TryDelete(consumedFullPath);
-            }
-
-            GetCachedBackgroundFiles(cacheFolder);
             return File.Exists(finalPath) ? finalPath : null;
         }
         catch (OperationCanceledException)
