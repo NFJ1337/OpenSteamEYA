@@ -29,8 +29,10 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     // 代码设置 ComboBox.SelectedItem 会触发 SelectionChanged，置位以区分“用户选择”与“初始同步”，避免回写/重复应用。
     private bool _syncing;
     private bool _languageMenuBuilt;
+    private bool _updateProxyMenuBuilt;
     private string _selectedLanguageCode = "zh-Hans";
     private string _selectedThemeCode = "Dark";
+    private string _selectedUpdateProxyCode = "direct";
     private bool _movingDataFolder;
     private bool _pickingBackground;
     private bool _pickingIntroVideo;
@@ -52,6 +54,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
 
         BuildLanguageMenu();
         BuildThemeMenu();
+        BuildUpdateProxyMenu();
         BuildCloseBehaviorMenu();
         // 语言切换后，让本页所有 {x:Bind Strings.Get(...), Mode=OneWay} 重新求值（主题项文本等）。
         Loc.LanguageChanged += OnLanguageChanged;
@@ -78,6 +81,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Strings)));
 
             UpdateThemeMenuTexts();
+            UpdateUpdateProxyMenuTexts();
             UpdateChoiceButtonTexts();
             UpdateCloseBehaviorMenuTexts();
             UpdateCloseBehaviorButtonText();
@@ -126,6 +130,27 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             item.Click += ThemeMenuItem_Click;
             ThemeFlyout.Items.Add(item);
         }
+    }
+
+    private void BuildUpdateProxyMenu()
+    {
+        if (_updateProxyMenuBuilt)
+        {
+            return;
+        }
+
+        foreach (var site in AppState.UpdateService.GetProxySites())
+        {
+            var item = new MenuFlyoutItem
+            {
+                Text = UpdateProxyDisplayName(site.Code),
+                Tag = site.Code
+            };
+            item.Click += UpdateProxyMenuItem_Click;
+            UpdateProxyFlyout.Items.Add(item);
+        }
+
+        _updateProxyMenuBuilt = true;
     }
 
     private void BuildCloseBehaviorMenu()
@@ -238,12 +263,62 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         }
     }
 
+    private void UpdateProxyMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuFlyoutItem { Tag: string proxyCode })
+        {
+            return;
+        }
+
+        _selectedUpdateProxyCode = proxyCode;
+        UpdateProxyButtonText.Text = UpdateProxyDisplayName(proxyCode);
+
+        var settings = AppState.SettingsService.Load();
+        if (string.Equals(settings.UpdateProxySite, proxyCode, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        settings.UpdateProxySite = proxyCode;
+        AppState.SettingsService.Save(settings);
+        AppState.UpdateService.SetProxySite(proxyCode);
+    }
+
+    private async void UpdateProxyLatencyButton_Click(object sender, RoutedEventArgs e)
+    {
+        UpdateProxyLatencyButton.IsEnabled = false;
+        AppState.ShowStatus(Loc.T("Settings_UpdateProxy_Testing"), InfoBarSeverity.Informational);
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            var elapsed = await AppState.UpdateService.ProbeLatencyAsync(_selectedUpdateProxyCode, cts.Token);
+            AppState.ShowStatus(
+                Loc.Tf("Settings_UpdateProxy_LatencyResult_Format", Math.Round(elapsed.TotalMilliseconds)),
+                InfoBarSeverity.Success);
+        }
+        catch (OperationCanceledException)
+        {
+            AppState.ShowStatus(Loc.T("Settings_UpdateProxy_LatencyTimeout"), InfoBarSeverity.Warning);
+        }
+        catch (Exception ex)
+        {
+            AppState.ShowStatus(
+                Loc.Tf("Settings_UpdateProxy_LatencyFailed_Format", ex.Message),
+                InfoBarSeverity.Error);
+        }
+        finally
+        {
+            UpdateProxyLatencyButton.IsEnabled = true;
+        }
+    }
+
     private void UpdateChoiceButtonTexts()
     {
         LanguageButtonText.Text = Loc.AvailablePacks
             .FirstOrDefault(pack => string.Equals(pack.Code, _selectedLanguageCode, StringComparison.OrdinalIgnoreCase))
             ?.Name ?? _selectedLanguageCode;
         ThemeButtonText.Text = ThemeDisplayName(_selectedThemeCode);
+        UpdateProxyButtonText.Text = UpdateProxyDisplayName(_selectedUpdateProxyCode);
     }
 
     private void UpdateThemeMenuTexts()
@@ -257,11 +332,31 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         }
     }
 
+    private void UpdateUpdateProxyMenuTexts()
+    {
+        foreach (var item in UpdateProxyFlyout.Items.OfType<MenuFlyoutItem>())
+        {
+            if (item.Tag is string code)
+            {
+                item.Text = UpdateProxyDisplayName(code);
+            }
+        }
+    }
+
     private static string ThemeDisplayName(string code) => code switch
     {
         "Light" => Loc.T("Settings_Theme_Light"),
         "Dark" => Loc.T("Settings_Theme_Dark"),
         _ => Loc.T("Settings_Theme_System")
+    };
+
+    private static string UpdateProxyDisplayName(string code) => code switch
+    {
+        "gh-proxy.org" => Loc.T("Settings_UpdateProxy_GhProxyOrg"),
+        "v4.gh-proxy.org" => Loc.T("Settings_UpdateProxy_GhProxyOrgV4"),
+        "v6.gh-proxy.org" => Loc.T("Settings_UpdateProxy_GhProxyOrgV6"),
+        "cdn.gh-proxy.org" => Loc.T("Settings_UpdateProxy_GhProxyOrgCdn"),
+        _ => Loc.T("Settings_UpdateProxy_Direct")
     };
 
     private void ApplyThemeSettings(AppSettings settings)
@@ -363,6 +458,14 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
                 ApplyThemeSettings(settings);
             }
 
+            _selectedUpdateProxyCode = AppState.UpdateService.GetProxySites()
+                .FirstOrDefault(site => string.Equals(
+                    site.Code,
+                    settings.UpdateProxySite,
+                    StringComparison.OrdinalIgnoreCase))
+                ?.Code
+                ?? AppState.UpdateService.GetProxySites()[0].Code;
+            AppState.UpdateService.SetProxySite(_selectedUpdateProxyCode);
             UpdateChoiceButtonTexts();
             RefreshCloseBehaviorFromSettings();
 

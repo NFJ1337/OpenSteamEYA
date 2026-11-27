@@ -1,5 +1,7 @@
 using System.IO;
 using System.Net;
+using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Xml.Linq;
@@ -23,6 +25,14 @@ internal sealed class AccountHistoryService
         Timeout = TimeSpan.FromSeconds(6)
     };
 
+    /// <summary>
+    /// 账号 JSON 固定使用 UTF-8 原文，不再把中文转成 \uXXXX；
+    /// TypeInfoResolver 绑定源生成上下文，AOT 下新增字段会自动沿用该配置。
+    /// </summary>
+    private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
+    private static readonly AccountHistoryJsonContext JsonContext = new(JsonOptions);
+    private static readonly UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
+
     // 串行化所有「读-改-写整文件」临界区。异步路径（SaveLoginAsync）用 await WaitAsync 不阻塞 UI 线程；
     // 同步路径（SaveCsAccountStatus/ImportAccounts/DeleteAccounts/ClearAll）用 Wait——其临界区内不含 await，
     // 持锁者必同步走完即释放，故 UI 线程上的 Wait 不会自死锁。
@@ -39,6 +49,47 @@ internal sealed class AccountHistoryService
         _historyFileName = historyFileName;
         _avatarFolderName = avatarFolderName;
         _sortOldestFirst = sortOldestFirst;
+        NormalizeHistoryFileUnicodeEscapes();
+    }
+
+    private static JsonSerializerOptions CreateJsonOptions()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            WriteIndented = true,
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        };
+        return options;
+    }
+
+    /// <summary>
+    /// 一次性把旧文件中的 \uXXXX 转义改写为 UTF-8 原文；不触碰尚未迁移的密文文件。
+    /// </summary>
+    private void NormalizeHistoryFileUnicodeEscapes()
+    {
+        try
+        {
+            if (!File.Exists(HistoryFilePath))
+            {
+                return;
+            }
+
+            var json = File.ReadAllText(HistoryFilePath);
+            if (json.IndexOf("\\u", StringComparison.Ordinal) < 0 ||
+                LegacyCredentialMigration.ContainsEncryptedCredentialData(json))
+            {
+                return;
+            }
+
+            var document = JsonSerializer.Deserialize(json, JsonContext.AccountHistoryDocument)
+                ?? new AccountHistoryDocument();
+            document.Accounts ??= [];
+            WriteDocument(document);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"账号 JSON UTF-8 编码转换失败（{_historyFileName}）：{ex.Message}");
+        }
     }
 
     public string AppFolderPath => AppPaths.DataRoot;
@@ -469,6 +520,36 @@ internal sealed class AccountHistoryService
             }
 
             item.Cs2PlaytimeHours = hours;
+            document.Accounts = NormalizeAccounts(document.Accounts).ToList();
+            WriteDocument(document);
+            return true;
+        }
+        finally
+        {
+            _fileGate.Release();
+        }
+    }
+
+    /// <summary>查询到最新昵称后只更新目标账号并立即落盘。</summary>
+    public bool SetPersonaName(string accountName, string steamId, string personaName)
+    {
+        if (string.IsNullOrWhiteSpace(accountName) ||
+            string.IsNullOrWhiteSpace(personaName))
+        {
+            return false;
+        }
+
+        _fileGate.Wait();
+        try
+        {
+            var document = ReadDocumentForWrite();
+            var item = FindExisting(document.Accounts, steamId, accountName);
+            if (item is null)
+            {
+                return false;
+            }
+
+            item.PersonaName = personaName.Trim();
             document.Accounts = NormalizeAccounts(document.Accounts).ToList();
             WriteDocument(document);
             return true;
@@ -1092,7 +1173,7 @@ internal sealed class AccountHistoryService
                     "旧账号库尚未完成明文迁移，已拒绝写入以避免破坏密文。");
             }
 
-            var document = JsonSerializer.Deserialize(json, AccountHistoryJsonContext.Default.AccountHistoryDocument)
+            var document = JsonSerializer.Deserialize(json, JsonContext.AccountHistoryDocument)
                 ?? new AccountHistoryDocument();
             document.Accounts ??= [];
             return document;
@@ -1299,14 +1380,14 @@ internal sealed class AccountHistoryService
     private void WriteDocument(AccountHistoryDocument document)
     {
         Directory.CreateDirectory(HistoryFolderPath);
-        var json = JsonSerializer.Serialize(document, AccountHistoryJsonContext.Default.AccountHistoryDocument);
+        var json = JsonSerializer.Serialize(document, JsonContext.AccountHistoryDocument);
 
         // 先写临时文件再原子替换，避免进程中断导致 accounts.json 半截损坏、下次保存清空全部历史。
         // 临时文件名加随机后缀，避免多次写入间残留的 .tmp 撞名。
         var tempPath = HistoryFilePath + "." + Path.GetRandomFileName() + ".tmp";
         try
         {
-            File.WriteAllText(tempPath, json);
+            File.WriteAllText(tempPath, json, Utf8NoBom);
 
             var backupPath = HistoryFilePath + ".bak";
             if (File.Exists(HistoryFilePath))

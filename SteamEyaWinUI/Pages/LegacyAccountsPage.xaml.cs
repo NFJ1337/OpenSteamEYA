@@ -102,6 +102,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         UpdateBatchButtonsState();
         RebuildRows(highlightFirst: false);
         RefreshAccountQueryRows();
+        RefreshLastLoginAccountText();
 
         // 白号库是账号管理页统一读写的账号库：订阅变化事件后，
         // 查询 / 备注 / 冷却等改动都会让本页立即重建，避免界面停留在旧状态。
@@ -207,6 +208,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         RebuildRows();
         RefreshAccountQueryRows();
         UpdateAccountQueryLocalizedChrome();
+        RefreshLastLoginAccountText();
     });
 
     // ---------- 视图：两个标签 / 搜索 / 筛选 ----------
@@ -219,7 +221,14 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
     private void LegacyFilter_Changed(object sender, RoutedEventArgs e) => RebuildRows();
 
     /// <summary>「显示隐藏」：两列一直在，只是默认用 ******** 遮住内容；勾选后显示真实值。</summary>
-    private void LegacyShowHiddenCheck_Changed(object sender, RoutedEventArgs e) => RebuildRows();
+    private void LegacyShowHiddenCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        var revealHiddenContent = RevealHiddenContent;
+        foreach (var row in Rows)
+        {
+            row.SetHiddenContentVisible(revealHiddenContent);
+        }
+    }
 
     /// <summary>是否显示密码 / 其他两列的真实内容（默认遮住）。</summary>
     private bool RevealHiddenContent => LegacyShowHiddenCheck?.IsChecked == true;
@@ -270,10 +279,9 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
                 continue;
             }
 
-            index++;
             var row = new LegacyAccountRow(
                 account,
-                index,
+                ++index,
                 revealHiddenContent,
                 _rowHoverBrush,
                 _statusAvailableBrush,
@@ -465,6 +473,151 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         LegacyManagementVacCountText.Text = Loc.Tf("Legacy_Management_Vac_Format", vac);
     }
 
+    private void RefreshLastLoginAccountText()
+    {
+        var settings = AppState.SettingsService.Load();
+        var accountName = settings.LastLegacyLoginAccountName;
+        var hasLastLoginAccount = !string.IsNullOrWhiteSpace(accountName) &&
+            AppState.WhiteAccounts.Any(account => string.Equals(
+                account.AccountName,
+                accountName,
+                StringComparison.OrdinalIgnoreCase));
+        if (LegacyManagementLocateLastLoginButton is not null)
+        {
+            LegacyManagementLocateLastLoginButton.IsEnabled = hasLastLoginAccount;
+        }
+
+        if (LegacyAccountQueryLocateLastLoginButton is not null)
+        {
+            LegacyAccountQueryLocateLastLoginButton.IsEnabled = hasLastLoginAccount;
+        }
+
+        var managementIndexText = Rows
+            .FirstOrDefault(row => string.Equals(
+                row.AccountName,
+                accountName,
+                StringComparison.OrdinalIgnoreCase))
+            ?.IndexText;
+        var queryIndexText = AccountQueryRows
+            .FirstOrDefault(row => string.Equals(
+                row.AccountName,
+                accountName,
+                StringComparison.OrdinalIgnoreCase))
+            ?.IndexText;
+
+        if (LegacyManagementLastLoginAccountText is not null)
+        {
+            LegacyManagementLastLoginAccountText.Text = FormatLastLoginAccountText(
+                managementIndexText ?? settings.LastLegacyLoginAccountIndex,
+                accountName,
+                settings.LastLegacyLoginAccountPersonaName);
+        }
+
+        if (LegacyAccountQueryLastLoginAccountText is not null)
+        {
+            LegacyAccountQueryLastLoginAccountText.Text = FormatLastLoginAccountText(
+                queryIndexText ?? settings.LastLegacyLoginAccountIndex,
+                accountName,
+                settings.LastLegacyLoginAccountPersonaName);
+        }
+    }
+
+    private SteamAccountHistoryItem? GetLastLoginAccount()
+    {
+        var accountName = AppState.SettingsService.Load().LastLegacyLoginAccountName;
+        return string.IsNullOrWhiteSpace(accountName)
+            ? null
+            : AppState.WhiteAccounts.FirstOrDefault(account => string.Equals(
+                account.AccountName,
+                accountName,
+                StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void LegacyManagementLocateLastLoginButton_Click(object sender, RoutedEventArgs e)
+    {
+        var account = GetLastLoginAccount();
+        if (account is null)
+        {
+            AppState.ShowStatus(Loc.T("Legacy_LastLoginAccount_None"), InfoBarSeverity.Warning);
+            return;
+        }
+
+        var row = Rows.FirstOrDefault(candidate => string.Equals(
+            candidate.Item.AccountName,
+            account.AccountName,
+            StringComparison.OrdinalIgnoreCase));
+        if (row is null)
+        {
+            _legacyGroupFilter = null;
+            RebuildLegacyGroupFilterMenu();
+            if (LegacySearchBox is not null)
+            {
+                LegacySearchBox.Text = string.Empty;
+            }
+
+            if (LegacyShowAvailableCheck is not null)
+            {
+                LegacyShowAvailableCheck.IsChecked = false;
+            }
+
+            if (LegacyShowRemarkedCheck is not null)
+            {
+                LegacyShowRemarkedCheck.IsChecked = false;
+            }
+
+            RebuildRows(highlightFirst: false);
+            row = Rows.FirstOrDefault(candidate => string.Equals(
+                candidate.Item.AccountName,
+                account.AccountName,
+                StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (row is null)
+        {
+            AppState.ShowStatus(Loc.T("Legacy_LastLoginAccount_None"), InfoBarSeverity.Warning);
+            return;
+        }
+
+        HighlightRow(row, scrollToTop: false);
+        ScrollListRowToFifth(LegacyAccountList, Rows, row);
+    }
+
+    private static string FormatLastLoginAccountText(
+        string? indexText,
+        string? accountName,
+        string? personaName)
+    {
+        return !string.IsNullOrWhiteSpace(indexText) &&
+               !string.IsNullOrWhiteSpace(accountName)
+            ? Loc.Tf(
+                "Legacy_LastLoginAccount_Format",
+                indexText!,
+                accountName!,
+                string.IsNullOrWhiteSpace(personaName) ? "-" : personaName!)
+            : Loc.T("Legacy_LastLoginAccount_None");
+    }
+
+    private void RecordLastLoginAccount(string? indexText, SteamAccountHistoryItem account)
+    {
+        try
+        {
+            var settings = AppState.SettingsService.Load();
+            settings.LastLegacyLoginAccountIndex = string.IsNullOrWhiteSpace(indexText)
+                ? "-"
+                : indexText;
+            settings.LastLegacyLoginAccountName = account.AccountName;
+            settings.LastLegacyLoginAccountPersonaName = string.IsNullOrWhiteSpace(account.PersonaName)
+                ? "-"
+                : account.PersonaName;
+            AppState.SettingsService.Save(settings);
+            RefreshLastLoginAccountText();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"记录上次登录账号失败：{ex.Message}");
+        }
+    }
+
     private static bool Matches(SteamAccountHistoryItem account, string keyword) =>
         account.AccountName.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
         (account.PersonaName?.Contains(keyword, StringComparison.OrdinalIgnoreCase) ?? false) ||
@@ -506,6 +659,8 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
     private bool _checkboxDragActive;
     private bool _checkboxDragSelectValue;
     private uint _checkboxDragPointerId;
+    private LegacyAccountRow? _rightPressedRow;
+    private uint _rightPressedPointerId;
     private readonly HashSet<string> _vacPlaytimeQueriesInFlight =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -542,6 +697,12 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         var row = ResolveRowAt(rootPosition, source);
         if (row is not null)
         {
+            if (props.IsRightButtonPressed)
+            {
+                _rightPressedRow = row;
+                _rightPressedPointerId = e.Pointer.PointerId;
+            }
+
             HighlightRow(row, scrollToTop: false);
         }
     }
@@ -703,7 +864,11 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
 
         // 命中测试的坐标是根元素坐标系（窗口内坐标），不是列表自己的坐标。
         var rootPosition = e.GetCurrentPoint(null).Position;
-        var row = ResolveRowAt(rootPosition, source);
+        var row = e.Pointer.PointerId == _rightPressedPointerId
+            ? _rightPressedRow ?? ResolveRowAt(rootPosition, source)
+            : ResolveRowAt(rootPosition, source);
+        _rightPressedRow = null;
+        _rightPressedPointerId = 0;
         if (row is null)
         {
             return;
@@ -834,6 +999,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         {
             case "account":
                 _contextAccount = row.Item;
+                _contextAccountIndexText = row.IndexText;
 
                 // 与备注列右键完全同一套菜单样式：MenuFlyout + 带图标的菜单项。
                 var login = new MenuFlyoutItem
@@ -945,6 +1111,29 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         }
     }
 
+    /// <summary>把目标行滚到可视区第 5 行；靠近顶部或底部时按实际可滚动范围收敛。</summary>
+    private void ScrollListRowToFifth<T>(ListView listView, IList<T> rows, T row)
+    {
+        var index = rows.IndexOf(row);
+        if (index < 0)
+        {
+            return;
+        }
+
+        var scrollViewer = FindDescendant<ScrollViewer>(listView);
+        var rowHeight = scrollViewer is not null && rows.Count > 0
+            ? scrollViewer.ExtentHeight / rows.Count
+            : 0;
+        if (scrollViewer is null || rowHeight <= 0)
+        {
+            listView.ScrollIntoView(row, ScrollIntoViewAlignment.Leading);
+            return;
+        }
+
+        var targetOffset = Math.Max(0, (index - 4) * rowHeight);
+        scrollViewer.ChangeView(null, targetOffset, null, disableAnimation: false);
+    }
+
     private void FocusRowForAccount(SteamAccountHistoryItem account)
     {
         if (LegacyAccountList is null || Rows.Count == 0)
@@ -973,6 +1162,11 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
 
     private void LegacyRefreshButton_Click(object sender, RoutedEventArgs e)
     {
+        foreach (var row in Rows)
+        {
+            row.IsChecked = false;
+        }
+
         AppState.ReloadWhiteAccounts();
         RebuildRows();
         AppState.ShowStatus(Loc.Tf("Legacy_Status_Refreshed_Format", Rows.Count), InfoBarSeverity.Success);
@@ -1260,6 +1454,8 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
     /// <summary>右键点中的那一行（菜单项点击时用它取账号）。</summary>
     private SteamAccountHistoryItem? _contextAccount;
 
+    private string? _contextAccountIndexText;
+
     /// <summary>触屏/手写笔的右键手势兜底（鼠标右键已经在 PointerReleased 里弹过了）。</summary>
     private void LegacyAccountRow_RightTapped(object sender, RightTappedRoutedEventArgs e)
     {
@@ -1403,7 +1599,11 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         {
             Text = row.Item.Note ?? string.Empty,
             IsSpellCheckEnabled = false,
-            Header = Loc.T("Legacy_Dialog_Note_Header")
+            Header = new TextBlock
+            {
+                Text = Loc.T("Legacy_Dialog_Note_Header"),
+                Foreground = new SolidColorBrush(Microsoft.UI.Colors.White)
+            }
         };
 
         var content = new StackPanel { Spacing = 10 };
@@ -1750,21 +1950,32 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
     {
         try
         {
-            var hours = await AppState.AccountQueryService.QueryCs2PlaytimeAsync(
+            var result = await AppState.AccountQueryService.QueryCs2PlaytimeAndPersonaAsync(
                 account,
                 (prompt, token) => PromptGuardCodeAsync(prompt, token, account),
                 CancellationToken.None);
-            if (!hours.HasValue)
+
+            if (result.Cs2PlaytimeHours is { } hours)
+            {
+                ApplyCs2PlaytimeResult(account, hours, "冷却设置后");
+            }
+            else
             {
                 AppLog.Warn($"冷却设置后未获取到 CS2 游戏时间：{account.AccountName}");
-                return;
             }
 
-            ApplyCs2PlaytimeResult(account, hours.Value, "冷却设置后");
+            if (!string.IsNullOrWhiteSpace(result.PersonaName))
+            {
+                ApplyPersonaNameResult(account, result.PersonaName, "冷却设置后");
+            }
+            else
+            {
+                AppLog.Warn($"冷却设置后未获取到 Steam 昵称：{account.AccountName}");
+            }
         }
         catch (Exception ex)
         {
-            AppLog.Warn($"冷却设置后异步查询 CS2 游戏时间失败（{account.AccountName}）：{ex.Message}");
+            AppLog.Warn($"冷却设置后异步查询 CS2 游戏时间/昵称失败（{account.AccountName}）：{ex.Message}");
         }
         finally
         {
@@ -1816,6 +2027,52 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         AppLog.Info(
             $"{operation}CS2 游戏时间已更新：{account.AccountName}，" +
             $"{FormatHelper.FormatCs2PlaytimeText(playtimeHours)}");
+    }
+
+    private void ApplyPersonaNameResult(
+        SteamAccountHistoryItem account,
+        string personaName,
+        string operation)
+    {
+        var normalized = personaName.Trim();
+        if (string.IsNullOrWhiteSpace(normalized) ||
+            !AppState.WhiteAccountService.SetPersonaName(
+                account.AccountName,
+                account.SteamId,
+                normalized))
+        {
+            AppLog.Warn($"{operation}保存 Steam 昵称失败：{account.AccountName}");
+            return;
+        }
+
+        account.PersonaName = normalized;
+        var stateItem = AppState.WhiteAccounts.FirstOrDefault(item =>
+            string.Equals(item.SteamId, account.SteamId, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(item.AccountName, account.AccountName, StringComparison.OrdinalIgnoreCase));
+        if (stateItem is not null)
+        {
+            stateItem.PersonaName = normalized;
+        }
+
+        var managementRow = Rows.FirstOrDefault(row =>
+            string.Equals(row.Item.SteamId, account.SteamId, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(row.Item.AccountName, account.AccountName, StringComparison.OrdinalIgnoreCase));
+        if (managementRow is not null)
+        {
+            managementRow.Item.PersonaName = normalized;
+            managementRow.RefreshPersonaNameFromItem();
+        }
+
+        var queryRow = AccountQueryRows.FirstOrDefault(row =>
+            string.Equals(row.Item.SteamId, account.SteamId, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(row.Item.AccountName, account.AccountName, StringComparison.OrdinalIgnoreCase));
+        if (queryRow is not null)
+        {
+            queryRow.Item.PersonaName = normalized;
+            queryRow.RefreshPersonaNameFromItem();
+        }
+
+        AppLog.Info($"{operation}Steam 昵称已更新：{account.AccountName} -> {normalized}");
     }
 
     /// <summary>需要 Steam Guard 时弹框要验证码（与历史页同一套交互，页面各自持有）。</summary>
@@ -1879,6 +2136,8 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             return;
         }
 
+        var contextIndexText = _contextAccountIndexText;
+
         if (string.IsNullOrWhiteSpace(account.AccountName))
         {
             AppState.ShowStatus(Loc.T("Creds_Error_AccountRequired"), InfoBarSeverity.Error);
@@ -1913,6 +2172,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
                     progress,
                     account.SteamId),
                 cancellationToken);
+            RecordLastLoginAccount(contextIndexText, account);
             AppState.ShowStatus(
                 Loc.Tf("History_Status_LoginStarted_Format", account.AccountTitle, account.SteamId),
                 InfoBarSeverity.Success);
@@ -2341,7 +2601,7 @@ public sealed partial class LegacyAccountRow : INotifyPropertyChanged
 
         AccountName = item.AccountName;
         Password = item.Password;
-        PasswordText = revealHiddenContent ? item.Password : Mask;
+        _revealHiddenContent = revealHiddenContent;
         Note = item.Note ?? string.Empty;
         // 冷却按「剩余秒数」判定：快照冷却早已到期时本页也要显示「可用」。
         var hasCooldown = item.GcVacBanned != true && (item.RemainingCooldownSeconds ?? 0) > 0;
@@ -2361,7 +2621,6 @@ public sealed partial class LegacyAccountRow : INotifyPropertyChanged
         Others = string.IsNullOrWhiteSpace(item.Email)
             ? string.Empty
             : string.IsNullOrWhiteSpace(item.EmailPassword) ? item.Email! : $"{item.Email}----{item.EmailPassword}";
-        OthersText = string.IsNullOrEmpty(Others) ? string.Empty : revealHiddenContent ? Others : Mask;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -2410,15 +2669,24 @@ public sealed partial class LegacyAccountRow : INotifyPropertyChanged
 
     public string AccountName { get; }
 
+    public string PersonaName => string.IsNullOrWhiteSpace(Item.PersonaName)
+        ? "-"
+        : Item.PersonaName!;
+
     public string Password { get; }
 
+    private bool _revealHiddenContent;
+
     /// <summary>密码列显示内容：默认 ********，勾选「显示隐藏」后是真实密码。</summary>
-    public string PasswordText { get; }
+    public string PasswordText => _revealHiddenContent ? Password : Mask;
 
     public string Cs2PlaytimeText => Item.Cs2PlaytimeText;
 
     public void RefreshCs2PlaytimeFromItem() =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Cs2PlaytimeText)));
+
+    public void RefreshPersonaNameFromItem() =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PersonaName)));
 
     private string _statusText = string.Empty;
 
@@ -2493,7 +2761,21 @@ public sealed partial class LegacyAccountRow : INotifyPropertyChanged
     public string Others { get; }
 
     /// <summary>其他列显示内容：默认 ********，勾选后是「邮箱----邮箱密码」。</summary>
-    public string OthersText { get; }
+    public string OthersText => string.IsNullOrEmpty(Others)
+        ? string.Empty
+        : _revealHiddenContent ? Others : Mask;
+
+    public void SetHiddenContentVisible(bool reveal)
+    {
+        if (_revealHiddenContent == reveal)
+        {
+            return;
+        }
+
+        _revealHiddenContent = reveal;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PasswordText)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(OthersText)));
+    }
 
     public bool IsChecked
     {

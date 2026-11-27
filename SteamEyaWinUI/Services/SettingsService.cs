@@ -477,11 +477,18 @@ internal sealed class AppSettings
     /// <summary>更新检查使用的 GitHub 站点代码（direct / gh-proxy.org / v4.gh-proxy.org / v6.gh-proxy.org / cdn.gh-proxy.org），与 GitHubUpdateService.ProxySites 保持一致；未知值回退 direct。</summary>
     public string UpdateProxySite { get; set; } = "direct";
 
-    /// <summary>「账号查询」页的并发线程数（1~100）。</summary>
-    public int AccountQueryThreadCount { get; set; } = 3;
+    /// <summary>「账号查询」页的并发线程数；只要求至少为 1，不设置上限。</summary>
+    public int AccountQueryThreadCount { get; set; } = 2;
 
     /// <summary>账号管理页「账号查询」标签最近一次完成整轮查询的本地时间。</summary>
     public DateTimeOffset? AccountQueryLastRunAt { get; set; }
+
+    /// <summary>账号管理/查询页最近一次通过右键「登录」启动的账号快照。</summary>
+    public string? LastLegacyLoginAccountIndex { get; set; }
+
+    public string? LastLegacyLoginAccountName { get; set; }
+
+    public string? LastLegacyLoginAccountPersonaName { get; set; }
 
     /// <summary>最近一次「每日数据备份」的日期（本地 yyyy-MM-dd）：同一天只备份一次。</summary>
     public string? LastDailyBackupDate { get; set; }

@@ -81,7 +81,7 @@
             <Setter Property="Height" Value="15" />
             <Setter Property="MinWidth" Value="0" />
             <Setter Property="MinHeight" Value="0" />
-            <Setter Property="Padding" Value="0" />
+            <Setter Property="Padding" Value="0,6,0,0" />
             <Setter Property="CornerRadius" Value="6" />
         </Style>
 
@@ -90,6 +90,19 @@
             <Setter Property="BorderBrush" Value="#4FFFFFFF" />
             <Setter Property="Foreground" Value="{StaticResource LegacyTextPrimaryBrush}" />
             <Setter Property="CornerRadius" Value="12" />
+        </Style>
+
+        <Style x:Key="LegacyQueryThreadTextBoxStyle" TargetType="TextBox" BasedOn="{StaticResource LegacySearchTextBoxStyle}">
+            <Setter Property="Height" Value="32" />
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Padding" Value="0,6,0,0" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="FontFamily" Value="Consolas" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="TextAlignment" Value="Center" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="UseSystemFocusVisuals" Value="False" />
         </Style>
 
         <Style x:Key="LegacyTableTextStyle" TargetType="TextBlock">
@@ -429,30 +442,32 @@
                     <Grid
                         x:Name="LegacyHeaderGrid"
                         ColumnSpacing="6"
-                        Padding="6,8,6,8"
+                        Padding="6,8"
                         Background="{ThemeResource AuroraPaneBrush}"
                         CornerRadius="12,12,0,0"
                         BorderThickness="0,0,0,1"
                         BorderBrush="{StaticResource LegacyDividerBrush}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="32" />
-                            <ColumnDefinition Width="32" />
-                            <ColumnDefinition Width="110" />
-                            <ColumnDefinition Width="95" />
-                            <ColumnDefinition Width="70" />
-                            <ColumnDefinition Width="2*" MinWidth="214" />
-                            <ColumnDefinition Width="112" />
-                            <ColumnDefinition Width="140" />
-                            <ColumnDefinition Width="*" MinWidth="60" />
+                            <ColumnDefinition Width="0.35*" MinWidth="40" />
+                            <ColumnDefinition Width="1.1*" MinWidth="100" />
+                            <ColumnDefinition Width="0.98*" MinWidth="107" />
+                            <ColumnDefinition Width="0.7*" MinWidth="105" />
+                            <ColumnDefinition Width="0.8*" MinWidth="70" />
+                            <ColumnDefinition Width="2*" MinWidth="240" />
+                            <ColumnDefinition Width="1*" MinWidth="110" />
+                            <ColumnDefinition Width="1.42*" MinWidth="125" />
+                            <ColumnDefinition Width="0.7*" MinWidth="82" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="1" Text="{x:Bind Strings.Get('Legacy_Col_Index'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
                         <TextBlock Grid.Column="2" Text="{x:Bind Strings.Get('Legacy_Col_Account'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
-                        <TextBlock Grid.Column="3" Text="{x:Bind Strings.Get('Legacy_Col_Password'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
-                        <TextBlock Grid.Column="4" Text="{x:Bind Strings.Get('Legacy_Col_Status'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
-                        <TextBlock Grid.Column="5" Text="{x:Bind Strings.Get('Legacy_Col_Cooldown'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
-                        <TextBlock Grid.Column="6" Text="{x:Bind Strings.Get('Legacy_Col_Cs2Playtime'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
-                        <TextBlock Grid.Column="7" Text="{x:Bind Strings.Get('Legacy_Col_Note'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
-                        <TextBlock Grid.Column="8" Text="{x:Bind Strings.Get('Legacy_Col_Others'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                        <TextBlock Grid.Column="3" Text="{x:Bind Strings.Get('Legacy_Query_Col_Persona'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                        <TextBlock Grid.Column="4" Text="{x:Bind Strings.Get('Legacy_Col_Password'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                        <TextBlock Grid.Column="5" Text="{x:Bind Strings.Get('Legacy_Col_Status'), Mode=OneWay}" Margin="-4,0,0,0" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                        <TextBlock Grid.Column="6" Text="{x:Bind Strings.Get('Legacy_Col_Cooldown'), Mode=OneWay}" Margin="-4,0,0,0" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                        <TextBlock Grid.Column="7" Text="{x:Bind Strings.Get('Legacy_Col_Cs2Playtime'), Mode=OneWay}" Margin="6,0,0,0" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                        <TextBlock Grid.Column="8" Text="{x:Bind Strings.Get('Legacy_Col_Note'), Mode=OneWay}" Margin="6,0,0,0" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                        <TextBlock Grid.Column="9" Text="{x:Bind Strings.Get('Legacy_Col_Others'), Mode=OneWay}" Margin="6,0,0,0" Style="{StaticResource LegacyTableHeaderTextStyle}" />
                     </Grid>
 
                     <ListView
@@ -485,17 +500,18 @@
                                     PointerExited="LegacyAccountRow_PointerExited">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="32" />
-                                        <ColumnDefinition Width="32" />
-                                        <ColumnDefinition Width="110" />
-                                        <ColumnDefinition Width="95" />
-                                        <ColumnDefinition Width="70" />
-                                        <ColumnDefinition Width="2*" MinWidth="214" />
-                                        <ColumnDefinition Width="112" />
-                                        <ColumnDefinition Width="140" />
-                                        <ColumnDefinition Width="*" MinWidth="60" />
+                                        <ColumnDefinition Width="0.35*" MinWidth="40" />
+                                        <ColumnDefinition Width="1.1*" MinWidth="100" />
+                                        <ColumnDefinition Width="0.98*" MinWidth="107" />
+                                        <ColumnDefinition Width="0.7*" MinWidth="105" />
+                                        <ColumnDefinition Width="0.8*" MinWidth="70" />
+                                        <ColumnDefinition Width="2*" MinWidth="240" />
+                                        <ColumnDefinition Width="1*" MinWidth="110" />
+                                        <ColumnDefinition Width="1.42*" MinWidth="125" />
+                                        <ColumnDefinition Width="0.7*" MinWidth="82" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.ColumnSpan="9" Background="{x:Bind HoverBrush, Mode=OneWay}" CornerRadius="8" IsHitTestVisible="False" />
-                                    <Border Grid.ColumnSpan="9" Background="{x:Bind HighlightBrush, Mode=OneWay}" CornerRadius="8" IsHitTestVisible="False" />
+                                    <Border Grid.ColumnSpan="10" Background="{x:Bind HoverBrush, Mode=OneWay}" CornerRadius="8" IsHitTestVisible="False" />
+                                    <Border Grid.ColumnSpan="10" Background="{x:Bind HighlightBrush, Mode=OneWay}" CornerRadius="8" IsHitTestVisible="False" />
                                     <CheckBox
                                         Grid.Column="0"
                                         MinWidth="0"
@@ -521,7 +537,12 @@
                                         />
                                     <TextBlock
                                         Grid.Column="3"
-                                        Text="{x:Bind PasswordText}"
+                                        Text="{x:Bind PersonaName, Mode=OneWay}"
+                                        TextTrimming="CharacterEllipsis"
+                                        Style="{StaticResource LegacyTableTextStyle}" />
+                                    <TextBlock
+                                        Grid.Column="4"
+                                        Text="{x:Bind PasswordText, Mode=OneWay}"
                                         TextTrimming="CharacterEllipsis"
                                         Style="{StaticResource LegacyTableTextStyle}"
                                         Tag="password"
@@ -529,10 +550,11 @@
                                         DoubleTapped="LegacyAccountCell_DoubleTapped" HorizontalAlignment="Stretch"
                                         MinHeight="20"
                                         />
-                                    <TextBlock Grid.Column="4" Text="{x:Bind StatusText, Mode=OneWay}" Foreground="{x:Bind StatusBrush, Mode=OneWay}" TextTrimming="CharacterEllipsis" Style="{StaticResource LegacyTableTextStyle}" />
+                                    <TextBlock Grid.Column="5" Text="{x:Bind StatusText, Mode=OneWay}" Foreground="{x:Bind StatusBrush, Mode=OneWay}" Margin="-4,0,0,0" TextTrimming="CharacterEllipsis" Style="{StaticResource LegacyTableTextStyle}" />
                                     <TextBlock
-                                        Grid.Column="7"
+                                        Grid.Column="8"
                                         Text="{x:Bind Note, Mode=OneWay}"
+                                        Margin="6,0,0,0"
                                         TextTrimming="CharacterEllipsis"
                                         Style="{StaticResource LegacyTableTextStyle}"
                                         Tag="note"
@@ -540,8 +562,9 @@
                                         MinHeight="20"
                                         />
                                     <TextBlock
-                                        Grid.Column="8"
-                                        Text="{x:Bind OthersText}"
+                                        Grid.Column="9"
+                                        Text="{x:Bind OthersText, Mode=OneWay}"
+                                        Margin="6,0,0,0"
                                         TextTrimming="CharacterEllipsis"
                                         Style="{StaticResource LegacyTableTextStyle}"
                                         Tag="others"
@@ -551,16 +574,18 @@
                                         MinHeight="20"
                                         />
                                     <TextBlock
-                                        Grid.Column="6"
+                                        Grid.Column="7"
                                         Text="{x:Bind Cs2PlaytimeText, Mode=OneWay}"
+                                        Margin="6,0,0,0"
                                         TextTrimming="CharacterEllipsis"
                                         HorizontalAlignment="Left"
                                         Style="{StaticResource LegacyTableTextStyle}" />
                                     <!-- 冷却时间（冷却结束的绝对时间）：右键可改冷却 -->
                                     <TextBlock
-                                        Grid.Column="5"
+                                        Grid.Column="6"
                                         Text="{x:Bind CooldownEndText, Mode=OneWay}"
                                         Foreground="{x:Bind StatusBrush, Mode=OneWay}"
+                                        Margin="-4,0,0,0"
                                         TextTrimming="CharacterEllipsis"
                                         Style="{StaticResource LegacyTableTextStyle}"
                                         Tag="cooldownEnd"
@@ -576,31 +601,60 @@
 
             <!-- 账号管理底栏：与账号查询底栏同模板，统计当前可见账号 -->
             <Border Grid.Row="2" Background="{ThemeResource AuroraPaneBrush}" CornerRadius="12" Padding="12,8">
-                <StackPanel
-                    Orientation="Horizontal"
-                    Spacing="16"
-                    HorizontalAlignment="Right">
-                    <TextBlock
-                        x:Name="LegacyManagementSelectedCountText"
-                        VerticalAlignment="Center"
-                        Foreground="{StaticResource LegacyTextMutedBrush}" />
-                    <TextBlock
-                        x:Name="LegacyManagementTotalCountText"
-                        VerticalAlignment="Center"
-                        Foreground="{StaticResource LegacyTextSecondaryBrush}" />
-                    <TextBlock
-                        x:Name="LegacyManagementAvailableCountText"
-                        VerticalAlignment="Center"
-                        Foreground="{StaticResource LegacyStatusAvailableBrush}" />
-                    <TextBlock
-                        x:Name="LegacyManagementCooldownCountText"
-                        VerticalAlignment="Center"
-                        Foreground="{StaticResource LegacyStatusCooldownBrush}" />
-                    <TextBlock
-                        x:Name="LegacyManagementVacCountText"
-                        VerticalAlignment="Center"
-                        Foreground="{StaticResource LegacyStatusVacBrush}" />
-                </StackPanel>
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid Grid.Column="0" ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Button
+                            x:Name="LegacyManagementLocateLastLoginButton"
+                            Grid.Column="0"
+                            Padding="10,4"
+                            MinHeight="0"
+                            VerticalAlignment="Center"
+                            Style="{StaticResource LegacyIcedGlassButtonStyle}"
+                            Click="LegacyManagementLocateLastLoginButton_Click">
+                            <TextBlock Text="{x:Bind Strings.Get('Legacy_LastLoginAccount_Locate'), Mode=OneWay}" />
+                        </Button>
+                        <TextBlock
+                            x:Name="LegacyManagementLastLoginAccountText"
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            Foreground="{StaticResource LegacyTextSecondaryBrush}"
+                            TextTrimming="CharacterEllipsis" />
+                    </Grid>
+                    <StackPanel
+                        Grid.Column="1"
+                        Orientation="Horizontal"
+                        Spacing="16"
+                        HorizontalAlignment="Right">
+                        <TextBlock
+                            x:Name="LegacyManagementSelectedCountText"
+                            VerticalAlignment="Center"
+                            Foreground="{StaticResource LegacyTextMutedBrush}" />
+                        <TextBlock
+                            x:Name="LegacyManagementTotalCountText"
+                            VerticalAlignment="Center"
+                            Foreground="{StaticResource LegacyTextSecondaryBrush}" />
+                        <TextBlock
+                            x:Name="LegacyManagementAvailableCountText"
+                            VerticalAlignment="Center"
+                            Foreground="{StaticResource LegacyStatusAvailableBrush}" />
+                        <TextBlock
+                            x:Name="LegacyManagementCooldownCountText"
+                            VerticalAlignment="Center"
+                            Foreground="{StaticResource LegacyStatusCooldownBrush}" />
+                        <TextBlock
+                            x:Name="LegacyManagementVacCountText"
+                            VerticalAlignment="Center"
+                            Foreground="{StaticResource LegacyStatusVacBrush}" />
+                    </StackPanel>
+                </Grid>
             </Border>
 
         </Grid>
@@ -799,68 +853,55 @@
                                 Text="{x:Bind Strings.Get('Legacy_Query_Threads'), Mode=OneWay}"
                                 VerticalAlignment="Center"
                                 Foreground="{StaticResource LegacyTextSecondaryBrush}" />
-                            <Border
-                                Width="112"
-                                Height="36"
-                                Background="{StaticResource LegacyInputSurfaceBrush}"
-                                BorderBrush="#4FFFFFFF"
-                                BorderThickness="1"
-                                CornerRadius="12">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="32" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock
-                                        x:Name="LegacyAccountQueryThreadDisplay"
-                                        Text="3"
-                                        HorizontalAlignment="Center"
-                                        VerticalAlignment="Center"
-                                        Foreground="{StaticResource LegacyTextPrimaryBrush}"
-                                        FontFamily="Consolas" />
-                                    <StackPanel Grid.Column="1" Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                        <Button
-                                            Style="{StaticResource LegacyQueryStepperButtonStyle}"
-                                            Click="LegacyAccountQueryThreadIncrementButton_Click">
-                                            <FontIcon Glyph="&#xE70E;" FontSize="7" />
-                                        </Button>
-                                        <Button
-                                            Style="{StaticResource LegacyQueryStepperButtonStyle}"
-                                            Click="LegacyAccountQueryThreadDecrementButton_Click">
-                                            <FontIcon Glyph="&#xE70D;" FontSize="7" />
-                                        </Button>
-                                    </StackPanel>
-                                </Grid>
-                            </Border>
-                            <TextBox
-                                x:Name="LegacyAccountQueryThreadTextBox"
-                                Width="92"
-                                Height="36"
-                                MaxLength="3"
-                                Text="3"
-                                TextAlignment="Center"
-                                IsSpellCheckEnabled="False"
-                                PlaceholderText="1-100"
-                                Style="{StaticResource LegacySearchTextBoxStyle}"
-                                BorderThickness="0"
-                                UseSystemFocusVisuals="False"
-                                FocusVisualPrimaryThickness="0"
-                                FocusVisualSecondaryThickness="0"
-                                TextChanged="LegacyAccountQueryThreadTextBox_TextChanged"
-                                LostFocus="LegacyAccountQueryThreadTextBox_LostFocus"
-                                KeyDown="LegacyAccountQueryThreadTextBox_KeyDown">
-                                <TextBox.Resources>
-                                    <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="Transparent" />
-                                    <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="Transparent" />
-                                </TextBox.Resources>
-                                <TextBox.InputScope>
-                                    <InputScope>
-                                        <InputScope.Names>
-                                            <InputScopeName NameValue="Number" />
-                                        </InputScope.Names>
-                                    </InputScope>
-                                </TextBox.InputScope>
-                            </TextBox>
+                            <Grid Width="136" ColumnSpacing="4" VerticalAlignment="Center">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox
+                                    x:Name="LegacyAccountQueryThreadTextBox"
+                                    VerticalAlignment="Center"
+                                    MaxLength="10"
+                                    Text="2"
+                                    TextAlignment="Center"
+                                    IsSpellCheckEnabled="False"
+                                    Style="{StaticResource LegacyQueryThreadTextBoxStyle}"
+                                    FocusVisualPrimaryThickness="0"
+                                    FocusVisualSecondaryThickness="0"
+                                    TextChanged="LegacyAccountQueryThreadTextBox_TextChanged"
+                                    Loaded="LegacyAccountQueryThreadTextBox_Loaded"
+                                    LostFocus="LegacyAccountQueryThreadTextBox_LostFocus"
+                                    KeyDown="LegacyAccountQueryThreadTextBox_KeyDown">
+                                    <TextBox.Resources>
+                                        <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#B3F472B6" />
+                                        <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#73F472B6" />
+                                        <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#52FFFFFF" />
+                                    </TextBox.Resources>
+                                    <TextBox.InputScope>
+                                        <InputScope>
+                                            <InputScope.Names>
+                                                <InputScopeName NameValue="Number" />
+                                            </InputScope.Names>
+                                        </InputScope>
+                                    </TextBox.InputScope>
+                                </TextBox>
+                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                    <RepeatButton
+                                        Width="32"
+                                        Height="16"
+                                        Style="{StaticResource ThemedNumberBoxSpinButtonStyle}"
+                                        Click="LegacyAccountQueryThreadIncrementButton_Click">
+                                        <FontIcon Glyph="&#xE70E;" FontSize="7" />
+                                    </RepeatButton>
+                                    <RepeatButton
+                                        Width="32"
+                                        Height="16"
+                                        Style="{StaticResource ThemedNumberBoxSpinButtonStyle}"
+                                        Click="LegacyAccountQueryThreadDecrementButton_Click">
+                                        <FontIcon Glyph="&#xE70D;" FontSize="7" />
+                                    </RepeatButton>
+                                </StackPanel>
+                            </Grid>
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
@@ -876,32 +917,35 @@
                     x:Name="LegacyAccountQueryHeaderGrid"
                     ColumnSpacing="8"
                     Padding="6,8"
+                    HorizontalAlignment="Left"
                     Background="{ThemeResource AuroraPaneBrush}"
                     CornerRadius="12,12,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="32" />
+                        <ColumnDefinition Width="40" />
                         <ColumnDefinition Width="1*" />
                         <ColumnDefinition Width="0.8*" />
                         <ColumnDefinition Width="1.2*" />
                         <ColumnDefinition Width="1.25*" />
                         <ColumnDefinition Width="0.45*" />
                         <ColumnDefinition Width="1.35*" />
-                        <ColumnDefinition Width="0.5*" />
-                        <ColumnDefinition Width="0.55*" />
+                        <ColumnDefinition Width="0.42*" />
+                        <ColumnDefinition Width="0.46*" />
                         <ColumnDefinition Width="1.5*" />
-                        <ColumnDefinition Width="1.35*" />
+                        <ColumnDefinition Width="1.53*" />
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="{x:Bind Strings.Get('Legacy_Query_Col_Select'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" HorizontalAlignment="Center" />
-                    <TextBlock Grid.Column="1" Text="{x:Bind Strings.Get('Legacy_Col_Account'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
-                    <TextBlock Grid.Column="2" Text="{x:Bind Strings.Get('Legacy_Col_Status'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
-                    <TextBlock Grid.Column="3" Text="{x:Bind Strings.Get('Legacy_Query_Col_Persona'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
-                    <TextBlock Grid.Column="4" Text="{x:Bind Strings.Get('Legacy_Col_Cs2Playtime'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
-                    <TextBlock Grid.Column="5" Text="{x:Bind Strings.Get('Legacy_Query_Col_Rank'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
-                    <TextBlock Grid.Column="6" Text="{x:Bind Strings.Get('Legacy_Query_Col_LastLogin'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
-                    <TextBlock Grid.Column="7" Text="{x:Bind Strings.Get('Legacy_Query_Col_Region'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
-                    <TextBlock Grid.Column="8" Text="{x:Bind Strings.Get('Legacy_Query_Col_China'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
-                    <TextBlock Grid.Column="9" Text="{x:Bind Strings.Get('Legacy_Query_Col_SteamId'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
-                    <TextBlock Grid.Column="10" Text="{x:Bind Strings.Get('Legacy_Query_Col_BanTime'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                    <TextBlock Grid.Column="1" Text="{x:Bind Strings.Get('Legacy_Col_Index'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                    <TextBlock Grid.Column="2" Text="{x:Bind Strings.Get('Legacy_Col_Account'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                    <TextBlock Grid.Column="3" Text="{x:Bind Strings.Get('Legacy_Col_Status'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                    <TextBlock Grid.Column="4" Text="{x:Bind Strings.Get('Legacy_Query_Col_Persona'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                    <TextBlock Grid.Column="5" Text="{x:Bind Strings.Get('Legacy_Col_Cs2Playtime'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                    <TextBlock Grid.Column="6" Text="{x:Bind Strings.Get('Legacy_Query_Col_Rank'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                    <TextBlock Grid.Column="7" Text="{x:Bind Strings.Get('Legacy_Query_Col_LastLogin'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                    <TextBlock Grid.Column="8" Text="{x:Bind Strings.Get('Legacy_Query_Col_Region'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                    <TextBlock Grid.Column="9" Text="{x:Bind Strings.Get('Legacy_Query_Col_China'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                    <TextBlock Grid.Column="10" Text="{x:Bind Strings.Get('Legacy_Query_Col_SteamId'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
+                    <TextBlock Grid.Column="11" Text="{x:Bind Strings.Get('Legacy_Query_Col_BanTime'), Mode=OneWay}" Style="{StaticResource LegacyTableHeaderTextStyle}" />
                 </Grid>
 
                 <ListView
@@ -910,6 +954,7 @@
                     SelectionMode="None"
                     IsItemClickEnabled="True"
                     ItemClick="LegacyAccountQueryList_ItemClick"
+                    SizeChanged="LegacyAccountQueryList_SizeChanged"
                     Background="{ThemeResource AuroraPaneBrush}"
                     CornerRadius="0,0,12,12"
                     ItemsSource="{x:Bind AccountQueryRows, Mode=OneWay}"
@@ -934,19 +979,20 @@
                             <Grid ColumnSpacing="8">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="32" />
+                                    <ColumnDefinition Width="40" />
                                     <ColumnDefinition Width="1*" />
                                     <ColumnDefinition Width="0.8*" />
                                     <ColumnDefinition Width="1.2*" />
                                     <ColumnDefinition Width="1.25*" />
                                     <ColumnDefinition Width="0.45*" />
                                     <ColumnDefinition Width="1.35*" />
-                                    <ColumnDefinition Width="0.5*" />
-                                    <ColumnDefinition Width="0.55*" />
+                                    <ColumnDefinition Width="0.42*" />
+                                    <ColumnDefinition Width="0.46*" />
                                     <ColumnDefinition Width="1.5*" />
-                                    <ColumnDefinition Width="1.35*" />
+                                    <ColumnDefinition Width="1.53*" />
                                 </Grid.ColumnDefinitions>
                                 <Border
-                                    Grid.ColumnSpan="11"
+                                    Grid.ColumnSpan="12"
                                     Background="{x:Bind HighlightBrush, Mode=OneWay}"
                                     CornerRadius="8"
                                     IsHitTestVisible="False" />
@@ -963,6 +1009,11 @@
                                     Tag="checkbox" />
                                 <TextBlock
                                     Grid.Column="1"
+                                    Text="{x:Bind IndexText}"
+                                    TextTrimming="CharacterEllipsis"
+                                    Style="{StaticResource LegacyTableTextStyle}" />
+                                <TextBlock
+                                    Grid.Column="2"
                                     Text="{x:Bind AccountName}"
                                     TextTrimming="CharacterEllipsis"
                                     Style="{StaticResource LegacyTableTextStyle}"
@@ -973,27 +1024,27 @@
                                     HorizontalAlignment="Stretch"
                                     MinHeight="20" />
                                 <TextBlock
-                                    Grid.Column="2"
+                                    Grid.Column="3"
                                     Text="{x:Bind StatusText, Mode=OneWay}"
                                     Foreground="{x:Bind StatusBrush, Mode=OneWay}"
                                     TextTrimming="CharacterEllipsis"
                                     ToolTipService.ToolTip="{x:Bind StatusDetail, Mode=OneWay}"
                                     Style="{StaticResource LegacyTableTextStyle}" />
-                                <TextBlock Grid.Column="3" Text="{x:Bind PersonaName, Mode=OneWay}" TextTrimming="CharacterEllipsis" Style="{StaticResource LegacyTableTextStyle}" />
-                                <TextBlock Grid.Column="4" Text="{x:Bind Cs2PlaytimeText, Mode=OneWay}" HorizontalAlignment="Left" Style="{StaticResource LegacyTableTextStyle}" />
-                                <TextBlock Grid.Column="5" Text="{x:Bind RankText, Mode=OneWay}" HorizontalAlignment="Left" Style="{StaticResource LegacyTableTextStyle}" />
-                                <TextBlock Grid.Column="6" Text="{x:Bind LastLoginText, Mode=OneWay}" Style="{StaticResource LegacyTableTextStyle}" />
-                                <TextBlock Grid.Column="7" Text="{x:Bind RegionText, Mode=OneWay}" HorizontalAlignment="Left" Style="{StaticResource LegacyTableTextStyle}" />
-                                <TextBlock Grid.Column="8" Text="{x:Bind ChinaSteamText, Mode=OneWay}" HorizontalAlignment="Left" Style="{StaticResource LegacyTableTextStyle}" />
+                                <TextBlock Grid.Column="4" Text="{x:Bind PersonaName, Mode=OneWay}" TextTrimming="CharacterEllipsis" Style="{StaticResource LegacyTableTextStyle}" />
+                                <TextBlock Grid.Column="5" Text="{x:Bind Cs2PlaytimeText, Mode=OneWay}" HorizontalAlignment="Left" Style="{StaticResource LegacyTableTextStyle}" />
+                                <TextBlock Grid.Column="6" Text="{x:Bind RankText, Mode=OneWay}" HorizontalAlignment="Left" Style="{StaticResource LegacyTableTextStyle}" />
+                                <TextBlock Grid.Column="7" Text="{x:Bind LastLoginText, Mode=OneWay}" Style="{StaticResource LegacyTableTextStyle}" />
+                                <TextBlock Grid.Column="8" Text="{x:Bind RegionText, Mode=OneWay}" HorizontalAlignment="Left" Style="{StaticResource LegacyTableTextStyle}" />
+                                <TextBlock Grid.Column="9" Text="{x:Bind ChinaSteamText, Mode=OneWay}" HorizontalAlignment="Left" Style="{StaticResource LegacyTableTextStyle}" />
                                 <TextBlock
-                                    Grid.Column="9"
+                                    Grid.Column="10"
                                     Text="{x:Bind SteamIdText, Mode=OneWay}"
                                     Style="{StaticResource LegacyTableTextStyle}"
                                     HorizontalAlignment="Stretch"
                                     IsDoubleTapEnabled="True"
                                     DoubleTapped="LegacyAccountQuerySteamId_DoubleTapped" />
                                 <TextBlock
-                                    Grid.Column="10"
+                                    Grid.Column="11"
                                     Text="{x:Bind BanTimeText, Mode=OneWay}"
                                     Foreground="{x:Bind BanTimeBrush, Mode=OneWay}"
                                     Style="{StaticResource LegacyTableTextStyle}" />
@@ -1006,17 +1057,41 @@
             <Border Grid.Row="3" Background="{ThemeResource AuroraPaneBrush}" CornerRadius="12" Padding="12,8">
                 <Grid ColumnSpacing="16">
                     <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock x:Name="LegacyAccountQueryStatusText" Grid.Column="0" Text="{x:Bind Strings.Get('Legacy_Query_Ready'), Mode=OneWay}" VerticalAlignment="Center" Foreground="{StaticResource LegacyTextSecondaryBrush}" TextTrimming="CharacterEllipsis" />
-                    <TextBlock x:Name="LegacyAccountQuerySelectedCountText" Grid.Column="1" VerticalAlignment="Center" Foreground="{StaticResource LegacyTextMutedBrush}" />
-                    <TextBlock x:Name="LegacyAccountQuerySuccessCountText" Grid.Column="2" VerticalAlignment="Center" Foreground="{StaticResource LegacyStatusAvailableBrush}" />
-                    <TextBlock x:Name="LegacyAccountQueryTotalCountText" Grid.Column="3" VerticalAlignment="Center" Foreground="{StaticResource LegacyTextSecondaryBrush}" />
-                    <TextBlock x:Name="LegacyAccountQueryLastRunText" Grid.Column="4" VerticalAlignment="Center" Foreground="{StaticResource LegacyTextMutedBrush}" />
+                    <Grid Grid.Column="0" ColumnSpacing="8" MaxWidth="520">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Button
+                            x:Name="LegacyAccountQueryLocateLastLoginButton"
+                            Grid.Column="0"
+                            Padding="10,4"
+                            MinHeight="0"
+                            VerticalAlignment="Center"
+                            Style="{StaticResource LegacyIcedGlassButtonStyle}"
+                            Click="LegacyAccountQueryLocateLastLoginButton_Click">
+                            <TextBlock Text="{x:Bind Strings.Get('Legacy_LastLoginAccount_Locate'), Mode=OneWay}" />
+                        </Button>
+                        <TextBlock
+                            x:Name="LegacyAccountQueryLastLoginAccountText"
+                            Grid.Column="1"
+                            MaxWidth="430"
+                            VerticalAlignment="Center"
+                            Foreground="{StaticResource LegacyTextSecondaryBrush}"
+                            TextTrimming="CharacterEllipsis" />
+                    </Grid>
+                    <TextBlock x:Name="LegacyAccountQueryStatusText" Grid.Column="1" VerticalAlignment="Center" Foreground="{StaticResource LegacyTextSecondaryBrush}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock x:Name="LegacyAccountQuerySelectedCountText" Grid.Column="2" VerticalAlignment="Center" Foreground="{StaticResource LegacyTextMutedBrush}" />
+                    <TextBlock x:Name="LegacyAccountQuerySuccessCountText" Grid.Column="3" VerticalAlignment="Center" Foreground="{StaticResource LegacyStatusAvailableBrush}" />
+                    <TextBlock x:Name="LegacyAccountQueryTotalCountText" Grid.Column="4" VerticalAlignment="Center" Foreground="{StaticResource LegacyTextSecondaryBrush}" />
+                    <TextBlock x:Name="LegacyAccountQueryLastRunText" Grid.Column="5" VerticalAlignment="Center" Foreground="{StaticResource LegacyTextMutedBrush}" />
                 </Grid>
             </Border>
         </Grid>

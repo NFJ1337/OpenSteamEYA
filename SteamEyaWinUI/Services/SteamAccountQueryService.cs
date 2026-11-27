@@ -52,6 +52,10 @@ internal sealed class SteamAccountQueryResult
     public string? AppliedPersonaName { get; set; }
 }
 
+internal sealed record SteamCs2PlaytimePersonaResult(
+    double? Cs2PlaytimeHours,
+    string? PersonaName);
+
 /// <summary>
 /// 「账号查询」工作流：复用本项目的 refresh token / CM / Web 会话能力，批量读取 Steam 资料，
 /// 可选修改昵称、头像和简介，并把结果写回白号账号库。
@@ -303,6 +307,55 @@ internal sealed partial class SteamAccountQueryService
             auth.Session,
             auth.SteamId,
             cancellationToken);
+    }
+
+    /// <summary>复用一次登录会话同时读取 CS2 游戏时间和最新昵称。</summary>
+    public async Task<SteamCs2PlaytimePersonaResult> QueryCs2PlaytimeAndPersonaAsync(
+        SteamAccountHistoryItem account,
+        Func<SteamGuardPrompt, CancellationToken, Task<string?>> guardCodeProvider,
+        CancellationToken cancellationToken)
+    {
+        var auth = await ResolveSessionAsync(
+            account,
+            guardCodeProvider,
+            progress: null,
+            cancellationToken);
+
+        double? playtimeHours = null;
+        try
+        {
+            playtimeHours = await ReadCs2PlaytimeHoursAsync(
+                auth.Session,
+                auth.SteamId,
+                cancellationToken);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            AppLog.Warn($"CS2 游戏时间读取超时（{account.AccountName}）。");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            AppLog.Warn($"CS2 游戏时间读取失败（{account.AccountName}）：{ex.Message}");
+        }
+
+        string? personaName = null;
+        try
+        {
+            (personaName, _) = await ReadUserInfoAsync(
+                auth.Session,
+                auth.SteamId,
+                cancellationToken);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            AppLog.Warn($"Steam 昵称读取超时（{account.AccountName}）。");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            AppLog.Warn($"Steam 昵称读取失败（{account.AccountName}）：{ex.Message}");
+        }
+
+        return new SteamCs2PlaytimePersonaResult(playtimeHours, personaName);
     }
 
     private static async Task<AuthenticatedWebSession> ResolveSessionAsync(

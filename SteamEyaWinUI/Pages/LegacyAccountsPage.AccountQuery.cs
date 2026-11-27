@@ -18,7 +18,7 @@ namespace SteamEyaWinUI.Pages;
 
 public sealed partial class LegacyAccountsPage
 {
-    private const int AccountQueryDefaultThreadCount = 3;
+    private const int AccountQueryDefaultThreadCount = 2;
     private readonly SemaphoreSlim _accountQueryGuardDialogGate = new(1, 1);
     private bool _accountQueryRunning;
     private bool _accountQueryInitializing = true;
@@ -32,6 +32,7 @@ public sealed partial class LegacyAccountsPage
     private bool _accountQueryCheckboxDragSelectValue;
     private uint _accountQueryCheckboxDragPointerId;
     private int? _accountQueryRowsFingerprint;
+    private double _accountQueryListWidth;
 
     /// <summary>账号查询标签的独立行集合，不改变原账号管理表的筛选与选择。</summary>
     public ObservableCollection<LegacyAccountQueryRow> AccountQueryRows { get; } = [];
@@ -42,7 +43,7 @@ public sealed partial class LegacyAccountsPage
         try
         {
             var settings = AppState.SettingsService.Load();
-            SyncAccountQueryThreadInputs(Math.Clamp(settings.AccountQueryThreadCount, 1, 100));
+            SyncAccountQueryThreadInputs(Math.Max(1, settings.AccountQueryThreadCount));
             UpdateAccountQueryStartButton();
             UpdateAccountQueryAvatarButton();
             UpdateAccountQueryFooter();
@@ -90,10 +91,12 @@ public sealed partial class LegacyAccountsPage
             : AppState.WhiteAccounts;
 
         AccountQueryRows.Clear();
+        var rowIndex = 0;
         foreach (var account in accounts)
         {
             var row = new LegacyAccountQueryRow(
                 account,
+                ++rowIndex,
                 _statusAvailableBrush,
                 _statusCooldownBrush,
                 _statusVacBrush,
@@ -123,6 +126,7 @@ public sealed partial class LegacyAccountsPage
 
         _accountQueryRowsFingerprint = fingerprint;
         UpdateAccountQueryFooter();
+        _dispatcherQueue.TryEnqueue(SyncAccountQueryHeaderWidth);
         if (scrollOffset is { } offset)
         {
             _dispatcherQueue.TryEnqueue(() =>
@@ -134,6 +138,46 @@ public sealed partial class LegacyAccountsPage
                     null,
                     disableAnimation: true);
             });
+        }
+    }
+
+    private void LegacyAccountQueryList_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        _accountQueryListWidth = e.NewSize.Width;
+        _dispatcherQueue.TryEnqueue(SyncAccountQueryHeaderWidth);
+    }
+
+    private void SyncAccountQueryHeaderWidth()
+    {
+        if (LegacyAccountQueryHeaderGrid is null)
+        {
+            return;
+        }
+
+        FrameworkElement? realizedRow = null;
+        if (LegacyAccountQueryList is not null)
+        {
+            var inspectCount = Math.Min(AccountQueryRows.Count, 20);
+            for (var index = 0; index < inspectCount; index++)
+            {
+                if (LegacyAccountQueryList.ContainerFromIndex(index) is FrameworkElement row &&
+                    row.ActualWidth > 0)
+                {
+                    realizedRow = row;
+                    break;
+                }
+            }
+        }
+
+        if (realizedRow is not null)
+        {
+            LegacyAccountQueryHeaderGrid.Width = realizedRow.ActualWidth;
+            return;
+        }
+
+        if (_accountQueryListWidth > 0)
+        {
+            LegacyAccountQueryHeaderGrid.Width = _accountQueryListWidth;
         }
     }
 
@@ -898,7 +942,8 @@ public sealed partial class LegacyAccountsPage
     private void LegacyAccountQueryThreadIncrementButton_Click(object sender, RoutedEventArgs e)
     {
         CommitAccountQueryThreadTextBox();
-        var value = Math.Clamp(GetAccountQueryThreadCount() + 1, 1, 100);
+        var current = GetAccountQueryThreadCount();
+        var value = current == int.MaxValue ? current : current + 1;
         SyncAccountQueryThreadInputs(value);
         SaveAccountQueryThreadCount(value);
     }
@@ -906,7 +951,7 @@ public sealed partial class LegacyAccountsPage
     private void LegacyAccountQueryThreadDecrementButton_Click(object sender, RoutedEventArgs e)
     {
         CommitAccountQueryThreadTextBox();
-        var value = Math.Clamp(GetAccountQueryThreadCount() - 1, 1, 100);
+        var value = Math.Max(1, GetAccountQueryThreadCount() - 1);
         SyncAccountQueryThreadInputs(value);
         SaveAccountQueryThreadCount(value);
     }
@@ -919,13 +964,55 @@ public sealed partial class LegacyAccountsPage
         }
 
         if (!int.TryParse(LegacyAccountQueryThreadTextBox.Text, out var value) ||
-            value is < 1 or > 100)
+            value < 1)
         {
             return;
         }
 
         SyncAccountQueryThreadInputs(value, updateTextBox: false);
         SaveAccountQueryThreadCount(value);
+    }
+
+    private void LegacyAccountQueryThreadTextBox_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not TextBox textBox)
+        {
+            return;
+        }
+
+        textBox.ApplyTemplate();
+        if (FindDescendantByName<Button>(textBox, "DeleteButton") is not { } deleteButton)
+        {
+            return;
+        }
+
+        deleteButton.Visibility = Visibility.Collapsed;
+        deleteButton.IsHitTestVisible = false;
+        if (deleteButton.Parent is Panel panel)
+        {
+            panel.Children.Remove(deleteButton);
+        }
+    }
+
+    private static T? FindDescendantByName<T>(DependencyObject root, string name)
+        where T : FrameworkElement
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var index = 0; index < count; index++)
+        {
+            var child = VisualTreeHelper.GetChild(root, index);
+            if (child is T match && string.Equals(match.Name, name, StringComparison.Ordinal))
+            {
+                return match;
+            }
+
+            if (FindDescendantByName<T>(child, name) is { } nested)
+            {
+                return nested;
+            }
+        }
+
+        return null;
     }
 
     private void LegacyAccountQueryThreadTextBox_LostFocus(object sender, RoutedEventArgs e) =>
@@ -950,7 +1037,7 @@ public sealed partial class LegacyAccountsPage
         }
 
         var value = int.TryParse(LegacyAccountQueryThreadTextBox.Text, out var parsed)
-            ? Math.Clamp(parsed, 1, 100)
+            ? Math.Max(1, parsed)
             : GetAccountQueryThreadCount();
         SyncAccountQueryThreadInputs(value);
         SaveAccountQueryThreadCount(value);
@@ -958,19 +1045,12 @@ public sealed partial class LegacyAccountsPage
 
     private void SyncAccountQueryThreadInputs(
         int value,
-        bool updateDisplay = true,
         bool updateTextBox = true)
     {
-        value = Math.Clamp(value, 1, 100);
+        value = Math.Max(1, value);
         _accountQuerySyncingThreadInputs = true;
         try
         {
-            if (updateDisplay && LegacyAccountQueryThreadDisplay is not null)
-            {
-                LegacyAccountQueryThreadDisplay.Text = value.ToString(
-                    System.Globalization.CultureInfo.InvariantCulture);
-            }
-
             if (updateTextBox && LegacyAccountQueryThreadTextBox is not null)
             {
                 LegacyAccountQueryThreadTextBox.Text = value.ToString(
@@ -985,7 +1065,7 @@ public sealed partial class LegacyAccountsPage
 
     private static void SaveAccountQueryThreadCount(int value)
     {
-        value = Math.Clamp(value, 1, 100);
+        value = Math.Max(1, value);
         var settings = AppState.SettingsService.Load();
         if (settings.AccountQueryThreadCount == value)
         {
@@ -1001,16 +1081,10 @@ public sealed partial class LegacyAccountsPage
         if (LegacyAccountQueryThreadTextBox is not null &&
             int.TryParse(LegacyAccountQueryThreadTextBox.Text, out var textValue))
         {
-            return Math.Clamp(textValue, 1, 100);
+            return Math.Max(1, textValue);
         }
 
-        if (LegacyAccountQueryThreadDisplay is null ||
-            !int.TryParse(LegacyAccountQueryThreadDisplay.Text, out var displayValue))
-        {
-            return 3;
-        }
-
-        return Math.Clamp(displayValue, 1, 100);
+        return AccountQueryDefaultThreadCount;
     }
 
     private void LegacyAccountQuerySelectAll_Click(object sender, RoutedEventArgs e) =>
@@ -1180,6 +1254,48 @@ public sealed partial class LegacyAccountsPage
         }
     }
 
+    private void LegacyAccountQueryLocateLastLoginButton_Click(object sender, RoutedEventArgs e)
+    {
+        var account = GetLastLoginAccount();
+        if (account is null)
+        {
+            AppState.ShowStatus(Loc.T("Legacy_LastLoginAccount_None"), InfoBarSeverity.Warning);
+            return;
+        }
+
+        var row = AccountQueryRows.FirstOrDefault(candidate => string.Equals(
+            candidate.Item.AccountName,
+            account.AccountName,
+            StringComparison.OrdinalIgnoreCase));
+        if (row is null && LegacyAccountQueryFailedOnlyCheck.IsChecked == true)
+        {
+            _accountQueryInitializing = true;
+            try
+            {
+                LegacyAccountQueryFailedOnlyCheck.IsChecked = false;
+            }
+            finally
+            {
+                _accountQueryInitializing = false;
+            }
+
+            RefreshAccountQueryRows();
+            row = AccountQueryRows.FirstOrDefault(candidate => string.Equals(
+                candidate.Item.AccountName,
+                account.AccountName,
+                StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (row is null)
+        {
+            AppState.ShowStatus(Loc.T("Legacy_LastLoginAccount_None"), InfoBarSeverity.Warning);
+            return;
+        }
+
+        HighlightAccountQueryRow(row);
+        ScrollListRowToFifth(LegacyAccountQueryList, AccountQueryRows, row);
+    }
+
     private void LegacyAccountQueryAccountCell_RightTapped(
         object sender,
         RightTappedRoutedEventArgs e)
@@ -1201,6 +1317,7 @@ public sealed partial class LegacyAccountsPage
         login.Click += (_, _) =>
         {
             _contextAccount = row.Item;
+            _contextAccountIndexText = row.IndexText;
             LegacyRowLogin_Click(login, new RoutedEventArgs());
         };
         flyout.Items.Add(login);
@@ -1276,12 +1393,14 @@ public sealed partial class LegacyAccountQueryRow : INotifyPropertyChanged
 
     internal LegacyAccountQueryRow(
         SteamAccountHistoryItem item,
+        int index,
         Brush successBrush,
         Brush cooldownBrush,
         Brush errorBrush,
         Brush mutedBrush)
     {
         Item = item;
+        IndexText = index.ToString(System.Globalization.CultureInfo.InvariantCulture);
         _successBrush = successBrush;
         _cooldownBrush = cooldownBrush;
         _errorBrush = errorBrush;
@@ -1293,6 +1412,8 @@ public sealed partial class LegacyAccountQueryRow : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 
     internal SteamAccountHistoryItem Item { get; }
+
+    public string IndexText { get; }
 
     public string AccountName => Item.AccountName;
 
@@ -1432,6 +1553,8 @@ public sealed partial class LegacyAccountQueryRow : INotifyPropertyChanged
     }
 
     internal void RefreshCs2PlaytimeFromItem() => Raise(nameof(Cs2PlaytimeText));
+
+    internal void RefreshPersonaNameFromItem() => Raise(nameof(PersonaName));
 
     internal void ApplyResult(SteamAccountQueryResult result)
     {
