@@ -287,6 +287,57 @@ internal sealed class SteamCmClient : IAsyncDisposable
         return accessToken;
     }
 
+    /// <summary>
+    /// 通过已登录的 Steam CM 会话读取玩家公开资料。Steam 客户端自己的好友列表也走这条接口，
+    /// 不依赖 steamcommunity.com，因此系统代理关闭时仍可用于刷新昵称。
+    /// </summary>
+    public async Task<string?> GetPersonaNameAsync(
+        string steamId,
+        CancellationToken cancellationToken)
+    {
+        var requestedSteamId = ulong.Parse(steamId, CultureInfo.InvariantCulture);
+        var requestBody = SteamProtoWriter.Build(writer =>
+        {
+            writer.WriteUInt64(1, requestedSteamId);
+        });
+
+        var response = await SendServiceMethodAsync(
+            "Player.GetPlayerLinkDetails#1",
+            requestBody,
+            realm: null,
+            cancellationToken);
+
+        EnsureOk(response, Loc.T("Legacy_Query_StatusUserInfo"));
+        return DecodePersonaName(response.Body, requestedSteamId);
+    }
+
+    /// <summary>
+    /// 通过 CM 的游戏库服务读取 CS2 总时长（分钟转小时）。请求字段与 Steam 客户端
+    /// Player.GetOwnedGames#1 一致。CM 后端会忽略 appids_filter（实测只返回 game_count），
+    /// 因此这里取完整游戏列表后只解析 appid 730。
+    /// </summary>
+    public async Task<double?> GetCs2PlaytimeHoursAsync(
+        string steamId,
+        CancellationToken cancellationToken)
+    {
+        var requestedSteamId = ulong.Parse(steamId, CultureInfo.InvariantCulture);
+        var requestBody = SteamProtoWriter.Build(writer =>
+        {
+            writer.WriteUInt64(1, requestedSteamId);
+            writer.WriteBool(3, true);
+            writer.WriteBool(6, false);
+        });
+
+        var response = await SendServiceMethodAsync(
+            "Player.GetOwnedGames#1",
+            requestBody,
+            realm: null,
+            cancellationToken);
+
+        EnsureOk(response, Loc.T("Legacy_Query_StatusCs2Playtime"));
+        return DecodeCs2PlaytimeHours(response.Body);
+    }
+
     public async Task<SteamEresult> UnsubscribePublishedFileAsync(
         ulong publishedFileId,
         uint appId,
@@ -517,7 +568,11 @@ internal sealed class SteamCmClient : IAsyncDisposable
         var servers = serverList.EnumerateArray()
             .Where(server => GetString(server, "type") == "websockets" &&
                 GetString(server, "realm") == "steamglobal")
-            .OrderBy(server => GetDouble(server, "wtd_load"))
+            // 国内网络下东京节点经常连续超时，而香港节点通常可直连。按负载排序时
+            // 前 8 台可能全是东京，香港排在第 9 台之后，最终表现为“偶尔查不到”。
+            // 香港节点内部仍按实时负载排序，其它区域保持原顺序。
+            .OrderBy(GetServerConnectionPriority)
+            .ThenBy(server => GetDouble(server, "wtd_load"))
             .Select(server => GetString(server, "endpoint"))
             .Where(endpoint => !string.IsNullOrWhiteSpace(endpoint))
             .Select(endpoint => endpoint!)
@@ -1280,6 +1335,107 @@ internal sealed class SteamCmClient : IAsyncDisposable
         return null;
     }
 
+    private static string? DecodePersonaName(byte[] body, ulong requestedSteamId)
+    {
+        var reader = new SteamProtoReader(body);
+        while (reader.TryReadTag(out var field, out var wireType))
+        {
+            if (field != 1)
+            {
+                reader.Skip(wireType);
+                continue;
+            }
+
+            var accountReader = new SteamProtoReader(reader.ReadLengthDelimited(wireType));
+            byte[]? publicData = null;
+            while (accountReader.TryReadTag(out var accountField, out var accountWireType))
+            {
+                if (accountField == 1)
+                {
+                    publicData = accountReader.ReadLengthDelimited(accountWireType);
+                }
+                else
+                {
+                    accountReader.Skip(accountWireType);
+                }
+            }
+
+            if (publicData is null)
+            {
+                continue;
+            }
+
+            var publicReader = new SteamProtoReader(publicData);
+            ulong? steamId = null;
+            string? personaName = null;
+            while (publicReader.TryReadTag(out var publicField, out var publicWireType))
+            {
+                switch (publicField)
+                {
+                    case 1:
+                        steamId = publicReader.ReadFixed64(publicWireType);
+                        break;
+
+                    case 10:
+                        personaName = publicReader.ReadString(publicWireType);
+                        break;
+
+                    default:
+                        publicReader.Skip(publicWireType);
+                        break;
+                }
+            }
+
+            if (steamId == requestedSteamId && !string.IsNullOrWhiteSpace(personaName))
+            {
+                return personaName.Trim();
+            }
+        }
+
+        return null;
+    }
+
+    private static double? DecodeCs2PlaytimeHours(byte[] body)
+    {
+        var reader = new SteamProtoReader(body);
+        while (reader.TryReadTag(out var field, out var wireType))
+        {
+            if (field != 2)
+            {
+                reader.Skip(wireType);
+                continue;
+            }
+
+            var gameReader = new SteamProtoReader(reader.ReadLengthDelimited(wireType));
+            uint? appId = null;
+            uint? playtimeMinutes = null;
+            while (gameReader.TryReadTag(out var gameField, out var gameWireType))
+            {
+                switch (gameField)
+                {
+                    case 1:
+                        appId = (uint)gameReader.ReadVarint(gameWireType);
+                        break;
+
+                    case 4:
+                        playtimeMinutes = (uint)gameReader.ReadVarint(gameWireType);
+                        break;
+
+                    default:
+                        gameReader.Skip(gameWireType);
+                        break;
+                }
+            }
+
+            if (appId == 730 && playtimeMinutes.HasValue)
+            {
+                return playtimeMinutes.Value / 60d;
+            }
+        }
+
+        return null;
+    }
+
     private static bool DecodeAreFilesInSubscriptionListResponse(byte[] body, ulong publishedFileId)
     {
         var reader = new SteamProtoReader(body);
@@ -1348,6 +1504,12 @@ internal sealed class SteamCmClient : IAsyncDisposable
             property.TryGetDouble(out var value)
             ? value
             : double.MaxValue;
+    }
+
+    private static int GetServerConnectionPriority(JsonElement server)
+    {
+        var endpoint = GetString(server, "endpoint");
+        return endpoint?.Contains("-hkg", StringComparison.OrdinalIgnoreCase) == true ? 0 : 1;
     }
 
     private static string Sha1Hex(string value)

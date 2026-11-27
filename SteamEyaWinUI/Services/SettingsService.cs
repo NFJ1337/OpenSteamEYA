@@ -477,6 +477,15 @@ internal sealed class AppSettings
     /// <summary>更新检查使用的 GitHub 站点代码（direct / gh-proxy.org / v4.gh-proxy.org / v6.gh-proxy.org / cdn.gh-proxy.org），与 GitHubUpdateService.ProxySites 保持一致；未知值回退 direct。</summary>
     public string UpdateProxySite { get; set; } = "direct";
 
+    /// <summary>Clash 外部控制器地址，例如 http://127.0.0.1:9097 或 https://host/api。</summary>
+    public string? ClashApiUrl { get; set; }
+
+    /// <summary>Clash 外部控制器密钥；空字符串表示该控制器未设置密钥。</summary>
+    public string? ClashApiSecret { get; set; }
+
+    /// <summary>上次选择的 Clash 代理组名称。</summary>
+    public string? ClashProxyGroup { get; set; }
+
     /// <summary>「账号查询」页的并发线程数；只要求至少为 1，不设置上限。</summary>
     public int AccountQueryThreadCount { get; set; } = 2;
 

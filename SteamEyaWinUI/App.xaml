@@ -21,6 +21,8 @@
 
             <SolidColorBrush x:Key="AuroraGlassBrush" Color="#8CFFFFFF" />
             <SolidColorBrush x:Key="AuroraGlassStrongBrush" Color="#B8FFFFFF" />
+            <!-- 与 AuroraGlassStrongBrush 同色系的实色版本，仅用于必须遮住底层内容的弹层。 -->
+            <SolidColorBrush x:Key="AuroraGlassStrongOpaqueBrush" Color="#FF5C5968" />
             <SolidColorBrush x:Key="AuroraGlassButtonBrush" Color="#7AFFFFFF" />
             <SolidColorBrush x:Key="AuroraGlassInputBrush" Color="#B8FFFFFF" />
             <SolidColorBrush x:Key="AuroraGlassBorderBrush" Color="#8FFFFFFF" />
@@ -195,7 +197,7 @@
                 <Setter Property="MinWidth" Value="160" />
             </Style>
             <Style x:Key="AuroraOpaqueMenuFlyoutPresenterStyle" TargetType="MenuFlyoutPresenter">
-                <Setter Property="Background" Value="{ThemeResource CustomUiDialogBrush}" />
+                <Setter Property="Background" Value="{ThemeResource AuroraGlassStrongOpaqueBrush}" />
                 <Setter Property="BorderBrush" Value="{ThemeResource AuroraGlassBorderBrush}" />
                 <Setter Property="BorderThickness" Value="1" />
                 <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />

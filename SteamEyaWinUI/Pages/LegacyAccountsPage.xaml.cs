@@ -820,6 +820,12 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             EndCheckboxDrag();
             e.Handled = true;
         }
+
+        if (e.Pointer.PointerId == _rightPressedPointerId)
+        {
+            _rightPressedRow = null;
+            _rightPressedPointerId = 0;
+        }
     }
 
     private void LegacyAccountList_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
@@ -827,6 +833,12 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         if (_checkboxDragActive && e.Pointer.PointerId == _checkboxDragPointerId)
         {
             EndCheckboxDrag();
+        }
+
+        if (e.Pointer.PointerId == _rightPressedPointerId)
+        {
+            _rightPressedRow = null;
+            _rightPressedPointerId = 0;
         }
     }
 
@@ -864,9 +876,17 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
 
         // 命中测试的坐标是根元素坐标系（窗口内坐标），不是列表自己的坐标。
         var rootPosition = e.GetCurrentPoint(null).Position;
-        var row = e.Pointer.PointerId == _rightPressedPointerId
-            ? _rightPressedRow ?? ResolveRowAt(rootPosition, source)
-            : ResolveRowAt(rootPosition, source);
+        // 以“松开时实际命中的行”为准。按下与松开之间如果列表滚动、行复用或指针
+        // 轻微位移，旧实现会优先使用按下时缓存的行，表现为偶尔对错账号/弹错列。
+        var row = ResolveRowAt(rootPosition, source);
+        if (row is null &&
+            e.Pointer.PointerId == _rightPressedPointerId &&
+            _rightPressedRow is not null &&
+            IsPointInsideRow(_rightPressedRow, rootPosition))
+        {
+            row = _rightPressedRow;
+        }
+
         _rightPressedRow = null;
         _rightPressedPointerId = 0;
         if (row is null)
@@ -961,6 +981,22 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
     {
         var index = Rows.IndexOf(row);
         return index >= 0 ? LegacyAccountList.ContainerFromIndex(index) as FrameworkElement : null;
+    }
+
+    private bool IsPointInsideRow(LegacyAccountRow row, Windows.Foundation.Point rootPosition)
+    {
+        if (FindRowElement(row) is not { } element)
+        {
+            return false;
+        }
+
+        var topLeft = element
+            .TransformToVisual(null)
+            .TransformPoint(new Windows.Foundation.Point(0, 0));
+        return rootPosition.X >= topLeft.X &&
+            rootPosition.X <= topLeft.X + element.ActualWidth &&
+            rootPosition.Y >= topLeft.Y &&
+            rootPosition.Y <= topLeft.Y + element.ActualHeight;
     }
 
     /// <summary>从被点元素往上找最近的列标记（XAML 里给各列 TextBlock 的 Tag 标了列名）。</summary>
@@ -1121,17 +1157,40 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         }
 
         var scrollViewer = FindDescendant<ScrollViewer>(listView);
-        var rowHeight = scrollViewer is not null && rows.Count > 0
-            ? scrollViewer.ExtentHeight / rows.Count
-            : 0;
-        if (scrollViewer is null || rowHeight <= 0)
+        if (scrollViewer is null)
         {
             listView.ScrollIntoView(row, ScrollIntoViewAlignment.Leading);
             return;
         }
 
-        var targetOffset = Math.Max(0, (index - 4) * rowHeight);
-        scrollViewer.ChangeView(null, targetOffset, null, disableAnimation: false);
+        // 先把目标行真实生成出来，再按该行实际高度计算“位于可视区第 5 行”的偏移。
+        // 不能用 ExtentHeight / 行数估算：虚拟化列表会产生误差，滚动越远偶尔偏得越多。
+        listView.ScrollIntoView(row, ScrollIntoViewAlignment.Leading);
+        listView.UpdateLayout();
+        if (listView.ContainerFromItem(row) is FrameworkElement container &&
+            container.ActualHeight > 0)
+        {
+            var topInViewport = container
+                .TransformToVisual(scrollViewer)
+                .TransformPoint(new Windows.Foundation.Point(0, 0))
+                .Y;
+            var targetOffset = Math.Max(
+                0,
+                scrollViewer.VerticalOffset + topInViewport - container.ActualHeight * 4);
+            var maxOffset = Math.Max(0, scrollViewer.ExtentHeight - scrollViewer.ViewportHeight);
+            scrollViewer.ChangeView(
+                null,
+                Math.Min(targetOffset, maxOffset),
+                null,
+                disableAnimation: false);
+            return;
+        }
+
+        var estimatedRowHeight = rows.Count > 0 ? scrollViewer.ExtentHeight / rows.Count : 0;
+        var fallbackOffset = estimatedRowHeight > 0
+            ? Math.Max(0, (index - 4) * estimatedRowHeight)
+            : 0;
+        scrollViewer.ChangeView(null, fallbackOffset, null, disableAnimation: false);
     }
 
     private void FocusRowForAccount(SteamAccountHistoryItem account)

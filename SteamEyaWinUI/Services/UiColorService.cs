@@ -109,6 +109,11 @@ internal sealed class UiColorService
 
         SetBrushColor(resources, "AuroraGlassBrush", glass);
         SetBrushColor(resources, "AuroraGlassStrongBrush", glassStrong);
+        var strongGlassBackdrop = PageBackgroundColor(color, _darkTheme ? 0.10 : 0.07);
+        SetBrushColor(
+            resources,
+            "AuroraGlassStrongOpaqueBrush",
+            CompositeOver(glassStrong, strongGlassBackdrop));
         SetBrushColor(resources, "AuroraGlassButtonBrush", GlassColor(132));
         SetBrushColor(resources, "AuroraGlassInputBrush", glassInput);
         SetBrushColor(resources, "AuroraGlassBorderBrush", border);
@@ -380,6 +385,16 @@ internal sealed class UiColorService
             (byte)Math.Round(first.R + (second.R - first.R) * amount),
             (byte)Math.Round(first.G + (second.G - first.G) * amount),
             (byte)Math.Round(first.B + (second.B - first.B) * amount));
+    }
+
+    private static Color CompositeOver(Color foreground, Color background)
+    {
+        var alpha = foreground.A / 255d;
+        return Color.FromArgb(
+            255,
+            (byte)Math.Round(foreground.R * alpha + background.R * (1 - alpha)),
+            (byte)Math.Round(foreground.G * alpha + background.G * (1 - alpha)),
+            (byte)Math.Round(foreground.B * alpha + background.B * (1 - alpha)));
     }
 
     private static Color WithAlpha(byte alpha, Color color) =>

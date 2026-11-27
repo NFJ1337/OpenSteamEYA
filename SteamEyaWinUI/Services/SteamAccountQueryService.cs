@@ -315,19 +315,58 @@ internal sealed partial class SteamAccountQueryService
         Func<SteamGuardPrompt, CancellationToken, Task<string?>> guardCodeProvider,
         CancellationToken cancellationToken)
     {
-        var auth = await ResolveSessionAsync(
-            account,
+        if (TryGetUsableCachedToken(account.EyaToken, out var cachedToken, out var cachedSteamId))
+        {
+            try
+            {
+                return await QueryCs2PlaytimeAndPersonaViaCmAsync(
+                    account,
+                    cachedToken,
+                    cachedSteamId,
+                    cancellationToken);
+            }
+            catch (SteamCmException ex) when (ex.IsTokenFailure)
+            {
+                AppLog.Warn($"冷却刷新：缓存令牌不可用，回退账号密码登录（{account.AccountName}）：{ex.Message}");
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(account.Password))
+        {
+            throw new InvalidOperationException(Loc.T("Creds_Error_PasswordRequired"));
+        }
+
+        var auth = await AppState.CredentialsAuthService.GetRefreshTokenAsync(
+            account.AccountName,
+            account.Password,
             guardCodeProvider,
             progress: null,
             cancellationToken);
+        var refreshToken = FormatHelper.NormalizeToken(auth.RefreshToken);
+        return await QueryCs2PlaytimeAndPersonaViaCmAsync(
+            account,
+            refreshToken,
+            auth.SteamId,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// 冷却时间刷新走 CM 直连：Steam CM 在无代理时通常仍可访问，
+    /// 而 store/community 网页在受限网络下会超时。两项资料互不影响，能取到哪项就更新哪项。
+    /// </summary>
+    private static async Task<SteamCs2PlaytimePersonaResult> QueryCs2PlaytimeAndPersonaViaCmAsync(
+        SteamAccountHistoryItem account,
+        string refreshToken,
+        string steamId,
+        CancellationToken cancellationToken)
+    {
+        await using var cmClient = new SteamCmClient(HttpClient);
+        await cmClient.ConnectAndLogOnAsync(refreshToken, steamId, cancellationToken);
 
         double? playtimeHours = null;
         try
         {
-            playtimeHours = await ReadCs2PlaytimeHoursAsync(
-                auth.Session,
-                auth.SteamId,
-                cancellationToken);
+            playtimeHours = await cmClient.GetCs2PlaytimeHoursAsync(steamId, cancellationToken);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -341,10 +380,7 @@ internal sealed partial class SteamAccountQueryService
         string? personaName = null;
         try
         {
-            (personaName, _) = await ReadUserInfoAsync(
-                auth.Session,
-                auth.SteamId,
-                cancellationToken);
+            personaName = await cmClient.GetPersonaNameAsync(steamId, cancellationToken);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {

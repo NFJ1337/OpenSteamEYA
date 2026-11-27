@@ -150,6 +150,13 @@
             </NavigationView.MenuItems>
             <NavigationView.FooterMenuItems>
                 <NavigationViewItem
+                    x:Name="ClashNavItem"
+                    Tag="clash">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE774;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
                     x:Name="TreasureBoxNavItem"
                     Tag="treasureBox">
                     <NavigationViewItem.Icon>
@@ -274,5 +281,14 @@
                 </Button.Template>
             </Button>
         </Grid>
+
+        <!-- 最小化会暂停 WinUI 合成表面；恢复前先铺主题底色，避免 Alt+Tab 回到窗口时闪一帧黑。 -->
+        <Border
+            x:Name="WindowActivationCover"
+            Grid.RowSpan="2"
+            Background="{ThemeResource AuroraPageBackgroundBrush}"
+            IsHitTestVisible="False"
+            Visibility="Collapsed"
+            Canvas.ZIndex="1000" />
     </Grid>
 </Window>

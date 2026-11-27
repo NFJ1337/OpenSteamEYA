@@ -33,6 +33,8 @@ public sealed partial class MainWindow : Window
     // [备用页面] 缓存账号页暂时隐藏，页面/路由/数据全部保留；恢复时只需改回 true。
     private const bool CachedAccountsPageEnabled = false;
     private const uint WmGetMinMaxInfo = 0x0024;
+    private const uint WmSize = 0x0005;
+    private const int SizeMinimized = 1;
     private const nuint WindowSubclassId = 1;
     private const double IntroVideoVolume = 0.1;
 
@@ -46,6 +48,7 @@ public sealed partial class MainWindow : Window
     private readonly SolidColorBrush _statusPanelBrush = new();
     private bool _statusPanelBrushAttached;
     private readonly DispatcherQueueTimer _statusDismissTimer;
+    private readonly DispatcherQueueTimer _windowRestoreCoverTimer;
     private MediaPlayer? _introMediaPlayer;
     private bool _introVideoActive;
     private bool _startupInitializationStarted;
@@ -144,6 +147,19 @@ public sealed partial class MainWindow : Window
         _statusDismissTimer.Interval = StatusAutoDismissDelay;
         _statusDismissTimer.IsRepeating = false;
         _statusDismissTimer.Tick += (_, _) => StatusInfoBar.IsOpen = false;
+
+        // 恢复窗口时合成器需要重新挂载内容；主题底色多保留一小段，避免首帧黑屏。
+        _windowRestoreCoverTimer = DispatcherQueue.CreateTimer();
+        _windowRestoreCoverTimer.Interval = TimeSpan.FromMilliseconds(120);
+        _windowRestoreCoverTimer.IsRepeating = false;
+        _windowRestoreCoverTimer.Tick += (_, _) =>
+        {
+            _windowRestoreCoverTimer.Stop();
+            if (AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Minimized })
+            {
+                WindowActivationCover.Visibility = Visibility.Collapsed;
+            }
+        };
 
         AppState.StatusReporter = ShowStatus;
         AppState.BusyChanged += OnBusyChanged;
@@ -824,6 +840,7 @@ public sealed partial class MainWindow : Window
             "loadout" => typeof(LoadoutPage),
             "personalization" => typeof(PersonalizationPage),
             "cs2Tracker" => typeof(Cs2TrackerPage),
+            "clash" => typeof(ClashPage),
             "treasureBox" => typeof(TreasureBoxPage),
             "settings" => typeof(SettingsPage),
             "about" => typeof(AboutPage),
@@ -1365,6 +1382,7 @@ public sealed partial class MainWindow : Window
         LoadoutNavItem.Content = Loc.T("Nav_Loadout");
         PersonalizationNavItem.Content = Loc.T("Nav_Personalization");
         Cs2TrackerNavItem.Content = Loc.T("Nav_Cs2Tracker");
+        ClashNavItem.Content = Loc.T("Nav_Clash");
         TreasureBoxNavItem.Content = Loc.T("Nav_TreasureBox");
         SettingsNavItem.Content = Loc.T("Nav_Settings");
         AboutNavItem.Content = Loc.T("Nav_About");
@@ -1701,6 +1719,14 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        if (AppWindow.Presenter is OverlappedPresenter
+            {
+                State: OverlappedPresenterState.Minimized
+            })
+        {
+            ShowWindowActivationCover();
+        }
+
         AppWindow.Show(true);
         if (AppWindow.Presenter is OverlappedPresenter
             {
@@ -1711,6 +1737,7 @@ public sealed partial class MainWindow : Window
         }
 
         Activate();
+        ScheduleWindowActivationCoverDismiss();
         UpdateTitleBarButtonColors();
         if (ContentFrame.Content is SettingsPage settingsPage)
         {
@@ -1839,7 +1866,37 @@ public sealed partial class MainWindow : Window
             return 0;
         }
 
+        if (message == WmSize)
+        {
+            var sizeType = (int)(wParam.ToInt64() & 0xFFFF);
+            if (sizeType == SizeMinimized)
+            {
+                Instance?.ShowWindowActivationCover();
+            }
+            else
+            {
+                Instance?.ScheduleWindowActivationCoverDismiss();
+            }
+        }
+
         return DefSubclassProc(hWnd, message, wParam, lParam);
+    }
+
+    private void ShowWindowActivationCover()
+    {
+        _windowRestoreCoverTimer.Stop();
+        WindowActivationCover.Visibility = Visibility.Visible;
+    }
+
+    private void ScheduleWindowActivationCoverDismiss()
+    {
+        if (WindowActivationCover.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        _windowRestoreCoverTimer.Stop();
+        _windowRestoreCoverTimer.Start();
     }
 
     [LibraryImport("user32.dll")]
