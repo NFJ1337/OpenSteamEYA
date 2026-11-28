@@ -360,7 +360,15 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 					}
 				}
 			}
-			if (!result.IsFullSuccess)
+			if (result.NameAppliedDirectly &&
+				result.WebCommunityUnavailable &&
+				!result.IsFullSuccess)
+			{
+				ShowStatus(
+					Loc.T("Login_Status_PersonalizeNameOnly"),
+					InfoBarSeverity.Warning);
+			}
+			else if (!result.IsFullSuccess)
 			{
 				List<string> list = new List<string>();
 				if (result.ProfileRequested && !result.ProfileApplied)
@@ -375,7 +383,11 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 				{
 					list.Add(result.AliasClearError ?? Loc.T("Profile_Error_Unknown"));
 				}
-				ShowStatus(Loc.Tf("Login_Status_PersonalizePartial_Format", string.Join("; ", list)), InfoBarSeverity.Warning);
+				ShowStatus(
+					Loc.Tf(
+						"Login_Status_PersonalizePartial_Format",
+						string.Join("; ", list.Distinct(StringComparer.Ordinal))),
+					InfoBarSeverity.Warning);
 			}
 		}
 		catch (OperationCanceledException)
@@ -573,6 +585,15 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 				string text = await SaveLoginHistoryAsync(result, eyaToken, profile);
 				ShowStatus(Loc.Tf("Login_Status_LoginStarted_Format", result.SteamId, FormatHelper.FormatRemaining(result.Remaining), text), (!_lastLoginHistorySaveFailed) ? InfoBarSeverity.Success : InfoBarSeverity.Warning);
 			}
+			if (IsTokenLoginMode)
+			{
+				await RunConfiguredCardLoginActionsAsync(
+					accountName,
+					eyaToken,
+					result.SteamId,
+					cancellationToken,
+					progress);
+			}
 		}
 		catch (OperationCanceledException)
 		{
@@ -590,6 +611,180 @@ public sealed partial class LoginPage : Page, INotifyPropertyChanged
 		finally
 		{
 			AppState.EndBusyOperation();
+		}
+	}
+
+	private async Task RunConfiguredCardLoginActionsAsync(
+		string accountName,
+		string eyaToken,
+		string steamId,
+		CancellationToken cancellationToken,
+		IProgress<string>? progress)
+	{
+		var settings = AppState.SettingsService.Load();
+		if (settings.Cs2ClearWorkshopOnLogin)
+		{
+			await RunCardLoginActionSafelyAsync(
+				"清除创意工坊订阅",
+				async () =>
+				{
+					ShowStatus(Loc.T("Login_Status_ClearingWorkshop"), InfoBarSeverity.Informational);
+					var count = await AppState.WorkshopService.ClearSubscriptionsAsync(
+						eyaToken,
+						progress,
+						cancellationToken);
+					ShowStatus(
+						Loc.Tf("Login_Status_WorkshopCleared_Format", count),
+						InfoBarSeverity.Success);
+				},
+				cancellationToken);
+		}
+
+		if (settings.Cs2ApplyLoadoutOnLogin)
+		{
+			await RunCardLoginActionSafelyAsync(
+				"一键装配",
+				async () =>
+				{
+					var preset = settings.Loadout;
+					if (preset.T.Count == 0 && preset.Ct.Count == 0)
+					{
+						ShowStatus(Loc.T("Login_Loadout_EmptyPreset"), InfoBarSeverity.Warning);
+						return;
+					}
+
+					ShowStatus(Loc.T("Login_Status_ApplyingLoadout"), InfoBarSeverity.Informational);
+					var result = await AppState.LoadoutService.ApplyPresetAsync(
+						preset,
+						eyaToken,
+						steamId,
+						cancellationToken);
+					if (result.IsSuccess)
+					{
+						ShowStatus(
+							Loc.Tf("Login_Status_LoadoutApplied_Format", result.Confirmed),
+							InfoBarSeverity.Success);
+						return;
+					}
+
+					var failures = string.Join("、", result.Failures.Take(6));
+					if (result.Failures.Count > 6)
+					{
+						failures += "…";
+					}
+					ShowStatus(
+						Loc.Tf(
+							"Login_Status_LoadoutPartial_Format",
+							result.Confirmed,
+							result.Requested,
+							failures),
+						InfoBarSeverity.Warning);
+				},
+				cancellationToken);
+		}
+
+		if (settings.Cs2PersonalizeOnLogin)
+		{
+			await RunCardLoginActionSafelyAsync(
+				"一键个性化",
+				() => RunCardLoginPersonalizeAsync(
+					settings,
+					eyaToken,
+					steamId,
+					cancellationToken,
+					progress),
+				cancellationToken);
+		}
+	}
+
+	private async Task RunCardLoginPersonalizeAsync(
+		AppSettings settings,
+		string eyaToken,
+		string steamId,
+		CancellationToken cancellationToken,
+		IProgress<string>? progress)
+	{
+		var personaName = settings.PersonaName;
+		var avatarPath = AppState.SettingsService.PersonalizationAvatarPath;
+		var hasName = !string.IsNullOrWhiteSpace(personaName);
+		var hasRealName = !string.IsNullOrWhiteSpace(settings.ProfileRealName);
+		var hasSummary = !string.IsNullOrWhiteSpace(settings.ProfileSummary);
+		var hasAvatar = File.Exists(avatarPath);
+		var clearAliases = settings.ClearAliasHistoryOnPersonalize;
+		if (!hasName && !hasRealName && !hasSummary && !hasAvatar && !clearAliases)
+		{
+			ShowStatus(Loc.T("Login_Personalize_Empty"), InfoBarSeverity.Warning);
+			return;
+		}
+
+		var result = await AppState.ProfileService.ApplyAsync(
+			eyaToken,
+			new SteamProfileApplyRequest(
+				hasName ? personaName : null,
+				hasRealName ? settings.ProfileRealName : null,
+				hasSummary ? settings.ProfileSummary : null,
+				hasAvatar ? avatarPath : null,
+				clearAliases),
+			progress,
+			cancellationToken);
+		if (result.NameApplied || result.AvatarApplied)
+		{
+			await Task.Run(() => AppState.AccountHistoryService.UpdateProfileLocally(
+				steamId,
+				result.NameApplied ? personaName : null,
+				result.AvatarApplied ? avatarPath : null));
+			AppState.ReloadHistory(steamId);
+			ApplyStoredAccountInfoProfile(steamId);
+		}
+
+		if (result.IsFullSuccess)
+		{
+			ShowStatus(Loc.T("Login_Status_Personalized"), InfoBarSeverity.Success);
+		}
+		else if (result.NameAppliedDirectly && result.WebCommunityUnavailable)
+		{
+			ShowStatus(Loc.T("Login_Status_PersonalizeNameOnly"), InfoBarSeverity.Warning);
+		}
+		else
+		{
+			var failures = new List<string>();
+			if (result.ProfileRequested && !result.ProfileApplied)
+			{
+				failures.Add(result.ProfileError ?? Loc.T("Profile_Error_Unknown"));
+			}
+			if (result.AvatarRequested && !result.AvatarApplied)
+			{
+				failures.Add(result.AvatarError ?? Loc.T("Profile_Error_Unknown"));
+			}
+			if (result.AliasClearRequested && !result.AliasesCleared)
+			{
+				failures.Add(result.AliasClearError ?? Loc.T("Profile_Error_Unknown"));
+			}
+			ShowStatus(
+				Loc.Tf(
+					"Login_Status_PersonalizePartial_Format",
+					string.Join("; ", failures.Distinct(StringComparer.Ordinal))),
+				InfoBarSeverity.Warning);
+		}
+	}
+
+	private async Task RunCardLoginActionSafelyAsync(
+		string actionName,
+		Func<Task> action,
+		CancellationToken cancellationToken)
+	{
+		try
+		{
+			await action();
+		}
+		catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+		{
+			throw;
+		}
+		catch (Exception ex)
+		{
+			AppLog.Warn($"卡密登录后自动执行{actionName}失败：{ex.Message}");
+			ShowStatus(ex.Message, InfoBarSeverity.Error);
 		}
 	}
 

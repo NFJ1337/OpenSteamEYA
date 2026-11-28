@@ -20,7 +20,7 @@ public sealed partial class ClashPage : Page, INotifyPropertyChanged
     private readonly DispatcherQueue _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
     private readonly ObservableCollection<ClashProxyGroup> _groups = [];
     private readonly ObservableCollection<ClashNodeViewModel> _nodes = [];
-    private readonly Dictionary<string, int> _knownDelays = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, int?> _knownDelays = new(StringComparer.Ordinal);
 
     private CancellationTokenSource? _operationCancellation;
     private ClashProxySnapshot? _snapshot;
@@ -35,6 +35,7 @@ public sealed partial class ClashPage : Page, INotifyPropertyChanged
         InitializeComponent();
         ProxyListView.ItemsSource = _nodes;
         Loc.LanguageChanged += OnLanguageChanged;
+        ClashWarmupCacheService.Updated += OnStartupWarmupUpdated;
         SetStatus(Loc.T("Clash_Status_Ready"), ClashStatusKind.Info);
     }
 
@@ -53,6 +54,11 @@ public sealed partial class ClashPage : Page, INotifyPropertyChanged
             ? DefaultApiUrl
             : settings.ClashApiUrl;
         ApiSecretPasswordBox.Password = settings.ClashApiSecret ?? string.Empty;
+
+        if (TryApplyStartupWarmup(settings))
+        {
+            return;
+        }
 
         if (!string.IsNullOrWhiteSpace(settings.ClashApiUrl))
         {
@@ -189,8 +195,68 @@ public sealed partial class ClashPage : Page, INotifyPropertyChanged
                 _preferredGroupName,
                 StringComparison.OrdinalIgnoreCase))
             ?? _groups.FirstOrDefault();
+        if (selectedGroup is not null &&
+            !string.Equals(selectedGroup.Name, _preferredGroupName, StringComparison.Ordinal))
+        {
+            _preferredGroupName = selectedGroup.Name;
+            var settings = AppState.SettingsService.Load();
+            settings.ClashProxyGroup = selectedGroup.Name;
+            AppState.SettingsService.Save(settings);
+        }
+
         UpdateGroupView(selectedGroup);
         RebuildProxyGroupMenu();
+    }
+
+    private bool TryApplyStartupWarmup(AppSettings settings)
+    {
+        if (!ClashWarmupCacheService.TryGet(
+                settings.ClashApiUrl,
+                settings.ClashApiSecret,
+                out var cached))
+        {
+            return false;
+        }
+
+        ApplyStartupWarmup(cached);
+        return true;
+    }
+
+    private void ApplyStartupWarmup(ClashWarmupCacheEntry cached)
+    {
+        _knownDelays.Clear();
+        foreach (var (nodeName, delay) in cached.Delays)
+        {
+            _knownDelays[nodeName] = delay;
+        }
+
+        _preferredGroupName = cached.GroupName;
+        ApplySnapshot(cached.Snapshot);
+        _hasConnected = true;
+        SortNodesByDelay();
+        RefreshActionButtons();
+        SetStatus(Loc.T("Clash_Status_TestDone"), ClashStatusKind.Info);
+    }
+
+    private void OnStartupWarmupUpdated(ClashWarmupCacheEntry cached)
+    {
+        _dispatcherQueue.TryEnqueue(() =>
+        {
+            if (_busy ||
+                !string.Equals(
+                    ApiUrlTextBox.Text.Trim(),
+                    cached.ApiUrl,
+                    StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(
+                    ApiSecretPasswordBox.Password,
+                    cached.ApiSecret,
+                    StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            ApplyStartupWarmup(cached);
+        });
     }
 
     private void RebuildProxyGroupMenu()
@@ -250,7 +316,14 @@ public sealed partial class ClashPage : Page, INotifyPropertyChanged
                 };
                 if (_knownDelays.TryGetValue(nodeName, out var delay))
                 {
-                    ApplyDelayVisual(node, delay);
+                    if (delay.HasValue)
+                    {
+                        ApplyDelayVisual(node, delay.Value);
+                    }
+                    else
+                    {
+                        ApplyDelayFailure(node);
+                    }
                 }
 
                 _nodes.Add(node);
@@ -386,32 +459,12 @@ public sealed partial class ClashPage : Page, INotifyPropertyChanged
         SetStatus(Loc.T("Clash_Status_TestingAll"), ClashStatusKind.Info);
         try
         {
-            var nodes = _nodes.ToList();
-            using var concurrency = new SemaphoreSlim(8);
-            await Task.WhenAll(nodes.Select(async node =>
-            {
-                await concurrency.WaitAsync(cancellation.Token);
-                try
-                {
-                    await TestNodeCoreAsync(node, cancellation.Token);
-                }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    AppLog.Warn($"测试 Clash 节点 {node.Name} 延迟失败：{ex.Message}");
-                    ApplyDelayFailure(node);
-                }
-                finally
-                {
-                    concurrency.Release();
-                }
-            }));
-            cancellation.Token.ThrowIfCancellationRequested();
-
-            SortNodesByDelay();
+            var result = await ClashProxyWorkflowService.ConnectAndTestAllAsync(
+                ApiUrlTextBox.Text,
+                ApiSecretPasswordBox.Password,
+                _currentGroup?.Name ?? _preferredGroupName,
+                cancellation.Token);
+            ApplyStartupWarmup(result);
             SetStatus(Loc.T("Clash_Status_TestDone"), ClashStatusKind.Success);
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
@@ -450,7 +503,7 @@ public sealed partial class ClashPage : Page, INotifyPropertyChanged
             }
             else
             {
-                _knownDelays.Remove(node.Name);
+                _knownDelays[node.Name] = null;
                 ApplyDelayFailure(node);
             }
 

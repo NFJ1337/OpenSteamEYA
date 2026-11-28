@@ -58,6 +58,7 @@ internal sealed class SettingsService
                         // 首次从旧版本升级时，为账号管理复制一份独立分组定义；之后两边互不影响。
                         settings.WhiteAccountGroups ??= CloneGroups(settings.Groups);
                         settings.AutoBackgroundImageApiPaths ??= [];
+                        settings.ManualQueryProxyAddresses ??= [];
                         if (settings.AutoBackgroundImageApiPaths.Count == 0 &&
                             AlcyBackgroundService.TryNormalizeApiPath(
                                 settings.AutoBackgroundImageApiPath,
@@ -384,7 +385,7 @@ internal sealed class AppSettings
     public bool UiColorAnimated { get; set; }
 
     /// <summary>自定义背景默认不透明度。</summary>
-    public const double DefaultCustomBackgroundOpacity = 0.4;
+    public const double DefaultCustomBackgroundOpacity = 0.3;
 
     /// <summary>入场动画是否默认启用。</summary>
     public const bool DefaultIntroVideoEnabled = true;
@@ -471,6 +472,15 @@ internal sealed class AppSettings
     /// <summary>是否在登录时把「来源账号」的 CS2 本地设置复制到要登录的账号。</summary>
     public bool Cs2SyncOnLogin { get; set; }
 
+    /// <summary>登录成功后是否自动清除 CS2 创意工坊订阅（黑号卡密登录页流程）。</summary>
+    public bool Cs2ClearWorkshopOnLogin { get; set; }
+
+    /// <summary>登录成功后是否自动执行当前页面的一键装配流程。</summary>
+    public bool Cs2ApplyLoadoutOnLogin { get; set; }
+
+    /// <summary>登录成功后是否自动执行当前页面的一键个性化流程。</summary>
+    public bool Cs2PersonalizeOnLogin { get; set; }
+
     /// <summary>CS2 设置同步的「来源账号」SteamID64；空表示未选择。详见 <see cref="Cs2CloudService"/>。</summary>
     public string? Cs2SyncSourceSteamId { get; set; }
 
@@ -485,6 +495,21 @@ internal sealed class AppSettings
 
     /// <summary>上次选择的 Clash 代理组名称。</summary>
     public string? ClashProxyGroup { get; set; }
+
+    /// <summary>账号查询时是否自动轮换 Clash 代理节点。</summary>
+    public bool ClashAutoRotateEnabled { get; set; }
+
+    /// <summary>每完成多少次账号查询后切换到 Clash 代理组中的下一个节点。</summary>
+    public int ClashRotationCount { get; set; } = 10;
+
+    /// <summary>账号查询是否使用「代理设置」里手动填写的代理，与 Clash 节点轮换相互独立。</summary>
+    public bool ManualQueryProxyEnabled { get; set; }
+
+    /// <summary>账号查询手动代理地址列表；每项可包含一行或多行，host:port 默认按 HTTP 代理解析。</summary>
+    public List<string>? ManualQueryProxyAddresses { get; set; } = [];
+
+    /// <summary>每执行多少次账号查询后切换到下一个手动代理。</summary>
+    public int ManualQueryProxyRotationCount { get; set; } = 10;
 
     /// <summary>「账号查询」页的并发线程数；只要求至少为 1，不设置上限。</summary>
     public int AccountQueryThreadCount { get; set; } = 2;

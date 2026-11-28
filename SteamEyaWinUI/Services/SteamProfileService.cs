@@ -20,8 +20,7 @@ internal sealed partial class SteamProfileService
 
     private readonly JwtTokenService _jwtTokenService = new();
 
-    // 与 SteamWorkshopService 同样的强约束 client：steamLoginSecure（含 access token）手动挂在 Cookie 头，
-    // 关闭自动重定向，避免 3xx 指向外部域名时 token 随 Cookie 头外泄。
+    // steamLoginSecure（含 access token）手动挂在 Cookie 头；关闭自动重定向，避免 3xx 把令牌带到外部域名。
     private static readonly HttpClient HttpClient = new(new HttpClientHandler
     {
         AutomaticDecompression = DecompressionMethods.All,
@@ -63,23 +62,45 @@ internal sealed partial class SteamProfileService
         var session = await SteamWebSession.BuildAsync(cmClient, eyaToken, token.SteamId, cancellationToken);
 
         var profileApplied = false;
+        var nameAppliedDirectly = false;
+        var webCommunityUnavailable = false;
         string? profileError = null;
         if (hasProfileFields)
         {
             progress?.Report(Loc.T("Profile_Progress_SavingProfile"));
-            (profileApplied, profileError) = await RunStepAsync(
-                () => SaveProfileAsync(token.SteamId, trimmedName, trimmedRealName, trimmedSummary, session, cancellationToken),
+            var profileStep = await ApplyProfileStepAsync(
+                cmClient,
+                token.SteamId,
+                trimmedName,
+                trimmedRealName,
+                trimmedSummary,
+                session,
                 cancellationToken);
+            profileApplied = profileStep.Applied;
+            profileError = profileStep.Error;
+            nameAppliedDirectly = profileStep.NameAppliedDirectly;
+            webCommunityUnavailable = profileStep.WebCommunityUnavailable;
         }
 
         var avatarApplied = false;
         string? avatarError = null;
         if (hasAvatar)
         {
-            progress?.Report(Loc.T("Profile_Progress_UploadingAvatar"));
-            (avatarApplied, avatarError) = await RunStepAsync(
-                () => UploadAvatarAsync(token.SteamId, request.AvatarImagePath!, session, cancellationToken),
-                cancellationToken);
+            if (webCommunityUnavailable && nameAppliedDirectly)
+            {
+                avatarError = Loc.T("Profile_Error_CommunityUnavailable");
+            }
+            else
+            {
+                progress?.Report(Loc.T("Profile_Progress_UploadingAvatar"));
+                (avatarApplied, avatarError) = await RunStepAsync(
+                    () => UploadAvatarAsync(
+                        token.SteamId,
+                        request.AvatarImagePath!,
+                        session,
+                        cancellationToken),
+                    cancellationToken);
+            }
         }
 
         // 曾用名清理放最后：改名成功后旧昵称刚被计入历史，此时清掉才能把它一并抹去。
@@ -87,14 +108,26 @@ internal sealed partial class SteamProfileService
         string? aliasClearError = null;
         if (request.ClearAliasHistory)
         {
-            progress?.Report(Loc.T("Profile_Progress_ClearingAliases"));
-            (aliasesCleared, aliasClearError) = await RunStepAsync(
-                () => ClearAliasHistoryAsync(token.SteamId, session, cancellationToken),
-                cancellationToken);
+            if (webCommunityUnavailable && nameAppliedDirectly)
+            {
+                aliasClearError = Loc.T("Profile_Error_CommunityUnavailable");
+            }
+            else
+            {
+                progress?.Report(Loc.T("Profile_Progress_ClearingAliases"));
+                (aliasesCleared, aliasClearError) = await RunStepAsync(
+                    () => ClearAliasHistoryAsync(
+                        token.SteamId,
+                        session,
+                        cancellationToken),
+                    cancellationToken);
+            }
         }
 
         return new SteamProfileApplyResult(
             hasProfileFields, profileApplied, profileError,
+            nameAppliedDirectly,
+            webCommunityUnavailable,
             trimmedName is not null,
             hasAvatar, avatarApplied, avatarError,
             request.ClearAliasHistory, aliasesCleared, aliasClearError);
@@ -129,6 +162,103 @@ internal sealed partial class SteamProfileService
     }
 
     // ---- 昵称 / 真名 / 概要（profile 表单）----
+
+    private static async Task<ProfileStepResult> ApplyProfileStepAsync(
+        SteamCmClient cmClient,
+        string steamId,
+        string? personaName,
+        string? realName,
+        string? summary,
+        SteamWebSession session,
+        CancellationToken cancellationToken)
+    {
+        string? webError = null;
+        var webCommunityUnavailable = false;
+        try
+        {
+            var (webApplied, error) = await SaveProfileAsync(
+                steamId,
+                personaName,
+                realName,
+                summary,
+                session,
+                cancellationToken);
+            if (webApplied)
+            {
+                return new ProfileStepResult(true, null, false, false);
+            }
+
+            webError = error;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"Steam 社区资料页保存失败，尝试 CM 昵称通道：{ex.Message}");
+            webError = ex.GetBaseException().Message;
+            webCommunityUnavailable = IsCommunityNetworkError(ex);
+        }
+
+        // 昵称可以通过 CM 直连更新；真名/概要没有等价的无网页通道。
+        if (string.IsNullOrWhiteSpace(personaName))
+        {
+            return new ProfileStepResult(
+                false,
+                webError ?? Loc.T("Profile_Error_Unknown"),
+                false,
+                webCommunityUnavailable);
+        }
+
+        try
+        {
+            await cmClient.SetPlayerNameAsync(steamId, personaName, cancellationToken);
+            if (realName is null && summary is null)
+            {
+                return new ProfileStepResult(true, null, true, webCommunityUnavailable);
+            }
+
+            return new ProfileStepResult(
+                false,
+                Loc.Tf(
+                    "Profile_Error_NameOnlyApplied_Format",
+                    webError ?? Loc.T("Profile_Error_Unknown")),
+                true,
+                webCommunityUnavailable);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"通过 Steam CM 修改昵称失败：{ex.Message}");
+            return new ProfileStepResult(
+                false,
+                string.Join(
+                    "; ",
+                    new[] { webError, ex.GetBaseException().Message }
+                        .Where(message => !string.IsNullOrWhiteSpace(message))
+                        .Distinct(StringComparer.Ordinal)),
+                false,
+                webCommunityUnavailable);
+        }
+    }
+
+    private static bool IsCommunityNetworkError(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is HttpRequestException or IOException or System.Net.Sockets.SocketException ||
+                current is System.Security.Authentication.AuthenticationException)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private static async Task<(bool Success, string? Error)> SaveProfileAsync(
         string steamId,
@@ -185,7 +315,9 @@ internal sealed partial class SteamProfileService
     }
 
     private static async Task<ProfileFields> TryGetCurrentProfileAsync(
-        string steamId, SteamWebSession session, CancellationToken cancellationToken)
+        string steamId,
+        SteamWebSession session,
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -418,7 +550,9 @@ internal sealed partial class SteamProfileService
     // ---- 共用：手动跟随 steamcommunity 内部重定向（带 vanity 的账号 GET 资料页会 302）----
 
     private static async Task<string> GetFollowingRedirectsAsync(
-        Uri uri, string cookieHeader, CancellationToken cancellationToken)
+        Uri uri,
+        string cookieHeader,
+        CancellationToken cancellationToken)
     {
         var current = uri;
         for (var hop = 0; hop < 4; hop++)
@@ -490,6 +624,12 @@ internal sealed partial class SteamProfileService
     {
         public static ProfileFields Empty { get; } = new(string.Empty, string.Empty, string.Empty, string.Empty);
     }
+
+    private sealed record ProfileStepResult(
+        bool Applied,
+        string? Error,
+        bool NameAppliedDirectly,
+        bool WebCommunityUnavailable);
 }
 
 /// <summary>一键个性化要应用的内容。字段为 null/空白表示不改该项；ClearAliasHistory 在其它步骤之后执行。</summary>
@@ -508,6 +648,8 @@ internal sealed record SteamProfileApplyResult(
     bool ProfileRequested,
     bool ProfileApplied,
     string? ProfileError,
+    bool NameAppliedDirectly,
+    bool WebCommunityUnavailable,
     bool NameRequested,
     bool AvatarRequested,
     bool AvatarApplied,
@@ -517,7 +659,7 @@ internal sealed record SteamProfileApplyResult(
     string? AliasClearError)
 {
     /// <summary>昵称确实被请求修改且资料表单保存成功。</summary>
-    public bool NameApplied => NameRequested && ProfileApplied;
+    public bool NameApplied => NameRequested && (ProfileApplied || NameAppliedDirectly);
 
     public bool IsFullSuccess =>
         (!ProfileRequested || ProfileApplied) &&

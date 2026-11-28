@@ -477,11 +477,17 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
     {
         var settings = AppState.SettingsService.Load();
         var accountName = settings.LastLegacyLoginAccountName;
-        var hasLastLoginAccount = !string.IsNullOrWhiteSpace(accountName) &&
-            AppState.WhiteAccounts.Any(account => string.Equals(
+        var lastLoginAccount = string.IsNullOrWhiteSpace(accountName)
+            ? null
+            : AppState.WhiteAccounts.FirstOrDefault(account => string.Equals(
                 account.AccountName,
                 accountName,
                 StringComparison.OrdinalIgnoreCase));
+        var hasLastLoginAccount = lastLoginAccount is not null;
+        // 登录时保存的是昵称快照；个性化或后续刷新改名后，优先显示账号库里的最新昵称。
+        var personaName = string.IsNullOrWhiteSpace(lastLoginAccount?.PersonaName)
+            ? settings.LastLegacyLoginAccountPersonaName
+            : lastLoginAccount.PersonaName;
         if (LegacyManagementLocateLastLoginButton is not null)
         {
             LegacyManagementLocateLastLoginButton.IsEnabled = hasLastLoginAccount;
@@ -510,7 +516,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             LegacyManagementLastLoginAccountText.Text = FormatLastLoginAccountText(
                 managementIndexText ?? settings.LastLegacyLoginAccountIndex,
                 accountName,
-                settings.LastLegacyLoginAccountPersonaName);
+                personaName);
         }
 
         if (LegacyAccountQueryLastLoginAccountText is not null)
@@ -518,7 +524,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             LegacyAccountQueryLastLoginAccountText.Text = FormatLastLoginAccountText(
                 queryIndexText ?? settings.LastLegacyLoginAccountIndex,
                 accountName,
-                settings.LastLegacyLoginAccountPersonaName);
+                personaName);
         }
     }
 
@@ -663,6 +669,9 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
     private uint _rightPressedPointerId;
     private readonly HashSet<string> _vacPlaytimeQueriesInFlight =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, CancellationTokenSource> _cooldownRefreshOperations =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _cooldownRefreshGate = new();
 
     /// <summary>
     /// 列表上的指针按下：左键、右键一视同仁，都把那行切成高亮（不滚动列表），
@@ -1993,26 +2002,36 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             return;
         }
 
-        var key = account.SteamId;
-        if (!_vacPlaytimeQueriesInFlight.Add(key))
+        var key = string.IsNullOrWhiteSpace(account.SteamId)
+            ? account.AccountName
+            : account.SteamId;
+        var cancellation = new CancellationTokenSource();
+        lock (_cooldownRefreshGate)
         {
-            return;
+            if (_cooldownRefreshOperations.TryGetValue(key, out var previous))
+            {
+                // 同一账号连续选择多个菜单项时，以最后一次确认为准，确保每次都真正重新查询。
+                previous.Cancel();
+            }
+
+            _cooldownRefreshOperations[key] = cancellation;
         }
 
         AppLog.Info($"冷却设置完成，已开始异步查询 CS2 游戏时间：{account.AccountName}");
-        _ = QueryCs2PlaytimeAfterCooldownAsync(account, key);
+        _ = QueryCs2PlaytimeAfterCooldownAsync(account, key, cancellation);
     }
 
     private async Task QueryCs2PlaytimeAfterCooldownAsync(
         SteamAccountHistoryItem account,
-        string queryKey)
+        string queryKey,
+        CancellationTokenSource cancellation)
     {
         try
         {
             var result = await AppState.AccountQueryService.QueryCs2PlaytimeAndPersonaAsync(
                 account,
                 (prompt, token) => PromptGuardCodeAsync(prompt, token, account),
-                CancellationToken.None);
+                cancellation.Token);
 
             if (result.Cs2PlaytimeHours is { } hours)
             {
@@ -2032,13 +2051,26 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
                 AppLog.Warn($"冷却设置后未获取到 Steam 昵称：{account.AccountName}");
             }
         }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            // 用户连续确认了新的冷却选项，上一轮结果直接丢弃。
+        }
         catch (Exception ex)
         {
             AppLog.Warn($"冷却设置后异步查询 CS2 游戏时间/昵称失败（{account.AccountName}）：{ex.Message}");
         }
         finally
         {
-            _vacPlaytimeQueriesInFlight.Remove(queryKey);
+            lock (_cooldownRefreshGate)
+            {
+                if (_cooldownRefreshOperations.TryGetValue(queryKey, out var current) &&
+                    ReferenceEquals(current, cancellation))
+                {
+                    _cooldownRefreshOperations.Remove(queryKey);
+                }
+            }
+
+            cancellation.Dispose();
         }
     }
 
@@ -2132,6 +2164,7 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         }
 
         AppLog.Info($"{operation}Steam 昵称已更新：{account.AccountName} -> {normalized}");
+        RefreshLastLoginAccountText();
     }
 
     /// <summary>需要 Steam Guard 时弹框要验证码（与历史页同一套交互，页面各自持有）。</summary>
@@ -2235,6 +2268,10 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             AppState.ShowStatus(
                 Loc.Tf("History_Status_LoginStarted_Format", account.AccountTitle, account.SteamId),
                 InfoBarSeverity.Success);
+            await RunConfiguredAccountManagementPostLoginActionsAsync(
+                account,
+                cancellationToken,
+                progress);
         }
         catch (OperationCanceledException)
         {
@@ -2250,6 +2287,175 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         finally
         {
             AppState.EndBusyOperation();
+        }
+    }
+
+    private async Task RunConfiguredAccountManagementPostLoginActionsAsync(
+        SteamAccountHistoryItem account,
+        CancellationToken cancellationToken,
+        IProgress<string>? progress)
+    {
+        var settings = AppState.SettingsService.Load();
+        if (!settings.Cs2ApplyLoadoutOnLogin && !settings.Cs2PersonalizeOnLogin)
+        {
+            return;
+        }
+
+        var credentials = await ResolvePersonalizationCredentialsAsync(
+            account,
+            progress,
+            cancellationToken);
+        if (credentials is null)
+        {
+            return;
+        }
+
+        if (settings.Cs2ApplyLoadoutOnLogin)
+        {
+            await RunAccountManagementPostLoginActionSafelyAsync(
+                "一键装配",
+                async () =>
+                {
+                    var preset = settings.Loadout;
+                    if (preset.T.Count == 0 && preset.Ct.Count == 0)
+                    {
+                        AppState.ShowStatus(Loc.T("Login_Loadout_EmptyPreset"), InfoBarSeverity.Warning);
+                        return;
+                    }
+
+                    AppState.ShowStatus(Loc.T("Login_Status_ApplyingLoadout"), InfoBarSeverity.Informational);
+                    var result = await AppState.LoadoutService.ApplyPresetAsync(
+                        preset,
+                        credentials.Value.Token,
+                        credentials.Value.SteamId,
+                        cancellationToken);
+                    if (result.IsSuccess)
+                    {
+                        AppState.ShowStatus(
+                            Loc.Tf("Login_Status_LoadoutApplied_Format", result.Confirmed),
+                            InfoBarSeverity.Success);
+                        return;
+                    }
+
+                    var failures = string.Join("、", result.Failures.Take(6));
+                    if (result.Failures.Count > 6)
+                    {
+                        failures += "…";
+                    }
+                    AppState.ShowStatus(
+                        Loc.Tf(
+                            "Login_Status_LoadoutPartial_Format",
+                            result.Confirmed,
+                            result.Requested,
+                            failures),
+                        InfoBarSeverity.Warning);
+                },
+                cancellationToken);
+        }
+
+        if (settings.Cs2PersonalizeOnLogin)
+        {
+            await RunAccountManagementPostLoginActionSafelyAsync(
+                "一键个性化",
+                () => RunAccountManagementPostLoginPersonalizationAsync(
+                    account,
+                    settings,
+                    credentials.Value.Token,
+                    credentials.Value.SteamId,
+                    cancellationToken,
+                    progress),
+                cancellationToken);
+        }
+    }
+
+    private async Task RunAccountManagementPostLoginPersonalizationAsync(
+        SteamAccountHistoryItem account,
+        AppSettings settings,
+        string token,
+        string steamId,
+        CancellationToken cancellationToken,
+        IProgress<string>? progress)
+    {
+        var personaName = settings.PersonaName;
+        var avatarPath = AppState.SettingsService.PersonalizationAvatarPath;
+        var hasName = !string.IsNullOrWhiteSpace(personaName);
+        var hasRealName = !string.IsNullOrWhiteSpace(settings.ProfileRealName);
+        var hasSummary = !string.IsNullOrWhiteSpace(settings.ProfileSummary);
+        var hasAvatar = File.Exists(avatarPath);
+        var clearAliases = settings.ClearAliasHistoryOnPersonalize;
+        if (!hasName && !hasRealName && !hasSummary && !hasAvatar && !clearAliases)
+        {
+            AppState.ShowStatus(Loc.T("Login_Personalize_Empty"), InfoBarSeverity.Warning);
+            return;
+        }
+
+        var result = await AppState.ProfileService.ApplyAsync(
+            token,
+            new SteamProfileApplyRequest(
+                hasName ? personaName : null,
+                hasRealName ? settings.ProfileRealName : null,
+                hasSummary ? settings.ProfileSummary : null,
+                hasAvatar ? avatarPath : null,
+                clearAliases),
+            progress,
+            cancellationToken);
+        if (result.NameApplied || result.AvatarApplied)
+        {
+            await ApplyPersonalizationProfileLocallyAsync(
+                account,
+                steamId,
+                result.NameApplied ? personaName : null,
+                result.AvatarApplied ? avatarPath : null);
+        }
+
+        if (result.IsFullSuccess)
+        {
+            AppState.ShowStatus(Loc.T("Login_Status_Personalized"), InfoBarSeverity.Success);
+        }
+        else if (result.NameAppliedDirectly && result.WebCommunityUnavailable)
+        {
+            AppState.ShowStatus(Loc.T("Login_Status_PersonalizeNameOnly"), InfoBarSeverity.Warning);
+        }
+        else
+        {
+            var failures = new List<string>();
+            if (result.ProfileRequested && !result.ProfileApplied)
+            {
+                failures.Add(result.ProfileError ?? Loc.T("Profile_Error_Unknown"));
+            }
+            if (result.AvatarRequested && !result.AvatarApplied)
+            {
+                failures.Add(result.AvatarError ?? Loc.T("Profile_Error_Unknown"));
+            }
+            if (result.AliasClearRequested && !result.AliasesCleared)
+            {
+                failures.Add(result.AliasClearError ?? Loc.T("Profile_Error_Unknown"));
+            }
+            AppState.ShowStatus(
+                Loc.Tf(
+                    "Login_Status_PersonalizePartial_Format",
+                    string.Join("; ", failures.Distinct(StringComparer.Ordinal))),
+                InfoBarSeverity.Warning);
+        }
+    }
+
+    private async Task RunAccountManagementPostLoginActionSafelyAsync(
+        string actionName,
+        Func<Task> action,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await action();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"账号管理登录后自动执行{actionName}失败：{ex.Message}");
+            AppState.ShowStatus(ex.Message, InfoBarSeverity.Error);
         }
     }
 
@@ -2452,18 +2658,22 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             return;
         }
 
-        if (!TryGetActionToken(account, "Login_Action_Personalize", out var token, out _))
-        {
-            return;
-        }
-
         var cancellationToken = AppState.BeginBusyOperation();
         var progress = new Progress<string>(message =>
             AppState.ShowStatus(message, InfoBarSeverity.Informational));
         try
         {
+            var credentials = await ResolvePersonalizationCredentialsAsync(
+                account,
+                progress,
+                cancellationToken);
+            if (credentials is null)
+            {
+                return;
+            }
+
             var result = await AppState.ProfileService.ApplyAsync(
-                token,
+                credentials.Value.Token,
                 new SteamProfileApplyRequest(
                     hasName ? personaName : null,
                     hasRealName ? settings.ProfileRealName : null,
@@ -2472,6 +2682,25 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
                     clearAliases),
                 progress,
                 cancellationToken);
+
+            if (result.NameApplied || result.AvatarApplied)
+            {
+                await ApplyPersonalizationProfileLocallyAsync(
+                    account,
+                    credentials.Value.SteamId,
+                    result.NameApplied ? personaName : null,
+                    result.AvatarApplied ? avatarPath : null);
+            }
+
+            if (result.NameAppliedDirectly &&
+                result.WebCommunityUnavailable &&
+                !result.IsFullSuccess)
+            {
+                AppState.ShowStatus(
+                    Loc.T("Login_Status_PersonalizeNameOnly"),
+                    InfoBarSeverity.Warning);
+                return;
+            }
 
             if (result.IsFullSuccess)
             {
@@ -2496,12 +2725,18 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
             }
 
             AppState.ShowStatus(
-                Loc.Tf("Login_Status_PersonalizePartial_Format", string.Join("; ", failures)),
+                Loc.Tf(
+                    "Login_Status_PersonalizePartial_Format",
+                    string.Join("; ", failures.Distinct(StringComparer.Ordinal))),
                 InfoBarSeverity.Warning);
         }
         catch (OperationCanceledException)
         {
             AppState.ShowStatus(Loc.T("Login_Status_PersonalizeCancelled"), InfoBarSeverity.Informational);
+        }
+        catch (SteamCmException ex) when (ex.IsTokenFailure)
+        {
+            AppState.ShowStatus(ex.Message, InfoBarSeverity.Error);
         }
         catch (Exception ex)
         {
@@ -2512,6 +2747,86 @@ public sealed partial class LegacyAccountsPage : Page, INotifyPropertyChanged
         {
             AppState.EndBusyOperation();
         }
+    }
+
+    /// <summary>
+    /// 与黑号登录页一致：先复用有效令牌；令牌失效时用账号管理中保存的密码重新登录并写回新令牌。
+    /// </summary>
+    private async Task<(string Token, string SteamId)?> ResolvePersonalizationCredentialsAsync(
+        SteamAccountHistoryItem account,
+        IProgress<string>? progress,
+        CancellationToken cancellationToken)
+    {
+        var cachedToken = account.EyaToken?.Trim() ?? string.Empty;
+        var tokenInfo = AppState.JwtTokenService.Inspect(cachedToken);
+        if (tokenInfo.IsValid && !string.IsNullOrWhiteSpace(tokenInfo.SteamId))
+        {
+            return (cachedToken, tokenInfo.SteamId);
+        }
+
+        if (string.IsNullOrWhiteSpace(account.Password))
+        {
+            AppState.ShowStatus(
+                Loc.Tf(
+                    "Login_Error_StatusCannotAction_Format",
+                    tokenInfo.Status,
+                    Loc.T("Login_Action_Personalize")),
+                InfoBarSeverity.Error);
+            return null;
+        }
+
+        progress?.Report(Loc.T("Legacy_Query_StatusLoggingIn"));
+        var auth = await AppState.CredentialsAuthService.GetRefreshTokenAsync(
+            account.AccountName,
+            account.Password,
+            (prompt, token) => PromptGuardCodeAsync(prompt, token, account),
+            progress,
+            cancellationToken);
+        var refreshToken = FormatHelper.NormalizeToken(auth.RefreshToken);
+        var refreshTokenInfo = AppState.JwtTokenService.Inspect(refreshToken);
+        var steamId = !string.IsNullOrWhiteSpace(auth.SteamId)
+            ? auth.SteamId
+            : refreshTokenInfo.SteamId;
+        if (string.IsNullOrWhiteSpace(steamId))
+        {
+            throw new InvalidOperationException(Loc.T("Login_Error_TokenMissingSteamIdPersonalize"));
+        }
+
+        account.SteamId = steamId;
+        account.EyaToken = refreshToken;
+        account.TokenExpiresAt = refreshTokenInfo.ExpiresAt;
+        account.JwtAvailable = true;
+        account.JwtStatus = Loc.T("Account_Jwt_Valid");
+        account.JwtValidatedAt = DateTimeOffset.Now;
+        if (!AppState.WhiteAccountService.SaveRefreshToken(
+                account.AccountName,
+                steamId,
+                refreshToken,
+                refreshTokenInfo.ExpiresAt))
+        {
+            AppLog.Warn($"一键个性化：密码登录成功，但保存新令牌失败：{account.AccountName}");
+        }
+
+        AppLog.Info($"一键个性化：令牌失效，已通过密码登录刷新令牌：{account.AccountName}");
+        return (refreshToken, steamId);
+    }
+
+    /// <summary>昵称和头像成功后，像黑号登录页一样立即写回白号账号库。</summary>
+    private async Task ApplyPersonalizationProfileLocallyAsync(
+        SteamAccountHistoryItem account,
+        string steamId,
+        string? personaName,
+        string? avatarPath)
+    {
+        await Task.Run(() => AppState.WhiteAccountService.UpdateProfileLocally(
+            steamId,
+            string.IsNullOrWhiteSpace(personaName) ? null : personaName,
+            string.IsNullOrWhiteSpace(avatarPath) ? null : avatarPath));
+
+        AppState.ReloadWhiteAccounts();
+        RebuildRows(highlightFirst: false);
+        FocusRowForAccount(account);
+        RefreshLastLoginAccountText();
     }
 
     // ---------- 生成 ID（合并成下拉框：点开选类型，生成后复制到剪贴板） ----------

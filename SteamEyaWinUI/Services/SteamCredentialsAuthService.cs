@@ -56,14 +56,21 @@ internal sealed class SteamCredentialsAuthService
         string password,
         Func<SteamGuardPrompt, CancellationToken, Task<string?>> guardCodeProvider,
         IProgress<string>? progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        HttpClient? httpClient = null)
     {
+        var client = httpClient ?? HttpClient;
         progress?.Report(Loc.T("Creds_Progress_GettingKey"));
-        var rsaKey = await GetRsaKeyAsync(accountName, cancellationToken);
+        var rsaKey = await GetRsaKeyAsync(accountName, client, cancellationToken);
         var encryptedPassword = EncryptPassword(password, rsaKey.Modulus, rsaKey.Exponent);
 
         progress?.Report(Loc.T("Creds_Progress_Authenticating"));
-        var begin = await BeginAuthAsync(accountName, encryptedPassword, rsaKey.Timestamp, cancellationToken);
+        var begin = await BeginAuthAsync(
+            accountName,
+            encryptedPassword,
+            rsaKey.Timestamp,
+            client,
+            cancellationToken);
 
         var clientId = begin.ClientId;
         var steamId = begin.SteamId;
@@ -81,7 +88,13 @@ internal sealed class SteamCredentialsAuthService
             }
 
             progress?.Report(Loc.T("Creds_Progress_SubmittingCode"));
-            await SubmitGuardCodeAsync(clientId, steamId, code.Trim(), codeType, cancellationToken);
+            await SubmitGuardCodeAsync(
+                clientId,
+                steamId,
+                code.Trim(),
+                codeType,
+                client,
+                cancellationToken);
             progress?.Report(Loc.T("Creds_Progress_Polling"));
         }
         else if (begin.AllowedConfirmations.Any(
@@ -99,7 +112,7 @@ internal sealed class SteamCredentialsAuthService
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var poll = await PollAsync(clientId, begin.RequestId, cancellationToken);
+            var poll = await PollAsync(clientId, begin.RequestId, client, cancellationToken);
             if (poll.NewClientId != 0)
             {
                 clientId = poll.NewClientId;
@@ -121,10 +134,18 @@ internal sealed class SteamCredentialsAuthService
 
     // ---- 各步骤 ----
 
-    private static async Task<RsaKey> GetRsaKeyAsync(string accountName, CancellationToken cancellationToken)
+    private static async Task<RsaKey> GetRsaKeyAsync(
+        string accountName,
+        HttpClient httpClient,
+        CancellationToken cancellationToken)
     {
         var request = SteamProtoWriter.Build(writer => writer.WriteString(1, accountName));
-        var body = await CallAsync("GetPasswordRSAPublicKey", request, useGet: true, cancellationToken);
+        var body = await CallAsync(
+            "GetPasswordRSAPublicKey",
+            request,
+            useGet: true,
+            httpClient,
+            cancellationToken);
 
         string? modulus = null;
         string? exponent = null;
@@ -159,7 +180,11 @@ internal sealed class SteamCredentialsAuthService
     }
 
     private static async Task<BeginResult> BeginAuthAsync(
-        string accountName, string encryptedPassword, ulong timestamp, CancellationToken cancellationToken)
+        string accountName,
+        string encryptedPassword,
+        ulong timestamp,
+        HttpClient httpClient,
+        CancellationToken cancellationToken)
     {
         // device_details.platform_type=SteamClient → refresh token 带 client 受众。
         var deviceDetails = SteamProtoWriter.Build(details =>
@@ -181,7 +206,12 @@ internal sealed class SteamCredentialsAuthService
             writer.WriteBytes(9, deviceDetails);
         });
 
-        var body = await CallAsync("BeginAuthSessionViaCredentials", request, useGet: false, cancellationToken);
+        var body = await CallAsync(
+            "BeginAuthSessionViaCredentials",
+            request,
+            useGet: false,
+            httpClient,
+            cancellationToken);
 
         ulong clientId = 0;
         ulong steamId = 0;
@@ -250,7 +280,12 @@ internal sealed class SteamCredentialsAuthService
     }
 
     private static async Task SubmitGuardCodeAsync(
-        ulong clientId, ulong steamId, string code, SteamGuardType codeType, CancellationToken cancellationToken)
+        ulong clientId,
+        ulong steamId,
+        string code,
+        SteamGuardType codeType,
+        HttpClient httpClient,
+        CancellationToken cancellationToken)
     {
         var request = SteamProtoWriter.Build(writer =>
         {
@@ -260,11 +295,19 @@ internal sealed class SteamCredentialsAuthService
             writer.WriteUInt32(4, (uint)(int)codeType);
         });
 
-        await CallAsync("UpdateAuthSessionWithSteamGuardCode", request, useGet: false, cancellationToken);
+        await CallAsync(
+            "UpdateAuthSessionWithSteamGuardCode",
+            request,
+            useGet: false,
+            httpClient,
+            cancellationToken);
     }
 
     private static async Task<PollResult> PollAsync(
-        ulong clientId, byte[] requestId, CancellationToken cancellationToken)
+        ulong clientId,
+        byte[] requestId,
+        HttpClient httpClient,
+        CancellationToken cancellationToken)
     {
         var request = SteamProtoWriter.Build(writer =>
         {
@@ -272,7 +315,12 @@ internal sealed class SteamCredentialsAuthService
             writer.WriteBytes(2, requestId);
         });
 
-        var body = await CallAsync("PollAuthSessionStatus", request, useGet: false, cancellationToken);
+        var body = await CallAsync(
+            "PollAuthSessionStatus",
+            request,
+            useGet: false,
+            httpClient,
+            cancellationToken);
 
         ulong newClientId = 0;
         string? refreshToken = null;
@@ -297,15 +345,19 @@ internal sealed class SteamCredentialsAuthService
     //      GetPasswordRSAPublicKey 是 GET-only（POST 返回 405），其余方法用 POST。 ----
 
     private static async Task<byte[]> CallAsync(
-        string method, byte[] request, bool useGet, CancellationToken cancellationToken)
+        string method,
+        byte[] request,
+        bool useGet,
+        HttpClient httpClient,
+        CancellationToken cancellationToken)
     {
         var encoded = Convert.ToBase64String(request);
 
         using var response = useGet
-            ? await HttpClient.GetAsync(
+            ? await httpClient.GetAsync(
                 $"{BaseUrl}{method}/v1/?input_protobuf_encoded={Uri.EscapeDataString(encoded)}",
                 cancellationToken)
-            : await PostEncodedAsync(method, encoded, cancellationToken);
+            : await PostEncodedAsync(method, encoded, httpClient, cancellationToken);
 
         var eresult = EResultOk;
         if (response.Headers.TryGetValues("x-eresult", out var eresultValues) &&
@@ -332,14 +384,17 @@ internal sealed class SteamCredentialsAuthService
     }
 
     private static async Task<HttpResponseMessage> PostEncodedAsync(
-        string method, string encoded, CancellationToken cancellationToken)
+        string method,
+        string encoded,
+        HttpClient httpClient,
+        CancellationToken cancellationToken)
     {
         using var content = new FormUrlEncodedContent(new[]
         {
             new KeyValuePair<string, string>("input_protobuf_encoded", encoded)
         });
 
-        return await HttpClient.PostAsync($"{BaseUrl}{method}/v1/", content, cancellationToken);
+        return await httpClient.PostAsync($"{BaseUrl}{method}/v1/", content, cancellationToken);
     }
 
     private static string MapEResult(int eresult, string? errorMessage)

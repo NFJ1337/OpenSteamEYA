@@ -38,6 +38,9 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     private bool _pickingIntroVideo;
     private bool _closeBehaviorMenuBuilt;
     private string _selectedCloseBehavior = CloseButtonBehaviors.Ask;
+    private List<ClashProxyGroup> _clashProxyGroups = [];
+    private string? _clashProxyGroupsApiUrl;
+    private string? _clashProxyGroupName;
 
     private static readonly (string Code, string TextKey)[] CloseBehaviorItems =
     [
@@ -87,6 +90,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             UpdateCloseBehaviorButtonText();
             UpdateCustomBackgroundControls();
             UpdateIntroVideoControls();
+            UpdateClashProxyGroupButtonText();
 
             // 未设置时 SteamPathText 显示的是本地化占位文案，需随语言刷新（已设置时是中性路径，刷新无副作用）。
             UpdateSteamPathText();
@@ -312,6 +316,344 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         }
     }
 
+    private void ClashAutoRotateToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        var settings = AppState.SettingsService.Load();
+        settings.ClashAutoRotateEnabled = ClashAutoRotateToggle.IsOn;
+        AppState.SettingsService.Save(settings);
+    }
+
+    private void ClashRotationCountBox_ValueChanged(
+        NumberBox sender,
+        NumberBoxValueChangedEventArgs args)
+    {
+        if (_syncing || double.IsNaN(sender.Value))
+        {
+            return;
+        }
+
+        var count = Math.Clamp((int)Math.Round(sender.Value), 1, 9999);
+        if (Math.Abs(sender.Value - count) > 0.001)
+        {
+            _syncing = true;
+            try
+            {
+                sender.Value = count;
+            }
+            finally
+            {
+                _syncing = false;
+            }
+        }
+
+        var settings = AppState.SettingsService.Load();
+        settings.ClashRotationCount = count;
+        AppState.SettingsService.Save(settings);
+    }
+
+    private void ClashRotationCountBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is not NumberBox { Value: double value } box ||
+            (!double.IsNaN(value) && value >= 1))
+        {
+            return;
+        }
+
+        _syncing = true;
+        try
+        {
+            box.Value = 10;
+        }
+        finally
+        {
+            _syncing = false;
+        }
+
+        var settings = AppState.SettingsService.Load();
+        settings.ClashRotationCount = 10;
+        AppState.SettingsService.Save(settings);
+    }
+
+    private void ClashRotationCountBox_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not NumberBox numberBox)
+        {
+            return;
+        }
+
+        numberBox.ApplyTemplate();
+        if (FindVisualDescendant<TextBox>(numberBox) is { } textBox)
+        {
+            textBox.TextAlignment = TextAlignment.Center;
+            textBox.VerticalContentAlignment = VerticalAlignment.Center;
+        }
+    }
+
+    private void ManualProxyToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        var settings = AppState.SettingsService.Load();
+        settings.ManualQueryProxyEnabled = ManualProxyToggle.IsOn;
+        AppState.SettingsService.Save(settings);
+    }
+
+    private void ManualProxyAddressesBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        var settings = AppState.SettingsService.Load();
+        settings.ManualQueryProxyAddresses =
+            ManualQueryProxyService.NormalizeLinesForStorage(ManualProxyAddressesBox.Text).ToList();
+        AppState.SettingsService.Save(settings);
+    }
+
+    private void ManualProxyRotationCountBox_ValueChanged(
+        NumberBox sender,
+        NumberBoxValueChangedEventArgs args)
+    {
+        if (_syncing || double.IsNaN(sender.Value))
+        {
+            return;
+        }
+
+        var count = Math.Clamp((int)Math.Round(sender.Value), 1, 9999);
+        if (Math.Abs(sender.Value - count) > 0.001)
+        {
+            _syncing = true;
+            try
+            {
+                sender.Value = count;
+            }
+            finally
+            {
+                _syncing = false;
+            }
+        }
+
+        var settings = AppState.SettingsService.Load();
+        settings.ManualQueryProxyRotationCount = count;
+        AppState.SettingsService.Save(settings);
+    }
+
+    private void ManualProxyRotationCountBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is not NumberBox { Value: double value } box ||
+            (!double.IsNaN(value) && value >= 1))
+        {
+            return;
+        }
+
+        _syncing = true;
+        try
+        {
+            box.Value = 10;
+        }
+        finally
+        {
+            _syncing = false;
+        }
+
+        var settings = AppState.SettingsService.Load();
+        settings.ManualQueryProxyRotationCount = 10;
+        AppState.SettingsService.Save(settings);
+    }
+
+    private async void ManualProxyTestButton_Click(object sender, RoutedEventArgs e)
+    {
+        ManualProxyTestButton.IsEnabled = false;
+        var text = ManualProxyAddressesBox.Text;
+        var parsed = ManualQueryProxyService.Parse(new[] { text });
+        if (parsed.Endpoints.Count == 0)
+        {
+            AppState.ShowStatus(
+                Loc.T("Settings_ManualProxy_NoEntries"),
+                InfoBarSeverity.Warning);
+            ManualProxyTestButton.IsEnabled = true;
+            return;
+        }
+
+        AppState.ShowStatus(
+            Loc.T("Settings_ManualProxy_Testing"),
+            InfoBarSeverity.Informational);
+        try
+        {
+            var summary = await ManualQueryProxyService.TestProxiesAsync(
+                text,
+                CancellationToken.None);
+            var average = Math.Round(summary.AverageLatencyMilliseconds);
+            if (summary.Failures.Count == 0)
+            {
+                AppState.ShowStatus(
+                    Loc.Tf("Settings_ManualProxy_TestSuccess_Format", summary.ValidCount, average),
+                    InfoBarSeverity.Success);
+            }
+            else if (summary.ValidCount > 0)
+            {
+                var firstFailure = summary.Failures[0];
+                AppState.ShowStatus(
+                    Loc.Tf(
+                        "Settings_ManualProxy_TestPartial_Format",
+                        summary.ValidCount,
+                        summary.ConfiguredCount,
+                        average,
+                        firstFailure.DisplayName,
+                        firstFailure.Error),
+                    InfoBarSeverity.Warning);
+            }
+            else
+            {
+                var firstFailure = summary.Failures[0];
+                AppState.ShowStatus(
+                    Loc.Tf(
+                        "Settings_ManualProxy_TestFailed_Format",
+                        firstFailure.DisplayName,
+                        firstFailure.Error),
+                    InfoBarSeverity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            AppState.ShowStatus(
+                Loc.Tf("Settings_ManualProxy_TestException_Format", ex.Message),
+                InfoBarSeverity.Error);
+        }
+        finally
+        {
+            ManualProxyTestButton.IsEnabled = true;
+        }
+    }
+
+    private static T? FindVisualDescendant<T>(DependencyObject root)
+        where T : DependencyObject
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var index = 0; index < count; index++)
+        {
+            var child = VisualTreeHelper.GetChild(root, index);
+            if (child is T match)
+            {
+                return match;
+            }
+
+            if (FindVisualDescendant<T>(child) is { } nested)
+            {
+                return nested;
+            }
+        }
+
+        return null;
+    }
+
+    private void SaveClashGroupSelection()
+    {
+        var settings = AppState.SettingsService.Load();
+        settings.ClashProxyGroup = _clashProxyGroupName;
+        AppState.SettingsService.Save(settings);
+    }
+
+    private void OpenClashManagerButton_Click(object sender, RoutedEventArgs e) =>
+        MainWindow.Instance?.OpenClashManagement();
+
+    private async Task RefreshClashProxyGroupsAsync()
+    {
+        var settings = AppState.SettingsService.Load();
+        if (string.IsNullOrWhiteSpace(settings.ClashApiUrl))
+        {
+            _clashProxyGroups = [];
+            _clashProxyGroupsApiUrl = null;
+            RebuildClashProxyGroupFlyout();
+            return;
+        }
+
+        try
+        {
+            using var service = new ClashProxyService();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            var snapshot = await service.GetSnapshotAsync(
+                settings.ClashApiUrl,
+                settings.ClashApiSecret ?? string.Empty,
+                timeout.Token);
+            _clashProxyGroups = snapshot.Groups.ToList();
+            _clashProxyGroupsApiUrl = settings.ClashApiUrl.Trim();
+            if (!_clashProxyGroups.Any(group => string.Equals(
+                    group.Name,
+                    _clashProxyGroupName,
+                    StringComparison.OrdinalIgnoreCase)))
+            {
+                _clashProxyGroupName = _clashProxyGroups.FirstOrDefault()?.Name;
+                SaveClashGroupSelection();
+            }
+
+            RebuildClashProxyGroupFlyout();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"选项配置页刷新 Clash 代理组失败：{ex.Message}");
+            _clashProxyGroups = [];
+            _clashProxyGroupsApiUrl = null;
+            RebuildClashProxyGroupFlyout();
+        }
+    }
+
+    private void RebuildClashProxyGroupFlyout()
+    {
+        ClashProxyGroupFlyout.Items.Clear();
+        foreach (var group in _clashProxyGroups)
+        {
+            var item = new MenuFlyoutItem
+            {
+                Text = group.DisplayName,
+                Tag = group.Name,
+                Icon = new FontIcon
+                {
+                    Glyph = string.Equals(
+                        group.Name,
+                        _clashProxyGroupName,
+                        StringComparison.OrdinalIgnoreCase)
+                        ? "\uE73E"
+                        : "\u200B",
+                    FontSize = 12
+                }
+            };
+            item.Click += ClashProxyGroupMenuItem_Click;
+            ClashProxyGroupFlyout.Items.Add(item);
+        }
+
+        ClashProxyGroupButton.IsEnabled = _clashProxyGroups.Count > 0;
+        UpdateClashProxyGroupButtonText();
+    }
+
+    private void ClashProxyGroupMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuFlyoutItem { Tag: string groupName })
+        {
+            return;
+        }
+
+        _clashProxyGroupName = groupName;
+        RebuildClashProxyGroupFlyout();
+        SaveClashGroupSelection();
+    }
+
+    private void UpdateClashProxyGroupButtonText()
+    {
+        ClashProxyGroupButtonText.Text = string.IsNullOrWhiteSpace(_clashProxyGroupName)
+            ? Loc.T("Clash_CurrentProxy_None")
+            : _clashProxyGroupName;
+    }
+
     private void UpdateChoiceButtonTexts()
     {
         LanguageButtonText.Text = Loc.AvailablePacks
@@ -488,6 +830,21 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
                 settings.AutoBackgroundEnabled &&
                 GetConfiguredAutoBackgroundPaths(settings).Count > 0;
             CustomBackgroundOpacitySlider.Value = Math.Clamp(settings.CustomBackgroundOpacity, 0.1, 0.9);
+            ClashAutoRotateToggle.IsOn = settings.ClashAutoRotateEnabled;
+            ClashRotationCountBox.Value = Math.Clamp(settings.ClashRotationCount, 1, 9999);
+            ManualProxyToggle.IsOn = settings.ManualQueryProxyEnabled;
+            ManualProxyAddressesBox.Text =
+                ManualQueryProxyService.FormatLines(settings.ManualQueryProxyAddresses);
+            ManualProxyRotationCountBox.Value =
+                Math.Clamp(settings.ManualQueryProxyRotationCount, 1, 9999);
+            _clashProxyGroupName = settings.ClashProxyGroup;
+            if (!string.Equals(
+                    _clashProxyGroupsApiUrl,
+                    settings.ClashApiUrl?.Trim(),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                _clashProxyGroups = [];
+            }
             UpdateCustomBackgroundControls();
         }
         finally
@@ -496,6 +853,8 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         }
 
         DataFolderPathText.Text = AppState.SettingsService.AppFolderPath;
+        RebuildClashProxyGroupFlyout();
+        _ = RefreshClashProxyGroupsAsync();
         UpdateSteamPathText();
         RefreshCs2SyncSources();
     }
@@ -1116,6 +1475,9 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     {
         var settings = AppState.SettingsService.Load();
         Cs2SyncToggle.IsOn = settings.Cs2SyncOnLogin;
+        Cs2ClearWorkshopOnLoginCheck.IsChecked = settings.Cs2ClearWorkshopOnLogin;
+        Cs2ApplyLoadoutOnLoginCheck.IsChecked = settings.Cs2ApplyLoadoutOnLogin;
+        Cs2PersonalizeOnLoginCheck.IsChecked = settings.Cs2PersonalizeOnLogin;
         _cs2SourceSteamId = settings.Cs2SyncSourceSteamId;
 
         if (clearInvalidSelection &&
@@ -1238,6 +1600,20 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
 
         var settings = AppState.SettingsService.Load();
         settings.Cs2SyncOnLogin = Cs2SyncToggle.IsOn;
+        AppState.SettingsService.Save(settings);
+    }
+
+    private void Cs2LoginActionCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        var settings = AppState.SettingsService.Load();
+        settings.Cs2ClearWorkshopOnLogin = Cs2ClearWorkshopOnLoginCheck.IsChecked == true;
+        settings.Cs2ApplyLoadoutOnLogin = Cs2ApplyLoadoutOnLoginCheck.IsChecked == true;
+        settings.Cs2PersonalizeOnLogin = Cs2PersonalizeOnLoginCheck.IsChecked == true;
         AppState.SettingsService.Save(settings);
     }
 

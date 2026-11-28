@@ -95,6 +95,7 @@ internal sealed class SteamCmClient : IAsyncDisposable
     private const int EMsgMulti = 1;
     private const int EMsgServiceMethodCallFromClient = 151;
     private const int EMsgClientHeartBeat = 703;
+    private const int EMsgClientChangeStatus = 716;
     private const int EMsgClientLogOff = 706;
     private const int EMsgClientLogOnResponse = 751;
     private const int EMsgClientLoggedOff = 757;
@@ -106,6 +107,7 @@ internal sealed class SteamCmClient : IAsyncDisposable
     private const int MaxCachedGcMessageKeys = 64;
 
     private readonly HttpClient _httpClient;
+    private readonly IWebProxy _webProxy;
     private readonly ConcurrentDictionary<ulong, TaskCompletionSource<ServiceMethodResponse>> _jobs = new();
     private readonly ConcurrentDictionary<string, TaskCompletionSource<SteamGcClientMessage>> _gcWaiters = new();
     private readonly Dictionary<string, Queue<SteamGcClientMessage>> _gcMessageCache = new(StringComparer.Ordinal);
@@ -124,9 +126,10 @@ internal sealed class SteamCmClient : IAsyncDisposable
     private ulong _steamId;
     private ulong _currentJobId = (ulong)RandomNumberGenerator.GetInt32(1, int.MaxValue);
 
-    public SteamCmClient(HttpClient httpClient)
+    public SteamCmClient(HttpClient httpClient, IWebProxy? webProxy = null)
     {
         _httpClient = httpClient;
+        _webProxy = webProxy ?? WebRequest.GetSystemWebProxy();
     }
 
     public async Task ConnectAndLogOnAsync(
@@ -309,6 +312,48 @@ internal sealed class SteamCmClient : IAsyncDisposable
 
         EnsureOk(response, Loc.T("Legacy_Query_StatusUserInfo"));
         return DecodePersonaName(response.Body, requestedSteamId);
+    }
+
+    /// <summary>
+    /// 直接通过 Steam CM 修改当前账号昵称，不依赖 steamcommunity.com。
+    /// 发送 ClientChangeStatus 后读取公开资料确认昵称已生效。
+    /// </summary>
+    public async Task SetPlayerNameAsync(
+        string steamId,
+        string playerName,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(playerName))
+        {
+            throw new ArgumentException("Player name cannot be empty.", nameof(playerName));
+        }
+
+        var body = SteamProtoWriter.Build(writer =>
+        {
+            writer.WriteUInt32(1, 1); // Online
+            writer.WriteString(2, playerName.Trim());
+            writer.WriteBool(4, true);
+            writer.WriteBool(6, true);
+        });
+        await SendProtobufMessageAsync(
+            EMsgClientChangeStatus,
+            body,
+            targetJobName: null,
+            jobIdSource: null,
+            realm: null,
+            cancellationToken);
+
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(400), cancellationToken);
+            var current = await GetPersonaNameAsync(steamId, cancellationToken);
+            if (string.Equals(current, playerName.Trim(), StringComparison.Ordinal))
+            {
+                return;
+            }
+        }
+
+        throw new InvalidOperationException(Loc.T("Profile_Error_CmNameNotConfirmed"));
     }
 
     /// <summary>
@@ -597,7 +642,7 @@ internal sealed class SteamCmClient : IAsyncDisposable
         _socket = new ClientWebSocket();
         _socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(30);
 
-        _socket.Options.Proxy = WebRequest.GetSystemWebProxy();
+        _socket.Options.Proxy = _webProxy;
 
         // 不回包的 CM 会让 ConnectAsync 挂起数分钟，必须按单个 endpoint 限时；
         // 超时抛 TimeoutException（而非 OperationCanceledException），

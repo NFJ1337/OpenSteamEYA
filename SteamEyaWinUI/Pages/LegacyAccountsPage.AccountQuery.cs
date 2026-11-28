@@ -821,6 +821,11 @@ public sealed partial class LegacyAccountsPage
                 throttle.Release();
             }
 
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                await ClashAutoRotateService.NotifyAccountQueryCompletedAsync();
+            }
+
             UpdateAccountQueryFooter();
         }
     }

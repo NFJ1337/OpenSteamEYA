@@ -119,6 +119,61 @@ internal sealed partial class ClashProxyService : IDisposable
             : null;
     }
 
+    /// <summary>
+    /// 对一组节点并发测试延迟。单个节点失败只记录为 null，不影响其它节点。
+    /// 供启动后的静默预热使用，不涉及任何 UI 提示。
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, int?>> TestAllDelaysAsync(
+        string apiBaseUrl,
+        string apiSecret,
+        IEnumerable<string> proxyNames,
+        int maxConcurrency,
+        CancellationToken cancellationToken)
+    {
+        var names = proxyNames
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var delays = new Dictionary<string, int?>(StringComparer.Ordinal);
+        using var concurrency = new SemaphoreSlim(Math.Max(1, maxConcurrency));
+
+        await Task.WhenAll(names.Select(async name =>
+        {
+            await concurrency.WaitAsync(cancellationToken);
+            try
+            {
+                int? delay;
+                try
+                {
+                    delay = await TestDelayAsync(
+                        apiBaseUrl,
+                        apiSecret,
+                        name,
+                        cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch
+                {
+                    delay = null;
+                }
+
+                lock (delays)
+                {
+                    delays[name] = delay;
+                }
+            }
+            finally
+            {
+                concurrency.Release();
+            }
+        }));
+
+        return delays;
+    }
+
     public async Task SelectProxyAsync(
         string apiBaseUrl,
         string apiSecret,
@@ -203,6 +258,7 @@ internal sealed partial class ClashProxyService : IDisposable
             ? property.GetString()
             : null;
     }
+
 }
 
 internal sealed class ClashSelectProxyRequest

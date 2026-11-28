@@ -180,12 +180,16 @@ public sealed partial class MainWindow : Window
 
         // 首页已开始呈现，再执行不会阻塞背景图与首屏的后台维护任务。
         _ = PrewarmSteamConnectionsAsync();
-        LegacyCacheCleaner.CleanRemovedMusicCacheOnce();
+        _ = RunBackgroundStartupActionAsync(
+            "清理已移除的音乐缓存",
+            LegacyCacheCleaner.CleanRemovedMusicCacheOnce);
         if (AppPaths.ImportedFromLegacy is { } legacyRoot)
         {
             AppLog.Info($"已从旧数据目录导入：\"{legacyRoot}\" → \"{AppPaths.DataRoot}\"（原目录保持原样，旧版仍可用）");
         }
-        DailyBackupService.RunForTodayIfNeeded();
+        _ = RunBackgroundStartupActionAsync(
+            "执行每日数据备份",
+            DailyBackupService.RunForTodayIfNeeded);
 
         // 首次启动即解析并持久化 Steam 安装路径（之后上号直接复用，不再每次探测）。
         // 等内容进入可视树（XamlRoot 就绪）后再跑，检测失败才需要弹框。
@@ -707,13 +711,77 @@ public sealed partial class MainWindow : Window
         }
 
         _startupInitializationStarted = true;
-        _ = CompleteStartupInitializationAsync();
+        // 启动业务全部独立运行：任何一项都不等待其它任务完成。
+        _ = ObserveStartupTaskAsync(
+            ResolveSteamPathAfterStartupAsync(),
+            "Steam 安装路径解析");
+        _ = ObserveStartupTaskAsync(
+            ShowInitialReleaseNotesIfNeededAsync(),
+            "本地更新日志");
+        _ = ObserveStartupTaskAsync(
+            RunStartupClashCheckAsync(),
+            "Clash 静默检查");
     }
 
-    private async Task CompleteStartupInitializationAsync()
+    private static async Task ObserveStartupTaskAsync(Task task, string operation)
     {
-        await ResolveSteamPathAfterStartupAsync();
-        await ShowInitialReleaseNotesIfNeededAsync();
+        try
+        {
+            await task;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"{operation}后台流程异常结束：{ex.GetBaseException().Message}");
+        }
+    }
+
+    private static async Task RunBackgroundStartupActionAsync(string operation, Action action)
+    {
+        try
+        {
+            await Task.Run(action);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"{operation}后台流程异常结束：{ex.GetBaseException().Message}");
+        }
+    }
+
+    /// <summary>
+    /// 启动后独立静默检查 Clash：连接 API、读取代理组、测试所选组全部节点延迟。
+    /// 成功和失败都不显示状态栏或弹窗，只在运行日志中留下诊断信息。
+    /// </summary>
+    private static async Task RunStartupClashCheckAsync()
+    {
+        var settings = AppState.SettingsService.Load();
+        if (string.IsNullOrWhiteSpace(settings.ClashApiUrl))
+        {
+            AppLog.Info("Clash 启动静默检查：尚未配置 API，跳过。");
+            return;
+        }
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+        try
+        {
+            var result = await ClashProxyWorkflowService.ConnectAndTestAllAsync(
+                settings.ClashApiUrl,
+                settings.ClashApiSecret ?? string.Empty,
+                settings.ClashProxyGroup,
+                timeout.Token);
+            var succeeded = result.Delays.Count(item => item.Value.HasValue);
+            var failed = result.Delays.Count - succeeded;
+            AppLog.Info(
+                $"Clash 启动静默检查完成：代理组「{result.GroupName}」，" +
+                $"节点 {result.Delays.Count} 个，成功 {succeeded}，失败 {failed}。");
+        }
+        catch (OperationCanceledException)
+        {
+            AppLog.Warn("Clash 启动静默检查超时，本次不再重试。");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"Clash 启动静默检查失败：{ex.Message}");
+        }
     }
 
     /// <summary>启动后台解析 Steam 安装路径（失败只记日志，不打扰用户）。</summary>
@@ -798,6 +866,13 @@ public sealed partial class MainWindow : Window
         _pendingLoginAccount = account;
         NavigateTo("login");
         RootNavigationView.SelectedItem = LoginNavItem;
+    }
+
+    /// <summary>从选项配置页打开 Clash 代理管理页面。</summary>
+    public void OpenClashManagement()
+    {
+        NavigateTo("clash");
+        RootNavigationView.SelectedItem = ClashNavItem;
     }
 
     private void EnsureLoginPageInitialized()

@@ -498,6 +498,47 @@ internal sealed class AccountHistoryService
         }
     }
 
+    /// <summary>保存账号密码登录兜底新取得的刷新令牌，不改动冷却、VAC、等级等业务字段。</summary>
+    public bool SaveRefreshToken(
+        string accountName,
+        string steamId,
+        string refreshToken,
+        DateTimeOffset? tokenExpiresAt)
+    {
+        if (string.IsNullOrWhiteSpace(accountName) ||
+            string.IsNullOrWhiteSpace(steamId) ||
+            string.IsNullOrWhiteSpace(refreshToken))
+        {
+            return false;
+        }
+
+        _fileGate.Wait();
+        try
+        {
+            var document = ReadDocumentForWrite();
+            var item = FindExisting(document.Accounts, steamId, accountName);
+            if (item is null)
+            {
+                return false;
+            }
+
+            item.AccountName = accountName.Trim();
+            item.SteamId = steamId.Trim();
+            item.EyaToken = refreshToken.Trim();
+            item.TokenExpiresAt = tokenExpiresAt;
+            item.JwtAvailable = true;
+            item.JwtStatus = Loc.T("Account_Jwt_Valid");
+            item.JwtValidatedAt = DateTimeOffset.Now;
+            document.Accounts = NormalizeAccounts(document.Accounts).ToList();
+            WriteDocument(document);
+            return true;
+        }
+        finally
+        {
+            _fileGate.Release();
+        }
+    }
+
     /// <summary>VAC 设置后异步刷新 CS2 游戏时间；只改目标账号并立即落盘。</summary>
     public bool SetCs2Playtime(string accountName, string steamId, double hours)
     {

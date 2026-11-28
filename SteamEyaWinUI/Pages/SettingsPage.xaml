@@ -90,48 +90,6 @@
                 </Grid>
             </Border>
 
-            <!-- 更新站点：可选直连或代理站，手动检测当前选择站点延迟 -->
-            <Border Style="{StaticResource CardBorderStyle}">
-                <StackPanel Spacing="10">
-                    <TextBlock
-                        Text="{x:Bind Strings.Get('Settings_UpdateProxy_Section'), Mode=OneWay}"
-                        Style="{StaticResource SectionTitleTextStyle}" />
-                    <TextBlock
-                        Text="{x:Bind Strings.Get('Settings_UpdateProxy_Desc'), Mode=OneWay}"
-                        Foreground="{ThemeResource AuroraTextMutedBrush}"
-                        TextWrapping="Wrap" />
-                    <Grid ColumnSpacing="12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <DropDownButton
-                            x:Name="UpdateProxyButton"
-                            Grid.Column="0"
-                            HorizontalAlignment="Stretch"
-                            Style="{StaticResource UiTintDropDownButtonStyle}">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <FontIcon Glyph="&#xE895;" FontSize="16" />
-                                <TextBlock x:Name="UpdateProxyButtonText" />
-                            </StackPanel>
-                            <DropDownButton.Flyout>
-                                <MenuFlyout x:Name="UpdateProxyFlyout" />
-                            </DropDownButton.Flyout>
-                        </DropDownButton>
-                        <Button
-                            x:Name="UpdateProxyLatencyButton"
-                            Grid.Column="1"
-                            Click="UpdateProxyLatencyButton_Click"
-                            ToolTipService.ToolTip="{x:Bind Strings.Get('Settings_UpdateProxy_LatencyButton'), Mode=OneWay}">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <FontIcon Glyph="&#xE895;" FontSize="14" />
-                                <TextBlock Text="{x:Bind Strings.Get('Settings_UpdateProxy_LatencyButton'), Mode=OneWay}" />
-                            </StackPanel>
-                        </Button>
-                    </Grid>
-                </StackPanel>
-            </Border>
-
             <!-- 自定义 UI 颜色 -->
             <Border Style="{StaticResource CardBorderStyle}">
                 <Grid ColumnSpacing="16">
@@ -308,7 +266,7 @@
                             Minimum="0.1"
                             Maximum="0.9"
                             StepFrequency="0.05"
-                            Value="0.4"
+                            Value="0.3"
                             ValueChanged="CustomBackgroundOpacitySlider_ValueChanged" />
                         <Button
                             x:Name="ResetCustomBackgroundOpacityButton"
@@ -689,6 +647,295 @@
                         Style="{StaticResource CaptionTextBlockStyle}"
                         Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                         TextWrapping="Wrap" />
+                    <Grid ColumnSpacing="18" HorizontalAlignment="Left">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <CheckBox
+                            x:Name="Cs2ClearWorkshopOnLoginCheck"
+                            Grid.Column="0"
+                            Content="{x:Bind Strings.Get('Settings_Cs2Sync_ClearWorkshop'), Mode=OneWay}"
+                            Checked="Cs2LoginActionCheck_Changed"
+                            Unchecked="Cs2LoginActionCheck_Changed" />
+                        <CheckBox
+                            x:Name="Cs2ApplyLoadoutOnLoginCheck"
+                            Grid.Column="1"
+                            Content="{x:Bind Strings.Get('Settings_Cs2Sync_ApplyLoadout'), Mode=OneWay}"
+                            Checked="Cs2LoginActionCheck_Changed"
+                            Unchecked="Cs2LoginActionCheck_Changed" />
+                        <CheckBox
+                            x:Name="Cs2PersonalizeOnLoginCheck"
+                            Grid.Column="2"
+                            Content="{x:Bind Strings.Get('Settings_Cs2Sync_Personalize'), Mode=OneWay}"
+                            Checked="Cs2LoginActionCheck_Changed"
+                            Unchecked="Cs2LoginActionCheck_Changed" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- 更新站点：可选直连或代理站，手动检测当前选择站点延迟 -->
+            <Border Style="{StaticResource CardBorderStyle}">
+                <StackPanel Spacing="10">
+                    <TextBlock
+                        Text="{x:Bind Strings.Get('Settings_UpdateProxy_Section'), Mode=OneWay}"
+                        Style="{StaticResource SectionTitleTextStyle}" />
+                    <TextBlock
+                        Text="{x:Bind Strings.Get('Settings_UpdateProxy_Desc'), Mode=OneWay}"
+                        Foreground="{ThemeResource AuroraTextMutedBrush}"
+                        TextWrapping="Wrap" />
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <DropDownButton
+                            x:Name="UpdateProxyButton"
+                            Grid.Column="0"
+                            HorizontalAlignment="Stretch"
+                            Style="{StaticResource UiTintDropDownButtonStyle}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE895;" FontSize="16" />
+                                <TextBlock x:Name="UpdateProxyButtonText" />
+                            </StackPanel>
+                            <DropDownButton.Flyout>
+                                <MenuFlyout x:Name="UpdateProxyFlyout" />
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
+                        <Button
+                            x:Name="UpdateProxyLatencyButton"
+                            Grid.Column="1"
+                            Click="UpdateProxyLatencyButton_Click"
+                            ToolTipService.ToolTip="{x:Bind Strings.Get('Settings_UpdateProxy_LatencyButton'), Mode=OneWay}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE895;" FontSize="14" />
+                                <TextBlock Text="{x:Bind Strings.Get('Settings_UpdateProxy_LatencyButton'), Mode=OneWay}" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Clash 代理设置：管理自动轮换参数，API 地址/密钥仍在 Clash 管理页配置 -->
+            <Border Style="{StaticResource CardBorderStyle}">
+                <StackPanel Spacing="12">
+                    <TextBlock
+                        Text="{x:Bind Strings.Get('Settings_Clash_Section'), Mode=OneWay}"
+                        Style="{StaticResource SectionTitleTextStyle}" />
+                    <TextBlock
+                        Text="{x:Bind Strings.Get('Settings_Clash_Desc'), Mode=OneWay}"
+                        Foreground="{ThemeResource AuroraTextMutedBrush}"
+                        TextWrapping="Wrap" />
+
+                    <Grid ColumnSpacing="16" RowSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <StackPanel Grid.Row="0" Spacing="2" VerticalAlignment="Center">
+                            <TextBlock
+                                Text="{x:Bind Strings.Get('Settings_Clash_AutoRotate'), Mode=OneWay}"
+                                Style="{StaticResource SectionTitleTextStyle}"
+                                FontSize="14" />
+                            <TextBlock
+                                Text="{x:Bind Strings.Get('Settings_Clash_AutoRotate_Desc'), Mode=OneWay}"
+                                Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ToggleSwitch
+                            x:Name="ClashAutoRotateToggle"
+                            Grid.Row="0"
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            Toggled="ClashAutoRotateToggle_Toggled" />
+
+                        <StackPanel Grid.Row="1" Spacing="2" VerticalAlignment="Center">
+                            <TextBlock
+                                Text="{x:Bind Strings.Get('Clash_ProxyGroup'), Mode=OneWay}"
+                                Style="{StaticResource SectionTitleTextStyle}"
+                                FontSize="14" />
+                            <TextBlock
+                                Text="{x:Bind Strings.Get('Settings_Clash_Group_Desc'), Mode=OneWay}"
+                                Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                        <DropDownButton
+                            x:Name="ClashProxyGroupButton"
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            Width="240"
+                            HorizontalContentAlignment="Stretch"
+                            IsEnabled="False"
+                            Style="{StaticResource UiTintDropDownButtonStyle}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE774;" FontSize="15" />
+                                <TextBlock
+                                    x:Name="ClashProxyGroupButtonText"
+                                    TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                            <DropDownButton.Flyout>
+                                <MenuFlyout
+                                    x:Name="ClashProxyGroupFlyout"
+                                    MenuFlyoutPresenterStyle="{StaticResource AuroraOpaqueMenuFlyoutPresenterStyle}" />
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
+
+                        <StackPanel Grid.Row="2" Spacing="2" VerticalAlignment="Center">
+                            <TextBlock
+                                Text="{x:Bind Strings.Get('Settings_Clash_RotationCount'), Mode=OneWay}"
+                                Style="{StaticResource SectionTitleTextStyle}"
+                                FontSize="14" />
+                            <TextBlock
+                                Text="{x:Bind Strings.Get('Settings_Clash_RotationCount_Desc'), Mode=OneWay}"
+                                Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                        <NumberBox
+                            x:Name="ClashRotationCountBox"
+                            Grid.Row="2"
+                            Grid.Column="1"
+                            Width="240"
+                            Minimum="1"
+                            Maximum="9999"
+                            SmallChange="1"
+                            LargeChange="10"
+                            SpinButtonPlacementMode="Inline"
+                            ValueChanged="ClashRotationCountBox_ValueChanged"
+                            LostFocus="ClashRotationCountBox_LostFocus"
+                            Loaded="ClashRotationCountBox_Loaded" />
+
+                        <StackPanel Grid.Row="3" Spacing="2" VerticalAlignment="Center">
+                            <TextBlock
+                                Text="{x:Bind Strings.Get('Settings_Clash_OpenManager'), Mode=OneWay}"
+                                Style="{StaticResource SectionTitleTextStyle}"
+                                FontSize="14" />
+                            <TextBlock
+                                Text="{x:Bind Strings.Get('Settings_Clash_OpenManager_Desc'), Mode=OneWay}"
+                                Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                        <Button
+                            x:Name="OpenClashManagerButton"
+                            Grid.Row="3"
+                            Grid.Column="1"
+                            Width="240"
+                            Content="{x:Bind Strings.Get('Settings_Clash_OpenManager_Button'), Mode=OneWay}"
+                            Style="{StaticResource AccentButtonStyle}"
+                            Click="OpenClashManagerButton_Click" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- 代理设置：账号查询可独立使用手动代理，并按时轮换；与上方 Clash 节点逻辑互不影响 -->
+            <Border Style="{StaticResource CardBorderStyle}">
+                <StackPanel Spacing="12">
+                    <TextBlock
+                        Text="{x:Bind Strings.Get('Settings_ManualProxy_Section'), Mode=OneWay}"
+                        Style="{StaticResource SectionTitleTextStyle}" />
+
+                    <Grid ColumnSpacing="16" RowSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <StackPanel Grid.Row="0" Spacing="2" VerticalAlignment="Center">
+                            <TextBlock
+                                Text="{x:Bind Strings.Get('Settings_ManualProxy_Enable'), Mode=OneWay}"
+                                Style="{StaticResource SectionTitleTextStyle}"
+                                FontSize="14" />
+                            <TextBlock
+                                Text="{x:Bind Strings.Get('Settings_ManualProxy_Enable_Desc'), Mode=OneWay}"
+                                Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ToggleSwitch
+                            x:Name="ManualProxyToggle"
+                            Grid.Row="0"
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            Toggled="ManualProxyToggle_Toggled" />
+
+                        <StackPanel Grid.Row="1" Spacing="2" VerticalAlignment="Top">
+                            <TextBlock
+                                Text="{x:Bind Strings.Get('Settings_ManualProxy_Addresses'), Mode=OneWay}"
+                                Style="{StaticResource SectionTitleTextStyle}"
+                                FontSize="14" />
+                            <TextBlock
+                                Text="{x:Bind Strings.Get('Settings_ManualProxy_Addresses_Desc'), Mode=OneWay}"
+                                Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                        <TextBox
+                            x:Name="ManualProxyAddressesBox"
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            Width="240"
+                            Height="96"
+                            AcceptsReturn="True"
+                            TextChanged="ManualProxyAddressesBox_TextChanged"
+                            TextWrapping="Wrap"
+                            PlaceholderText="{x:Bind Strings.Get('Settings_ManualProxy_Placeholder'), Mode=OneWay}"
+                            ScrollViewer.VerticalScrollBarVisibility="Auto"
+                            Style="{StaticResource UiTintTextBoxStyle}" />
+
+                        <StackPanel Grid.Row="2" Spacing="2" VerticalAlignment="Center">
+                            <TextBlock
+                                Text="{x:Bind Strings.Get('Settings_ManualProxy_RotationCount'), Mode=OneWay}"
+                                Style="{StaticResource SectionTitleTextStyle}"
+                                FontSize="14" />
+                            <TextBlock
+                                Text="{x:Bind Strings.Get('Settings_ManualProxy_RotationCount_Desc'), Mode=OneWay}"
+                                Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                        <NumberBox
+                            x:Name="ManualProxyRotationCountBox"
+                            Grid.Row="2"
+                            Grid.Column="1"
+                            Width="240"
+                            Minimum="1"
+                            Maximum="9999"
+                            SmallChange="1"
+                            LargeChange="10"
+                            SpinButtonPlacementMode="Inline"
+                            ValueChanged="ManualProxyRotationCountBox_ValueChanged"
+                            LostFocus="ManualProxyRotationCountBox_LostFocus"
+                            Loaded="ClashRotationCountBox_Loaded" />
+
+                        <StackPanel Grid.Row="3" Spacing="2" VerticalAlignment="Center">
+                            <TextBlock
+                                Text="{x:Bind Strings.Get('Settings_ManualProxy_Test'), Mode=OneWay}"
+                                Style="{StaticResource SectionTitleTextStyle}"
+                                FontSize="14" />
+                            <TextBlock
+                                Text="{x:Bind Strings.Get('Settings_ManualProxy_Test_Desc'), Mode=OneWay}"
+                                Foreground="{ThemeResource AuroraTextMutedBrush}"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                        <Button
+                            x:Name="ManualProxyTestButton"
+                            Grid.Row="3"
+                            Grid.Column="1"
+                            Width="240"
+                            Content="{x:Bind Strings.Get('Settings_ManualProxy_Test'), Mode=OneWay}"
+                            Style="{StaticResource AccentButtonStyle}"
+                            Click="ManualProxyTestButton_Click" />
+                    </Grid>
                 </StackPanel>
             </Border>
 

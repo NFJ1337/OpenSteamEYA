@@ -76,17 +76,6 @@ internal sealed partial class SteamAccountQueryService
     private const string VacPage =
         "https://help.steampowered.com/zh-cn/wizard/VacBans";
 
-    private static readonly HttpClient HttpClient = new(new HttpClientHandler
-    {
-        AutomaticDecompression = DecompressionMethods.All,
-        UseCookies = false,
-        AllowAutoRedirect = false,
-        UseProxy = true
-    })
-    {
-        Timeout = TimeSpan.FromSeconds(30)
-    };
-
     public async Task<SteamAccountQueryResult> QueryAsync(
         SteamAccountHistoryItem account,
         SteamAccountQueryOptions options,
@@ -98,6 +87,7 @@ internal sealed partial class SteamAccountQueryService
         {
             AccountName = account.AccountName
         };
+        using var proxyTransport = ManualQueryProxyService.CreateTransportForAccountQuery();
 
         try
         {
@@ -106,6 +96,7 @@ internal sealed partial class SteamAccountQueryService
                 account,
                 guardCodeProvider,
                 progress,
+                proxyTransport,
                 cancellationToken);
 
             result.LoginSucceeded = true;
@@ -123,6 +114,7 @@ internal sealed partial class SteamAccountQueryService
                     var (rank, lastLogin) = await ReadRankInfoAsync(
                         auth.Session,
                         auth.SteamId,
+                        proxyTransport.HttpClient,
                         cancellationToken);
                     result.RankChecked = true;
                     result.CsProfileRank = rank;
@@ -142,6 +134,7 @@ internal sealed partial class SteamAccountQueryService
                     var (personaName, region) = await ReadUserInfoAsync(
                         auth.Session,
                         auth.SteamId,
+                        proxyTransport.HttpClient,
                         cancellationToken);
                     result.UserInfoChecked = true;
                     result.PersonaName = personaName;
@@ -157,6 +150,7 @@ internal sealed partial class SteamAccountQueryService
                 {
                     result.HasChinaSteam = await ReadChinaSteamAsync(
                         auth.Session,
+                        proxyTransport.HttpClient,
                         cancellationToken);
                     result.ChinaSteamChecked = true;
                 }
@@ -171,7 +165,10 @@ internal sealed partial class SteamAccountQueryService
                 progress?.Report(Loc.T("Legacy_Query_StatusBanTime"));
                 try
                 {
-                    var ban = await ReadBanStateAsync(auth.Session, cancellationToken);
+                    var ban = await ReadBanStateAsync(
+                        auth.Session,
+                        proxyTransport.HttpClient,
+                        cancellationToken);
                     result.BanChecked = true;
                     result.VacBanned = ban.VacBanned;
                     result.BanExpiresAt = ban.ExpiresAt;
@@ -191,6 +188,7 @@ internal sealed partial class SteamAccountQueryService
                     var hours = await ReadCs2PlaytimeHoursAsync(
                         auth.Session,
                         auth.SteamId,
+                        proxyTransport.HttpClient,
                         cancellationToken);
                     if (hours.HasValue)
                     {
@@ -285,12 +283,17 @@ internal sealed partial class SteamAccountQueryService
     }
 
     /// <summary>复用 VAC 查询刚建立的 Web 会话读取 CS2 游戏时间，避免再次连接 Steam CM。</summary>
-    public Task<double?> QueryCs2PlaytimeAsync(
+    public async Task<double?> QueryCs2PlaytimeAsync(
         SteamWebSession session,
         string steamId,
         CancellationToken cancellationToken)
     {
-        return ReadCs2PlaytimeHoursAsync(session, steamId, cancellationToken);
+        using var proxyTransport = ManualQueryProxyService.CreateTransportForAccountQuery();
+        return await ReadCs2PlaytimeHoursAsync(
+            session,
+            steamId,
+            proxyTransport.HttpClient,
+            cancellationToken);
     }
 
     public async Task<double?> QueryCs2PlaytimeAsync(
@@ -298,14 +301,17 @@ internal sealed partial class SteamAccountQueryService
         Func<SteamGuardPrompt, CancellationToken, Task<string?>> guardCodeProvider,
         CancellationToken cancellationToken)
     {
+        using var proxyTransport = ManualQueryProxyService.CreateTransportForAccountQuery();
         var auth = await ResolveSessionAsync(
             account,
             guardCodeProvider,
             progress: null,
+            proxyTransport,
             cancellationToken);
         return await ReadCs2PlaytimeHoursAsync(
             auth.Session,
             auth.SteamId,
+            proxyTransport.HttpClient,
             cancellationToken);
     }
 
@@ -315,6 +321,7 @@ internal sealed partial class SteamAccountQueryService
         Func<SteamGuardPrompt, CancellationToken, Task<string?>> guardCodeProvider,
         CancellationToken cancellationToken)
     {
+        using var proxyTransport = ManualQueryProxyService.CreateTransportForAccountQuery();
         if (TryGetUsableCachedToken(account.EyaToken, out var cachedToken, out var cachedSteamId))
         {
             try
@@ -323,6 +330,7 @@ internal sealed partial class SteamAccountQueryService
                     account,
                     cachedToken,
                     cachedSteamId,
+                    proxyTransport,
                     cancellationToken);
             }
             catch (SteamCmException ex) when (ex.IsTokenFailure)
@@ -341,12 +349,14 @@ internal sealed partial class SteamAccountQueryService
             account.Password,
             guardCodeProvider,
             progress: null,
-            cancellationToken);
+            cancellationToken,
+            proxyTransport.WebProxy is null ? null : proxyTransport.HttpClient);
         var refreshToken = FormatHelper.NormalizeToken(auth.RefreshToken);
         return await QueryCs2PlaytimeAndPersonaViaCmAsync(
             account,
             refreshToken,
             auth.SteamId,
+            proxyTransport,
             cancellationToken);
     }
 
@@ -358,9 +368,12 @@ internal sealed partial class SteamAccountQueryService
         SteamAccountHistoryItem account,
         string refreshToken,
         string steamId,
+        ManualQueryProxyTransport proxyTransport,
         CancellationToken cancellationToken)
     {
-        await using var cmClient = new SteamCmClient(HttpClient);
+        await using var cmClient = new SteamCmClient(
+            proxyTransport.HttpClient,
+            proxyTransport.WebProxy);
         await cmClient.ConnectAndLogOnAsync(refreshToken, steamId, cancellationToken);
 
         double? playtimeHours = null;
@@ -398,13 +411,18 @@ internal sealed partial class SteamAccountQueryService
         SteamAccountHistoryItem account,
         Func<SteamGuardPrompt, CancellationToken, Task<string?>> guardCodeProvider,
         IProgress<string>? progress,
+        ManualQueryProxyTransport proxyTransport,
         CancellationToken cancellationToken)
     {
         if (TryGetUsableCachedToken(account.EyaToken, out var cachedToken, out var cachedSteamId))
         {
             try
             {
-                return await CreateSessionAsync(cachedToken, cachedSteamId, cancellationToken);
+                return await CreateSessionAsync(
+                    cachedToken,
+                    cachedSteamId,
+                    proxyTransport,
+                    cancellationToken);
             }
             catch (SteamCmException ex) when (ex.IsTokenFailure)
             {
@@ -422,17 +440,25 @@ internal sealed partial class SteamAccountQueryService
             account.Password,
             guardCodeProvider,
             progress,
-            cancellationToken);
+            cancellationToken,
+            proxyTransport.WebProxy is null ? null : proxyTransport.HttpClient);
         var refreshToken = FormatHelper.NormalizeToken(auth.RefreshToken);
-        return await CreateSessionAsync(refreshToken, auth.SteamId, cancellationToken);
+        return await CreateSessionAsync(
+            refreshToken,
+            auth.SteamId,
+            proxyTransport,
+            cancellationToken);
     }
 
     private static async Task<AuthenticatedWebSession> CreateSessionAsync(
         string refreshToken,
         string steamId,
+        ManualQueryProxyTransport proxyTransport,
         CancellationToken cancellationToken)
     {
-        await using var cmClient = new SteamCmClient(HttpClient);
+        await using var cmClient = new SteamCmClient(
+            proxyTransport.HttpClient,
+            proxyTransport.WebProxy);
         await cmClient.ConnectAndLogOnAsync(refreshToken, steamId, cancellationToken);
         var session = await SteamWebSession.BuildAsync(
             cmClient,
@@ -470,12 +496,14 @@ internal sealed partial class SteamAccountQueryService
     private static async Task<(int? Rank, string? LastLogin)> ReadRankInfoAsync(
         SteamWebSession session,
         string steamId,
+        HttpClient httpClient,
         CancellationToken cancellationToken)
     {
         var (html, finalUri) = await GetHtmlAsync(
             string.Format(CultureInfo.InvariantCulture, RankPageFormat, steamId),
             session,
             "en-US,en;q=0.9",
+            httpClient,
             cancellationToken);
         EnsureAuthenticatedPage(finalUri);
 
@@ -512,12 +540,14 @@ internal sealed partial class SteamAccountQueryService
     private static async Task<(string? PersonaName, string? Region)> ReadUserInfoAsync(
         SteamWebSession session,
         string steamId,
+        HttpClient httpClient,
         CancellationToken cancellationToken)
     {
         var (html, finalUri) = await GetHtmlAsync(
             string.Format(CultureInfo.InvariantCulture, UserInfoPageFormat, steamId),
             session,
             "en-US,en;q=0.9",
+            httpClient,
             cancellationToken);
         EnsureAuthenticatedPage(finalUri);
 
@@ -562,12 +592,14 @@ internal sealed partial class SteamAccountQueryService
 
     private static async Task<bool?> ReadChinaSteamAsync(
         SteamWebSession session,
+        HttpClient httpClient,
         CancellationToken cancellationToken)
     {
         var (html, finalUri) = await GetHtmlAsync(
             ChinaSteamPage,
             session,
             "en-US,en;q=0.9",
+            httpClient,
             cancellationToken);
         EnsureAuthenticatedPage(finalUri);
 
@@ -585,12 +617,14 @@ internal sealed partial class SteamAccountQueryService
 
     private static async Task<BanState> ReadBanStateAsync(
         SteamWebSession session,
+        HttpClient httpClient,
         CancellationToken cancellationToken)
     {
         var (cooldownHtml, cooldownUri) = await GetHtmlAsync(
             CooldownPage,
             session,
             "zh-CN,zh;q=0.9",
+            httpClient,
             cancellationToken);
         EnsureAuthenticatedPage(cooldownUri);
 
@@ -611,6 +645,7 @@ internal sealed partial class SteamAccountQueryService
             VacPage,
             session,
             "zh-CN,zh;q=0.9",
+            httpClient,
             cancellationToken);
         EnsureAuthenticatedPage(vacUri);
 
@@ -623,29 +658,37 @@ internal sealed partial class SteamAccountQueryService
     private static async Task<double?> ReadCs2PlaytimeHoursAsync(
         SteamWebSession session,
         string steamId,
+        HttpClient httpClient,
         CancellationToken cancellationToken)
     {
         var apiHours = await TryReadCs2PlaytimeHoursFromApiAsync(
             session,
             steamId,
+            httpClient,
             cancellationToken);
         return apiHours
             ?? await TryReadCs2PlaytimeHoursFromStatsAsync(
                 session,
                 steamId,
+                httpClient,
                 cancellationToken)
             ?? await TryReadCs2PlaytimeHoursFromPagesAsync(
                 session,
                 steamId,
+                httpClient,
                 cancellationToken);
     }
 
     private static async Task<double?> TryReadCs2PlaytimeHoursFromApiAsync(
         SteamWebSession session,
         string steamId,
+        HttpClient httpClient,
         CancellationToken cancellationToken)
     {
-        var webApiToken = await ReadSteamWebApiTokenAsync(session, cancellationToken);
+        var webApiToken = await ReadSteamWebApiTokenAsync(
+            session,
+            httpClient,
+            cancellationToken);
         if (string.IsNullOrWhiteSpace(webApiToken))
         {
             AppLog.Warn("CS2 游戏时间 API 未获取到 webapi_token，尝试网页回退。");
@@ -658,7 +701,7 @@ internal sealed partial class SteamAccountQueryService
             "&include_appinfo=0&include_played_free_games=1";
         try
         {
-            using var response = await HttpClient.GetAsync(url, cancellationToken);
+            using var response = await httpClient.GetAsync(url, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
                 var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -706,12 +749,14 @@ internal sealed partial class SteamAccountQueryService
     private static async Task<double?> TryReadCs2PlaytimeHoursFromStatsAsync(
         SteamWebSession session,
         string steamId,
+        HttpClient httpClient,
         CancellationToken cancellationToken)
     {
         var (json, finalUri) = await GetHtmlAsync(
             string.Format(CultureInfo.InvariantCulture, Cs2StatsJsonPageFormat, steamId),
             session,
             "en-US,en;q=0.9",
+            httpClient,
             cancellationToken);
         if (finalUri.AbsolutePath.Contains("/login", StringComparison.OrdinalIgnoreCase))
         {
@@ -754,12 +799,14 @@ internal sealed partial class SteamAccountQueryService
 
     private static async Task<string?> ReadSteamWebApiTokenAsync(
         SteamWebSession session,
+        HttpClient httpClient,
         CancellationToken cancellationToken)
     {
         var (html, finalUri) = await GetHtmlAsync(
             StoreExplorePage,
             session,
             "en-US,en;q=0.9",
+            httpClient,
             cancellationToken);
         EnsureAuthenticatedPage(finalUri);
 
@@ -787,6 +834,7 @@ internal sealed partial class SteamAccountQueryService
     private static async Task<double?> TryReadCs2PlaytimeHoursFromPagesAsync(
         SteamWebSession session,
         string steamId,
+        HttpClient httpClient,
         CancellationToken cancellationToken)
     {
         var urls = new[]
@@ -801,6 +849,7 @@ internal sealed partial class SteamAccountQueryService
                 url,
                 session,
                 "en-US,en;q=0.9",
+                httpClient,
                 cancellationToken);
             lastHtml = html;
             if (finalUri.AbsolutePath.Contains("/login", StringComparison.OrdinalIgnoreCase))
@@ -908,6 +957,7 @@ internal sealed partial class SteamAccountQueryService
         string url,
         SteamWebSession session,
         string acceptLanguage,
+        HttpClient httpClient,
         CancellationToken cancellationToken)
     {
         const int maxAttempts = 3;
@@ -916,7 +966,12 @@ internal sealed partial class SteamAccountQueryService
         {
             try
             {
-                return await GetHtmlCoreAsync(url, session, acceptLanguage, cancellationToken);
+                return await GetHtmlCoreAsync(
+                    url,
+                    session,
+                    acceptLanguage,
+                    httpClient,
+                    cancellationToken);
             }
             catch (Exception ex) when (
                 attempt < maxAttempts &&
@@ -940,6 +995,7 @@ internal sealed partial class SteamAccountQueryService
         string url,
         SteamWebSession session,
         string acceptLanguage,
+        HttpClient httpClient,
         CancellationToken cancellationToken)
     {
         var current = new Uri(url);
@@ -952,7 +1008,7 @@ internal sealed partial class SteamAccountQueryService
                 "User-Agent",
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123 Safari/537.36");
 
-            using var response = await HttpClient.SendAsync(
+            using var response = await httpClient.SendAsync(
                 request,
                 HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken);
